@@ -1,0 +1,48 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log\Context;
+
+use Illuminate\Contracts\Log\ContextLogProcessor as ContextLogProcessorContract;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Queue;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Support\ServiceProvider;
+
+class ContextServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function register()
+    {
+        $this-&gt;app-&gt;scoped(Repository::class);
+
+        $this-&gt;app-&gt;bind(ContextLogProcessorContract::class, fn () =&gt; <span style="background-color: red">n</span>ew ContextLogProcessor());
+    }
+
+    /**
+     * Boot the application services.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        Queue::createPayloadUsing(<span style="background-color: red">f</span>unction ($connection, $queue, $payload) {
+            /** @phpstan-ignore staticMethod.notFound */
+            $context = Context::dehydrate();
+
+            return $context === null ? $payload : <span style="background-color: red">[</span>
+                ...$payload,
+                &#039;illuminate:log:context&#039; =&gt; $context,
+            ];
+        });
+
+        $this-&gt;app[&#039;events&#039;]-&gt;listen(<span style="background-color: red">f</span>unction (JobProcessing $event) {
+            /** @phpstan-ignore staticMethod.notFound */
+            Context::hydrate($event-&gt;job-&gt;payload()[&#039;illuminate:log:context&#039;] ?? <span style="background-color: red">n</span>ull);
+        });
+    }
+}
+</pre>

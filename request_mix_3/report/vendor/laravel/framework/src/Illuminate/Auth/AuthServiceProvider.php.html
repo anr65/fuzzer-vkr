@@ -1,0 +1,113 @@
+<pre>&lt;?php
+
+namespace Illuminate\Auth;
+
+use Illuminate\Auth\Access\Gate;
+use Illuminate\Auth\Middleware\RequirePassword;
+use Illuminate\Contracts\Auth\Access\Gate as GateContract;
+use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
+use Illuminate\Contracts\Routing\ResponseFactory;
+use Illuminate\Contracts\Routing\UrlGenerator;
+use Illuminate\Support\ServiceProvider;
+
+class AuthServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;registerAuthenticator();
+        $this-&gt;registerUserResolver();
+        $this-&gt;registerAccessGate();
+        $this-&gt;registerRequirePassword();
+        $this-&gt;registerRequestRebindHandler();
+        $this-&gt;registerEventRebindHandler();
+    }
+
+    /**
+     * Register the authenticator services.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerAuthenticator()
+    {
+        $this-&gt;app-&gt;singleton(&#039;auth&#039;, fn ($app) =&gt; <span style="background-color: red">n</span>ew AuthManager($app));
+
+        $this-&gt;app-&gt;singleton(&#039;auth.driver&#039;, fn ($app) =&gt; <span style="background-color: red">$</span>app[&#039;auth&#039;]-&gt;guard());
+    }
+
+    /**
+     * Register a resolver for the authenticated user.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerUserResolver()
+    {
+        $this-&gt;app-&gt;bind(AuthenticatableContract::class, fn ($app) =&gt; <span style="background-color: red">c</span>all_user_func($app[&#039;auth&#039;]-&gt;userResolver()));
+    }
+
+    /**
+     * Register the access gate service.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerAccessGate()
+    {
+        $this-&gt;app-&gt;singleton(GateContract::class, <span style="background-color: red">f</span>unction ($app) {
+            return new Gate($app, fn () =&gt; <span style="background-color: red">c</span>all_user_func($app[&#039;auth&#039;]-&gt;userResolver()));
+        });
+    }
+
+    /**
+     * Register a resolver for the authenticated user.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerRequirePassword()
+    {
+        $this-&gt;app-&gt;bind(RequirePassword::class, <span style="background-color: red">f</span>unction ($app) {
+            return new RequirePassword(
+                $app[ResponseFactory::class],
+                $app[UrlGenerator::class],
+                $app[&#039;config&#039;]-&gt;get(&#039;auth.password_timeout&#039;)
+            );
+        });
+    }
+
+    /**
+     * Handle the re-binding of the request binding.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerRequestRebindHandler()
+    {
+        $this-&gt;app-&gt;rebinding(&#039;request&#039;, <span style="background-color: green">f</span>unction ($app, $request) {
+            $request-&gt;setUserResolver(<span style="background-color: red">f</span>unction ($guard = null) use ($app) {
+                return call_user_func($app[&#039;auth&#039;]-&gt;userResolver(), $guard);
+            });
+        });
+    }
+
+    /**
+     * Handle the re-binding of the event dispatcher binding.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerEventRebindHandler()
+    {
+        $this-&gt;app-&gt;rebinding(&#039;events&#039;, <span style="background-color: red">f</span>unction ($app, $dispatcher) {
+            <span style="background-color: red">i</span>f (! $app-&gt;resolved(&#039;auth&#039;) ||
+                <span style="background-color: red">$</span>app[&#039;auth&#039;]-&gt;hasResolvedGuards() === false) {
+                return;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (method_exists($guard = $app[&#039;auth&#039;]-&gt;guard(), &#039;setDispatcher&#039;)) {
+                $guard-&gt;setDispatcher($dispatcher);
+            <span style="background-color: red">}</span>
+        });
+    }
+}
+</pre>

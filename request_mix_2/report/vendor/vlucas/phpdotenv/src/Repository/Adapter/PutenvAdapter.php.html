@@ -1,0 +1,92 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository\Adapter;
+
+use PhpOption\None;
+use PhpOption\Option;
+use PhpOption\Some;
+
+final class PutenvAdapter implements AdapterInterface
+{
+    /**
+     * Create a new putenv adapter instance.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate function __construct()
+    {
+        //
+    }
+
+    /**
+     * Create a new instance of the adapter, if it is available.
+     *
+     * @return \PhpOption\Option&lt;\Dotenv\Repository\Adapter\AdapterInterface&gt;
+     */
+    <span style="background-color: green">p</span>ublic static function create()
+    {
+        <span style="background-color: green">i</span>f (self::isSupported()) {
+            /** @var \PhpOption\Option&lt;AdapterInterface&gt; */
+            return Some::create(new self());
+        <span style="background-color: red">}</span>
+
+        return None::create();
+    }
+
+    /**
+     * Determines if the adapter is supported.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rivate static function isSupported()
+    {
+        return \function_exists(&#039;getenv&#039;) &amp;&amp; <span style="background-color: green">\</span>function_exists(&#039;putenv&#039;);
+    }
+
+    /**
+     * Read an environment variable, if it exists.
+     *
+     * @param non-empty-string $name
+     *
+     * @return \PhpOption\Option&lt;string&gt;
+     */
+    <span style="background-color: green">p</span>ublic function read(string $name)
+    {
+        /** @var \PhpOption\Option&lt;string&gt; */
+        return Option::fromValue(\getenv($name), false)-&gt;filter(<span style="background-color: red">s</span>tatic function ($value) {
+            return \is_string($value);
+        });
+    }
+
+    /**
+     * Write to an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     * @param string           $value
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function write(string $name, string $value)
+    {
+        \putenv(&quot;$name=$value&quot;);
+
+        return true;
+    }
+
+    /**
+     * Delete an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function delete(string $name)
+    {
+        \putenv($name);
+
+        return true;
+    }
+}
+</pre>

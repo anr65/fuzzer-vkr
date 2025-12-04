@@ -1,0 +1,62 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+class RouteUri
+{
+    /**
+     * The route URI.
+     *
+     * @var string
+     */
+    public $uri;
+
+    /**
+     * The fields that should be used when resolving bindings.
+     *
+     * @var array
+     */
+    public $bindingFields = [];
+
+    /**
+     * Create a new route URI instance.
+     *
+     * @param  string  $uri
+     * @param  array  $bindingFields
+     */
+    <span style="background-color: green">p</span>ublic function __construct(string $uri, array $bindingFields = [])
+    {
+        $this-&gt;uri = $uri;
+        $this-&gt;bindingFields = $bindingFields;
+    }
+
+    /**
+     * Parse the given URI.
+     *
+     * @param  string  $uri
+     * @return static
+     */
+    <span style="background-color: green">p</span>ublic static function parse($uri)
+    {
+        preg_match_all(&#039;/\{([\w\:]+?)\??\}/&#039;, $uri, $matches);
+
+        $bindingFields = [];
+
+        <span style="background-color: green">f</span>oreach ($matches[0] as $match) {
+            <span style="background-color: green">i</span>f (! str_contains($match, &#039;:&#039;)) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $segments = explode(&#039;:&#039;, trim($match, &#039;{}?&#039;));
+
+            $bindingFields[$segments[0]] = $segments[1];
+
+            $uri = str_contains($match, &#039;?&#039;)
+                ? str_replace($match, &#039;{&#039;.$segments[0].&#039;?}&#039;, $uri)
+                : <span style="background-color: red">s</span>tr_replace($match, &#039;{&#039;.$segments[0].&#039;}&#039;, $uri);
+        <span style="background-color: green">}</span>
+
+        return new static($uri, $bindingFields);
+    }
+}
+</pre>

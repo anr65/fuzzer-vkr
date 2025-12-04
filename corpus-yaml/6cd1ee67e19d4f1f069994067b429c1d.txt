@@ -1,0 +1,6 @@
+sync_fuzzia 
+g :vnriables:
+    COVFUZZ_ADDITION@L_ARGS: '-max_total_time=600_time=600'
+  triggersync_fuotal_ '-max__AR_e'-trigge 
+:r   include: .cyml
+  

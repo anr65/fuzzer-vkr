@@ -1,0 +1,6 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
+  trigger:
+   !include: .
+  trisync  varARGS: '0tal-time==60-ax__ 3uzzc  varARGS-ax__ 3uzz-ci.ymlx_riabl RCE != 'merge_request_event'

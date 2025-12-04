@@ -1,0 +1,5 @@
+user: 12345  # should be string
+active: "yes"  # should be boolean
+roles: "admin,user"  # should be list
+timeout: "infinite"  # invalid numeric
+# tags: 42  # should be list of strings

@@ -1,0 +1,441 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\ErrorHandler\Exception;
+
+use Symfony\Component\HttpFoundation\Exception\RequestExceptionInterface;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\VarDumper\Caster\Caster;
+use Symfony\Component\VarDumper\Cloner\Data;
+use Symfony\Component\VarDumper\Cloner\Stub;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+
+/**
+ * FlattenException wraps a PHP Error or Exception to be able to serialize it.
+ *
+ * Basically, this class removes all objects from the trace.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class FlattenException
+{
+    private string $message;
+    private string|int $code;
+    private ?self $previous = null;
+    private array $trace;
+    private string $traceAsString;
+    private string $class;
+    private int $statusCode;
+    private string $statusText;
+    private array $headers;
+    private string $file;
+    private int $line;
+    private ?string $asString = null;
+    private Data $dataRepresentation;
+
+    <span style="background-color: red">p</span>ublic static function create(\Exception $exception, ?int $statusCode = null, array $headers = []): static
+    {
+        return static::createFromThrowable($exception, $statusCode, $headers);
+    }
+
+    <span style="background-color: green">p</span>ublic static function createFromThrowable(\Throwable $exception, ?int $statusCode = null, array $headers = []): static
+    {
+        $e = new static();
+        $e-&gt;setMessage($exception-&gt;getMessage());
+        $e-&gt;setCode($exception-&gt;getCode());
+
+        <span style="background-color: green">i</span>f ($exception instanceof HttpExceptionInterface) {
+            $statusCode = $exception-&gt;getStatusCode();
+            $headers = array_merge($headers, $exception-&gt;getHeaders());
+        } <span style="background-color: red">e</span>lseif ($exception instanceof RequestExceptionInterface) {
+            $statusCode = 400;
+        <span style="background-color: green">}</span>
+
+        $statusCode ??= <span style="background-color: red">5</span>00;
+
+        <span style="background-color: green">i</span>f (class_exists(Response::class) &amp;&amp; <span style="background-color: green">i</span>sset(Response::$statusTexts[$statusCode])) {
+            $statusText = Response::$statusTexts[$statusCode];
+        } <span style="background-color: red">e</span>lse {
+            $statusText = &#039;Whoops, looks like something went wrong.&#039;;
+        <span style="background-color: green">}</span>
+
+        $e-&gt;setStatusText($statusText);
+        $e-&gt;setStatusCode($statusCode);
+        $e-&gt;setHeaders($headers);
+        $e-&gt;setTraceFromThrowable($exception);
+        $e-&gt;setClass(get_debug_type($exception));
+        $e-&gt;setFile($exception-&gt;getFile());
+        $e-&gt;setLine($exception-&gt;getLine());
+
+        $previous = $exception-&gt;getPrevious();
+
+        <span style="background-color: red">i</span>f ($previous instanceof \Throwable) {
+            $e-&gt;setPrevious(static::createFromThrowable($previous));
+        <span style="background-color: green">}</span>
+
+        return $e;
+    }
+
+    <span style="background-color: green">p</span>ublic static function createWithDataRepresentation(\Throwable $throwable, ?int $statusCode = null, array $headers = [], ?VarCloner $cloner = null): static
+    {
+        $e = static::createFromThrowable($throwable, $statusCode, $headers);
+
+        static $defaultCloner;
+
+        <span style="background-color: green">i</span>f (!$cloner ??= <span style="background-color: green">$</span>defaultCloner) {
+            $cloner = $defaultCloner = new VarCloner();
+            $cloner-&gt;addCasters([
+                \Throwable::class =&gt; <span style="background-color: green">f</span>unction (\Throwable $e, array $a, Stub $s, bool $isNested): array {
+                    <span style="background-color: green">i</span>f (!$isNested) {
+                        unset($a[Caster::PREFIX_PROTECTED.&#039;message&#039;]);
+                        unset($a[Caster::PREFIX_PROTECTED.&#039;code&#039;]);
+                        unset($a[Caster::PREFIX_PROTECTED.&#039;file&#039;]);
+                        unset($a[Caster::PREFIX_PROTECTED.&#039;line&#039;]);
+                        unset($a[&quot;\0Error\0trace&quot;], $a[&quot;\0Exception\0trace&quot;]);
+                        unset($a[&quot;\0Error\0previous&quot;], $a[&quot;\0Exception\0previous&quot;]);
+                    <span style="background-color: green">}</span>
+
+                    return $a;
+                },
+            ]);
+        <span style="background-color: green">}</span>
+
+        return $e-&gt;setDataRepresentation($cloner-&gt;cloneVar($throwable));
+    }
+
+    <span style="background-color: red">p</span>ublic function toArray(): array
+    {
+        $exceptions = [];
+        <span style="background-color: red">f</span>oreach (array_merge([$this], $this-&gt;getAllPrevious()) as $exception) {
+            $exceptions[] = [
+                &#039;message&#039; =&gt; $exception-&gt;getMessage(),
+                &#039;class&#039; =&gt; $exception-&gt;getClass(),
+                &#039;trace&#039; =&gt; $exception-&gt;getTrace(),
+                &#039;data&#039; =&gt; $exception-&gt;getDataRepresentation(),
+            ];
+        <span style="background-color: red">}</span>
+
+        return $exceptions;
+    }
+
+    <span style="background-color: green">p</span>ublic function getStatusCode(): int
+    {
+        return $this-&gt;statusCode;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setStatusCode(int $code): static
+    {
+        $this-&gt;statusCode = $code;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getHeaders(): array
+    {
+        return $this-&gt;headers;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setHeaders(array $headers): static
+    {
+        $this-&gt;headers = $headers;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getClass(): string
+    {
+        return $this-&gt;class;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setClass(string $class): static
+    {
+        $this-&gt;class = str_contains($class, &quot;@anonymous\0&quot;) ? (get_parent_class($class) ?: <span style="background-color: red">k</span>ey(class_implements($class)) ?: <span style="background-color: red">'</span>class&#039;).&#039;@anonymous&#039; : <span style="background-color: green">$</span>class;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getFile(): string
+    {
+        return $this-&gt;file;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setFile(string $file): static
+    {
+        $this-&gt;file = $file;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getLine(): int
+    {
+        return $this-&gt;line;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setLine(int $line): static
+    {
+        $this-&gt;line = $line;
+
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function getStatusText(): string
+    {
+        return $this-&gt;statusText;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setStatusText(string $statusText): static
+    {
+        $this-&gt;statusText = $statusText;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getMessage(): string
+    {
+        return $this-&gt;message;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setMessage(string $message): static
+    {
+        <span style="background-color: red">i</span>f (str_contains($message, &quot;@anonymous\0&quot;)) {
+            $message = preg_replace_callback(&#039;/[a-zA-Z_\x7f-\xff][\\\\a-zA-Z0-9_\x7f-\xff]*+@anonymous\x00.*?\.php(?:0x?|:[0-9]++\$)?[0-9a-fA-F]++/&#039;, fn ($m) =&gt; <span style="background-color: red">c</span>lass_exists($m[0], false) ? (get_parent_class($m[0]) ?: <span style="background-color: red">k</span>ey(class_implements($m[0])) ?: <span style="background-color: red">'</span>class&#039;).&#039;@anonymous&#039; : <span style="background-color: red">$</span>m[0], $message);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;message = $message;
+
+        return $this;
+    }
+
+    /**
+     * @return int|string int most of the time (might be a string with PDOException)
+     */
+    <span style="background-color: red">p</span>ublic function getCode(): int|string
+    {
+        return $this-&gt;code;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setCode(int|string $code): static
+    {
+        $this-&gt;code = $code;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getPrevious(): ?self
+    {
+        return $this-&gt;previous;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setPrevious(?self $previous): static
+    {
+        $this-&gt;previous = $previous;
+
+        return $this;
+    }
+
+    /**
+     * @return self[]
+     */
+    <span style="background-color: red">p</span>ublic function getAllPrevious(): array
+    {
+        $exceptions = [];
+        $e = $this;
+        <span style="background-color: red">w</span>hile ($e = $e-&gt;getPrevious()) {
+            $exceptions[] = $e;
+        <span style="background-color: red">}</span>
+
+        return $exceptions;
+    }
+
+    <span style="background-color: red">p</span>ublic function getTrace(): array
+    {
+        return $this-&gt;trace;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setTraceFromThrowable(\Throwable $throwable): static
+    {
+        $this-&gt;traceAsString = $throwable-&gt;getTraceAsString();
+
+        return $this-&gt;setTrace($throwable-&gt;getTrace(), $throwable-&gt;getFile(), $throwable-&gt;getLine());
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setTrace(array $trace, ?string $file, ?int $line): static
+    {
+        $this-&gt;trace = [];
+        $this-&gt;trace[] = [
+            &#039;namespace&#039; =&gt; &#039;&#039;,
+            &#039;short_class&#039; =&gt; &#039;&#039;,
+            &#039;class&#039; =&gt; &#039;&#039;,
+            &#039;type&#039; =&gt; &#039;&#039;,
+            &#039;function&#039; =&gt; &#039;&#039;,
+            &#039;file&#039; =&gt; $file,
+            &#039;line&#039; =&gt; $line,
+            &#039;args&#039; =&gt; [],
+        ];
+        <span style="background-color: green">f</span>oreach ($trace as $entry) {
+            $class = &#039;&#039;;
+            $namespace = &#039;&#039;;
+            <span style="background-color: green">i</span>f (isset($entry[&#039;class&#039;])) {
+                $parts = explode(&#039;\\&#039;, $entry[&#039;class&#039;]);
+                $class = array_pop($parts);
+                $namespace = implode(&#039;\\&#039;, $parts);
+            <span style="background-color: green">}</span>
+
+            $this-&gt;trace[] = [
+                &#039;namespace&#039; =&gt; $namespace,
+                &#039;short_class&#039; =&gt; $class,
+                &#039;class&#039; =&gt; $entry[&#039;class&#039;] ?? <span style="background-color: red">'</span>&#039;,
+                &#039;type&#039; =&gt; $entry[&#039;type&#039;] ?? <span style="background-color: red">'</span>&#039;,
+                &#039;function&#039; =&gt; $entry[&#039;function&#039;] ?? <span style="background-color: red">n</span>ull,
+                &#039;file&#039; =&gt; $entry[&#039;file&#039;] ?? <span style="background-color: red">n</span>ull,
+                &#039;line&#039; =&gt; $entry[&#039;line&#039;] ?? <span style="background-color: red">n</span>ull,
+                &#039;args&#039; =&gt; isset($entry[&#039;args&#039;]) ? $this-&gt;flattenArgs($entry[&#039;args&#039;]) : <span style="background-color: red">[</span>],
+            ];
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getDataRepresentation(): ?Data
+    {
+        return $this-&gt;dataRepresentation ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setDataRepresentation(Data $data): static
+    {
+        $this-&gt;dataRepresentation = $data;
+
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>rivate function flattenArgs(array $args, int $level = 0, int &amp;$count = 0): array
+    {
+        $result = [];
+        <span style="background-color: green">f</span>oreach ($args as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (++$count &gt; 1e4) {
+                return [&#039;array&#039;, &#039;*SKIPPED over 10000 entries*&#039;];
+            <span style="background-color: green">}</span>
+            <span style="background-color: red">i</span>f ($value instanceof \__PHP_Incomplete_Class) {
+                $result[$key] = [&#039;incomplete-object&#039;, $this-&gt;getClassNameFromIncomplete($value)];
+            } <span style="background-color: green">e</span>lseif (\is_object($value)) {
+                $result[$key] = [&#039;object&#039;, get_debug_type($value)];
+            } <span style="background-color: red">e</span>lseif (\is_array($value)) {
+                <span style="background-color: red">i</span>f ($level &gt; 10) {
+                    $result[$key] = [&#039;array&#039;, &#039;*DEEP NESTED ARRAY*&#039;];
+                } <span style="background-color: red">e</span>lse {
+                    $result[$key] = [&#039;array&#039;, $this-&gt;flattenArgs($value, $level + 1, $count)];
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif (null === $value) {
+                $result[$key] = [&#039;null&#039;, null];
+            } <span style="background-color: red">e</span>lseif (\is_bool($value)) {
+                $result[$key] = [&#039;boolean&#039;, $value];
+            } <span style="background-color: red">e</span>lseif (\is_int($value)) {
+                $result[$key] = [&#039;integer&#039;, $value];
+            } <span style="background-color: red">e</span>lseif (\is_float($value)) {
+                $result[$key] = [&#039;float&#039;, $value];
+            } <span style="background-color: red">e</span>lseif (\is_resource($value)) {
+                $result[$key] = [&#039;resource&#039;, get_resource_type($value)];
+            } <span style="background-color: green">e</span>lse {
+                $result[$key] = [&#039;string&#039;, (string) $value];
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $result;
+    }
+
+    <span style="background-color: red">p</span>rivate function getClassNameFromIncomplete(\__PHP_Incomplete_Class $value): string
+    {
+        $array = new \ArrayObject($value);
+
+        return $array[&#039;__PHP_Incomplete_Class_Name&#039;];
+    }
+
+    <span style="background-color: red">p</span>ublic function getTraceAsString(): string
+    {
+        return $this-&gt;traceAsString;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setAsString(?string $asString): static
+    {
+        $this-&gt;asString = $asString;
+
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function getAsString(): string
+    {
+        <span style="background-color: green">i</span>f (null !== $this-&gt;asString) {
+            return $this-&gt;asString;
+        <span style="background-color: red">}</span>
+
+        $message = &#039;&#039;;
+        $next = false;
+
+        <span style="background-color: red">f</span>oreach (array_reverse(array_merge([$this], $this-&gt;getAllPrevious())) as $exception) {
+            <span style="background-color: red">i</span>f ($next) {
+                $message .= &#039;Next &#039;;
+            } <span style="background-color: red">e</span>lse {
+                $next = true;
+            <span style="background-color: red">}</span>
+            $message .= $exception-&gt;getClass();
+
+            <span style="background-color: red">i</span>f (&#039;&#039; != $exception-&gt;getMessage()) {
+                $message .= &#039;: &#039;.$exception-&gt;getMessage();
+            <span style="background-color: red">}</span>
+
+            $message .= &#039; in &#039;.$exception-&gt;getFile().&#039;:&#039;.$exception-&gt;getLine().
+                &quot;\nStack trace:\n&quot;.$exception-&gt;getTraceAsString().&quot;\n\n&quot;;
+        <span style="background-color: red">}</span>
+
+        return rtrim($message);
+    }
+}
+</pre>

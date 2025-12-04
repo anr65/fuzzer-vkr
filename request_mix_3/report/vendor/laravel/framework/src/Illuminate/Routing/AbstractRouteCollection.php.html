@@ -1,0 +1,286 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use ArrayIterator;
+use Countable;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use IteratorAggregate;
+use LogicException;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\Routing\Matcher\Dumper\CompiledUrlMatcherDumper;
+use Symfony\Component\Routing\RouteCollection as SymfonyRouteCollection;
+use Traversable;
+
+abstract class AbstractRouteCollection implements Countable, IteratorAggregate, RouteCollectionInterface
+{
+    /**
+     * Handle the matched route.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Illuminate\Routing\Route|null  $route
+     * @return \Illuminate\Routing\Route
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+     */
+    <span style="background-color: green">p</span>rotected function handleMatchedRoute(Request $request, $route)
+    {
+        <span style="background-color: red">i</span>f (! is_null($route)) {
+            return $route-&gt;bind($request);
+        <span style="background-color: green">}</span>
+
+        // If no route was found we will now check if a matching route is specified by
+        // another HTTP verb. If it is we will need to throw a MethodNotAllowed and
+        // inform the user agent of which HTTP verb it should use for this route.
+        $others = $this-&gt;checkForAlternateVerbs($request);
+
+        <span style="background-color: green">i</span>f (count($others) &gt; 0) {
+            return $this-&gt;getRouteForMethods($request, $others);
+        <span style="background-color: green">}</span>
+
+        throw new NotFoundHttpException(sprintf(
+            &#039;The route %s could not be found.&#039;,
+            $request-&gt;path()
+        ));
+    }
+
+    /**
+     * Determine if any routes match on another HTTP verb.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function checkForAlternateVerbs($request)
+    {
+        $methods = array_diff(Router::$verbs, [$request-&gt;getMethod()]);
+
+        // Here we will spin through all verbs except for the current request verb and
+        // check to see if any routes respond to them. If they do, we will return a
+        // proper error response with the correct headers on the response string.
+        return array_values(array_filter(
+            $methods,
+            <span style="background-color: green">f</span>unction ($method) use ($request) {
+                return ! is_null($this-&gt;matchAgainstRoutes($this-&gt;get($method), $request, false));
+            }
+        ));
+    }
+
+    /**
+     * Determine if a route in the array matches the request.
+     *
+     * @param  \Illuminate\Routing\Route[]  $routes
+     * @param  \Illuminate\Http\Request  $request
+     * @param  bool  $includingMethod
+     * @return \Illuminate\Routing\Route|null
+     */
+    <span style="background-color: green">p</span>rotected function matchAgainstRoutes(array $routes, $request, $includingMethod = true)
+    {
+        [$fallbacks, $routes] = (new Collection($routes))-&gt;partition(<span style="background-color: green">f</span>unction ($route) {
+            return $route-&gt;isFallback;
+        });
+
+        return $routes-&gt;merge($fallbacks)-&gt;first(
+            fn (Route $route) =&gt; <span style="background-color: green">$</span>route-&gt;matches($request, $includingMethod)
+        );
+    }
+
+    /**
+     * Get a route (if necessary) that responds when other available methods are present.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  string[]  $methods
+     * @return \Illuminate\Routing\Route
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException
+     */
+    <span style="background-color: green">p</span>rotected function getRouteForMethods($request, array $methods)
+    {
+        <span style="background-color: red">i</span>f ($request-&gt;isMethod(&#039;OPTIONS&#039;)) {
+            return (new Route(&#039;OPTIONS&#039;, $request-&gt;path(), <span style="background-color: red">f</span>unction () use ($methods) {
+                return new Response(&#039;&#039;, 200, [&#039;Allow&#039; =&gt; implode(&#039;,&#039;, $methods)]);
+            }))-&gt;bind($request);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;requestMethodNotAllowed($request, $methods, $request-&gt;method());
+    }
+
+    /**
+     * Throw a method not allowed HTTP exception.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $others
+     * @param  string  $method
+     * @return never
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException
+     */
+    <span style="background-color: green">p</span>rotected function requestMethodNotAllowed($request, array $others, $method)
+    {
+        throw new MethodNotAllowedHttpException(
+            $others,
+            sprintf(
+                &#039;The %s method is not supported for route %s. Supported methods: %s.&#039;,
+                $method,
+                $request-&gt;path(),
+                implode(&#039;, &#039;, $others)
+            )
+        );
+    }
+
+    /**
+     * Throw a method not allowed HTTP exception.
+     *
+     * @param  array  $others
+     * @param  string  $method
+     * @return void
+     *
+     * @deprecated use requestMethodNotAllowed
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException
+     */
+    <span style="background-color: red">p</span>rotected function methodNotAllowed(array $others, $method)
+    {
+        throw new MethodNotAllowedHttpException(
+            $others,
+            sprintf(
+                &#039;The %s method is not supported for this route. Supported methods: %s.&#039;,
+                $method,
+                implode(&#039;, &#039;, $others)
+            )
+        );
+    }
+
+    /**
+     * Compile the routes for caching.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function compile()
+    {
+        $compiled = $this-&gt;dumper()-&gt;getCompiledRoutes();
+
+        $attributes = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;getRoutes() as $route) {
+            $attributes[$route-&gt;getName()] = [
+                &#039;methods&#039; =&gt; $route-&gt;methods(),
+                &#039;uri&#039; =&gt; $route-&gt;uri(),
+                &#039;action&#039; =&gt; $route-&gt;getAction(),
+                &#039;fallback&#039; =&gt; $route-&gt;isFallback,
+                &#039;defaults&#039; =&gt; $route-&gt;defaults,
+                &#039;wheres&#039; =&gt; $route-&gt;wheres,
+                &#039;bindingFields&#039; =&gt; $route-&gt;bindingFields(),
+                &#039;lockSeconds&#039; =&gt; $route-&gt;locksFor(),
+                &#039;waitSeconds&#039; =&gt; $route-&gt;waitsFor(),
+                &#039;withTrashed&#039; =&gt; $route-&gt;allowsTrashedBindings(),
+            ];
+        <span style="background-color: red">}</span>
+
+        return compact(&#039;compiled&#039;, &#039;attributes&#039;);
+    }
+
+    /**
+     * Return the CompiledUrlMatcherDumper instance for the route collection.
+     *
+     * @return \Symfony\Component\Routing\Matcher\Dumper\CompiledUrlMatcherDumper
+     */
+    <span style="background-color: red">p</span>ublic function dumper()
+    {
+        return new CompiledUrlMatcherDumper($this-&gt;toSymfonyRouteCollection());
+    }
+
+    /**
+     * Convert the collection to a Symfony RouteCollection instance.
+     *
+     * @return \Symfony\Component\Routing\RouteCollection
+     */
+    <span style="background-color: red">p</span>ublic function toSymfonyRouteCollection()
+    {
+        $symfonyRoutes = new SymfonyRouteCollection;
+
+        $routes = $this-&gt;getRoutes();
+
+        <span style="background-color: red">f</span>oreach ($routes as $route) {
+            <span style="background-color: red">i</span>f (! $route-&gt;isFallback) {
+                $symfonyRoutes = $this-&gt;addToSymfonyRoutesCollection($symfonyRoutes, $route);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($routes as $route) {
+            <span style="background-color: red">i</span>f ($route-&gt;isFallback) {
+                $symfonyRoutes = $this-&gt;addToSymfonyRoutesCollection($symfonyRoutes, $route);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $symfonyRoutes;
+    }
+
+    /**
+     * Add a route to the SymfonyRouteCollection instance.
+     *
+     * @param  \Symfony\Component\Routing\RouteCollection  $symfonyRoutes
+     * @param  \Illuminate\Routing\Route  $route
+     * @return \Symfony\Component\Routing\RouteCollection
+     *
+     * @throws \LogicException
+     */
+    <span style="background-color: red">p</span>rotected function addToSymfonyRoutesCollection(SymfonyRouteCollection $symfonyRoutes, Route $route)
+    {
+        $name = $route-&gt;getName();
+
+        <span style="background-color: red">i</span>f (
+            ! is_null($name)
+            &amp;&amp; <span style="background-color: red">s</span>tr_ends_with($name, &#039;.&#039;)
+            &amp;&amp; <span style="background-color: red">!</span> is_null($symfonyRoutes-&gt;get($name))
+        ) {
+            $name = null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $name) {
+            $route-&gt;name($this-&gt;generateRouteName());
+
+            $this-&gt;add($route);
+        } <span style="background-color: red">e</span>lseif (! is_null($symfonyRoutes-&gt;get($name))) {
+            throw new LogicException(&quot;Unable to prepare route [{$route-&gt;uri}] for serialization. Another route has already been assigned name [{$name}].&quot;);
+        <span style="background-color: red">}</span>
+
+        $symfonyRoutes-&gt;add($route-&gt;getName(), $route-&gt;toSymfonyRoute());
+
+        return $symfonyRoutes;
+    }
+
+    /**
+     * Get a randomly generated route name.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function generateRouteName()
+    {
+        return &#039;generated::&#039;.Str::random();
+    }
+
+    /**
+     * Get an iterator for the items.
+     *
+     * @return \ArrayIterator
+     */
+    <span style="background-color: red">p</span>ublic function getIterator(): Traversable
+    {
+        return new ArrayIterator($this-&gt;getRoutes());
+    }
+
+    /**
+     * Count the number of items in the collection.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return count($this-&gt;getRoutes());
+    }
+}
+</pre>

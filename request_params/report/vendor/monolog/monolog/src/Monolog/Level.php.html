@@ -1,0 +1,210 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog;
+
+use Psr\Log\LogLevel;
+
+/**
+ * Represents the log levels
+ *
+ * Monolog supports the logging levels described by RFC 5424 {@see https://datatracker.ietf.org/doc/html/rfc5424}
+ * but due to BC the severity values used internally are not 0-7.
+ *
+ * To get the level name/value out of a Level there are several options:
+ *
+ * - Use -&gt;getName() to get the standard Monolog name which is full uppercased (e.g. &quot;DEBUG&quot;)
+ * - Use -&gt;toPsrLogLevel() to get the standard PSR-3 name which is full lowercased (e.g. &quot;debug&quot;)
+ * - Use -&gt;toRFC5424Level() to get the standard RFC 5424 value (e.g. 7 for debug, 0 for emergency)
+ * - Use -&gt;name to get the enum case&#039;s name which is capitalized (e.g. &quot;Debug&quot;)
+ *
+ * To get the internal value for filtering, if the includes/isLowerThan/isHigherThan methods are
+ * not enough, you can use -&gt;value to get the enum case&#039;s integer value.
+ */
+enum Level: int
+{
+    /**
+     * Detailed debug information
+     */
+    case Debug = 100;
+
+    /**
+     * Interesting events
+     *
+     * Examples: User logs in, SQL logs.
+     */
+    case Info = 200;
+
+    /**
+     * Uncommon events
+     */
+    case Notice = 250;
+
+    /**
+     * Exceptional occurrences that are not errors
+     *
+     * Examples: Use of deprecated APIs, poor use of an API,
+     * undesirable things that are not necessarily wrong.
+     */
+    case Warning = 300;
+
+    /**
+     * Runtime errors
+     */
+    case Error = 400;
+
+    /**
+     * Critical conditions
+     *
+     * Example: Application component unavailable, unexpected exception.
+     */
+    case Critical = 500;
+
+    /**
+     * Action must be taken immediately
+     *
+     * Example: Entire website down, database unavailable, etc.
+     * This should trigger the SMS alerts and wake you up.
+     */
+    case Alert = 550;
+
+    /**
+     * Urgent alert.
+     */
+    case Emergency = 600;
+
+    /**
+     * @param  value-of&lt;self::NAMES&gt;|LogLevel::*|&#039;Debug&#039;|&#039;Info&#039;|&#039;Notice&#039;|&#039;Warning&#039;|&#039;Error&#039;|&#039;Critical&#039;|&#039;Alert&#039;|&#039;Emergency&#039; $name
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function fromName(string $name): self
+    {
+        return match (strtolower($name)) {
+            &#039;debug&#039; =&gt; <span style="background-color: red">s</span>elf::Debug,
+            &#039;info&#039; =&gt; <span style="background-color: red">s</span>elf::Info,
+            &#039;notice&#039; =&gt; <span style="background-color: red">s</span>elf::Notice,
+            &#039;warning&#039; =&gt; <span style="background-color: red">s</span>elf::Warning,
+            &#039;error&#039; =&gt; <span style="background-color: red">s</span>elf::Error,
+            &#039;critical&#039; =&gt; <span style="background-color: red">s</span>elf::Critical,
+            &#039;alert&#039; =&gt; <span style="background-color: red">s</span>elf::Alert,
+            &#039;emergency&#039; =&gt; <span style="background-color: red">s</span>elf::Emergency,
+        };
+    }
+
+    /**
+     * @param  value-of&lt;self::VALUES&gt; $value
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function fromValue(int $value): self
+    {
+        return self::from($value);
+    }
+
+    /**
+     * Returns true if the passed $level is higher or equal to $this
+     */
+    <span style="background-color: red">p</span>ublic function includes(Level $level): bool
+    {
+        return $this-&gt;value &lt;= $level-&gt;value;
+    }
+
+    <span style="background-color: red">p</span>ublic function isHigherThan(Level $level): bool
+    {
+        return $this-&gt;value &gt; $level-&gt;value;
+    }
+
+    <span style="background-color: red">p</span>ublic function isLowerThan(Level $level): bool
+    {
+        return $this-&gt;value &lt; $level-&gt;value;
+    }
+
+    /**
+     * Returns the monolog standardized all-capitals name of the level
+     *
+     * Use this instead of $level-&gt;name which returns the enum case name (e.g. Debug vs DEBUG if you use getName())
+     *
+     * @return value-of&lt;self::NAMES&gt;
+     */
+    <span style="background-color: green">p</span>ublic function getName(): string
+    {
+        return match ($this) {
+            self::Debug =&gt; <span style="background-color: red">'</span>DEBUG&#039;,
+            self::Info =&gt; <span style="background-color: red">'</span>INFO&#039;,
+            self::Notice =&gt; <span style="background-color: red">'</span>NOTICE&#039;,
+            self::Warning =&gt; <span style="background-color: red">'</span>WARNING&#039;,
+            self::Error =&gt; <span style="background-color: green">'</span>ERROR&#039;,
+            self::Critical =&gt; <span style="background-color: red">'</span>CRITICAL&#039;,
+            self::Alert =&gt; <span style="background-color: red">'</span>ALERT&#039;,
+            self::Emergency =&gt; <span style="background-color: red">'</span>EMERGENCY&#039;,
+        };
+    }
+
+    /**
+     * Returns the PSR-3 level matching this instance
+     *
+     * @phpstan-return \Psr\Log\LogLevel::*
+     */
+    <span style="background-color: red">p</span>ublic function toPsrLogLevel(): string
+    {
+        return match ($this) {
+            self::Debug =&gt; <span style="background-color: red">L</span>ogLevel::DEBUG,
+            self::Info =&gt; <span style="background-color: red">L</span>ogLevel::INFO,
+            self::Notice =&gt; <span style="background-color: red">L</span>ogLevel::NOTICE,
+            self::Warning =&gt; <span style="background-color: red">L</span>ogLevel::WARNING,
+            self::Error =&gt; <span style="background-color: red">L</span>ogLevel::ERROR,
+            self::Critical =&gt; <span style="background-color: red">L</span>ogLevel::CRITICAL,
+            self::Alert =&gt; <span style="background-color: red">L</span>ogLevel::ALERT,
+            self::Emergency =&gt; <span style="background-color: red">L</span>ogLevel::EMERGENCY,
+        };
+    }
+
+    /**
+     * Returns the RFC 5424 level matching this instance
+     *
+     * @phpstan-return int&lt;0, 7&gt;
+     */
+    <span style="background-color: red">p</span>ublic function toRFC5424Level(): int
+    {
+        return match ($this) {
+            self::Debug =&gt; <span style="background-color: red">7</span>,
+            self::Info =&gt; <span style="background-color: red">6</span>,
+            self::Notice =&gt; <span style="background-color: red">5</span>,
+            self::Warning =&gt; <span style="background-color: red">4</span>,
+            self::Error =&gt; <span style="background-color: red">3</span>,
+            self::Critical =&gt; <span style="background-color: red">2</span>,
+            self::Alert =&gt; <span style="background-color: red">1</span>,
+            self::Emergency =&gt; <span style="background-color: red">0</span>,
+        };
+    }
+
+    public const VALUES = [
+        100,
+        200,
+        250,
+        300,
+        400,
+        500,
+        550,
+        600,
+    ];
+
+    public const NAMES = [
+        &#039;DEBUG&#039;,
+        &#039;INFO&#039;,
+        &#039;NOTICE&#039;,
+        &#039;WARNING&#039;,
+        &#039;ERROR&#039;,
+        &#039;CRITICAL&#039;,
+        &#039;ALERT&#039;,
+        &#039;EMERGENCY&#039;,
+    ];
+}
+</pre>

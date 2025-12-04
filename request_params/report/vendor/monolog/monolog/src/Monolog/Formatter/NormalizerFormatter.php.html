@@ -1,0 +1,354 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog\Formatter;
+
+use Monolog\JsonSerializableDateTimeImmutable;
+use Monolog\Utils;
+use Throwable;
+use Monolog\LogRecord;
+
+/**
+ * Normalizes incoming records to remove objects/resources so it&#039;s easier to dump to various targets
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ */
+class NormalizerFormatter implements FormatterInterface
+{
+    public const SIMPLE_DATE = &quot;Y-m-d\TH:i:sP&quot;;
+
+    protected string $dateFormat;
+    protected int $maxNormalizeDepth = 9;
+    protected int $maxNormalizeItemCount = 1000;
+
+    private int $jsonEncodeOptions = Utils::DEFAULT_JSON_FLAGS;
+
+    protected string $basePath = &#039;&#039;;
+
+    /**
+     * @param string|null $dateFormat The format of the timestamp: one supported by DateTime::format
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?string $dateFormat = null)
+    {
+        $this-&gt;dateFormat = null === $dateFormat ? static::SIMPLE_DATE : <span style="background-color: green">$</span>dateFormat;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: green">p</span>ublic function format(LogRecord $record)
+    {
+        return $this-&gt;normalizeRecord($record);
+    }
+
+    /**
+     * Normalize an arbitrary value to a scalar|array|null
+     *
+     * @return null|scalar|array&lt;mixed[]|scalar|null&gt;
+     */
+    <span style="background-color: red">p</span>ublic function normalizeValue(mixed $data): mixed
+    {
+        return $this-&gt;normalize($data);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: red">p</span>ublic function formatBatch(array $records)
+    {
+        <span style="background-color: red">f</span>oreach ($records as $key =&gt; $record) {
+            $records[$key] = $this-&gt;format($record);
+        <span style="background-color: red">}</span>
+
+        return $records;
+    }
+
+    <span style="background-color: red">p</span>ublic function getDateFormat(): string
+    {
+        return $this-&gt;dateFormat;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setDateFormat(string $dateFormat): self
+    {
+        $this-&gt;dateFormat = $dateFormat;
+
+        return $this;
+    }
+
+    /**
+     * The maximum number of normalization levels to go through
+     */
+    <span style="background-color: red">p</span>ublic function getMaxNormalizeDepth(): int
+    {
+        return $this-&gt;maxNormalizeDepth;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setMaxNormalizeDepth(int $maxNormalizeDepth): self
+    {
+        $this-&gt;maxNormalizeDepth = $maxNormalizeDepth;
+
+        return $this;
+    }
+
+    /**
+     * The maximum number of items to normalize per level
+     */
+    <span style="background-color: red">p</span>ublic function getMaxNormalizeItemCount(): int
+    {
+        return $this-&gt;maxNormalizeItemCount;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setMaxNormalizeItemCount(int $maxNormalizeItemCount): self
+    {
+        $this-&gt;maxNormalizeItemCount = $maxNormalizeItemCount;
+
+        return $this;
+    }
+
+    /**
+     * Enables `json_encode` pretty print.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setJsonPrettyPrint(bool $enable): self
+    {
+        <span style="background-color: red">i</span>f ($enable) {
+            $this-&gt;jsonEncodeOptions |= JSON_PRETTY_PRINT;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;jsonEncodeOptions &amp;= ~JSON_PRETTY_PRINT;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Setting a base path will hide the base path from exception and stack trace file names to shorten them
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setBasePath(string $path = &#039;&#039;): self
+    {
+        <span style="background-color: red">i</span>f ($path !== &#039;&#039;) {
+            $path = rtrim($path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;basePath = $path;
+
+        return $this;
+    }
+
+    /**
+     * Provided as extension point
+     *
+     * Because normalize is called with sub-values of context data etc, normalizeRecord can be
+     * extended when data needs to be appended on the record array but not to other normalized data.
+     *
+     * @return array&lt;mixed[]|scalar|null&gt;
+     */
+    <span style="background-color: green">p</span>rotected function normalizeRecord(LogRecord $record): array
+    {
+        /** @var array&lt;mixed[]|scalar|null&gt; $normalized */
+        $normalized = $this-&gt;normalize($record-&gt;toArray());
+
+        return $normalized;
+    }
+
+    /**
+     * @return null|scalar|array&lt;mixed[]|scalar|null&gt;
+     */
+    <span style="background-color: green">p</span>rotected function normalize(mixed $data, int $depth = 0): mixed
+    {
+        <span style="background-color: red">i</span>f ($depth &gt; $this-&gt;maxNormalizeDepth) {
+            return &#039;Over &#039; . $this-&gt;maxNormalizeDepth . &#039; levels deep, aborting normalization&#039;;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (null === $data || <span style="background-color: green">\</span>is_scalar($data)) {
+            <span style="background-color: red">i</span>f (\is_float($data)) {
+                <span style="background-color: red">i</span>f (is_infinite($data)) {
+                    return ($data &gt; 0 ? &#039;&#039; : <span style="background-color: red">'</span>-&#039;) . &#039;INF&#039;;
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f (is_nan($data)) {
+                    return &#039;NaN&#039;;
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+
+            return $data;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (\is_array($data)) {
+            $normalized = [];
+
+            $count = 1;
+            <span style="background-color: green">f</span>oreach ($data as $key =&gt; $value) {
+                <span style="background-color: red">i</span>f ($count++ &gt; $this-&gt;maxNormalizeItemCount) {
+                    $normalized[&#039;...&#039;] = &#039;Over &#039; . $this-&gt;maxNormalizeItemCount . &#039; items (&#039;.\count($data).&#039; total), aborting normalization&#039;;
+                    break;
+                <span style="background-color: green">}</span>
+
+                $normalized[$key] = $this-&gt;normalize($value, $depth + 1);
+            <span style="background-color: green">}</span>
+
+            return $normalized;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($data instanceof \DateTimeInterface) {
+            return $this-&gt;formatDate($data);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (\is_object($data)) {
+            <span style="background-color: green">i</span>f ($data instanceof Throwable) {
+                return $this-&gt;normalizeException($data, $depth);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($data instanceof \JsonSerializable) {
+                /** @var null|scalar|array&lt;mixed[]|scalar|null&gt; $value */
+                $value = $data-&gt;jsonSerialize();
+            } <span style="background-color: red">e</span>lseif (\get_class($data) === &#039;__PHP_Incomplete_Class&#039;) {
+                $accessor = new \ArrayObject($data);
+                $value = (string) $accessor[&#039;__PHP_Incomplete_Class_Name&#039;];
+            } <span style="background-color: red">e</span>lseif (method_exists($data, &#039;__toString&#039;)) {
+                try {
+                    /** @var string $value */
+                    $value = $data-&gt;__toString();
+                } <span style="background-color: red">c</span>atch (\Throwable) {
+                    // if the toString method is failing, use the default behavior
+                    /** @var null|scalar|array&lt;mixed[]|scalar|null&gt; $value */
+                    $value = json_decode($this-&gt;toJson($data, true), true);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                // the rest is normalized by json encoding and decoding it
+                /** @var null|scalar|array&lt;mixed[]|scalar|null&gt; $value */
+                $value = json_decode($this-&gt;toJson($data, true), true);
+            <span style="background-color: red">}</span>
+
+            return [Utils::getClass($data) =&gt; $value];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_resource($data)) {
+            return sprintf(&#039;[resource(%s)]&#039;, get_resource_type($data));
+        <span style="background-color: red">}</span>
+
+        return &#039;[unknown(&#039;.\gettype($data).&#039;)]&#039;;
+    }
+
+    /**
+     * @return array&lt;array-key, string|int|array&lt;string|int|array&lt;string&gt;&gt;&gt;
+     */
+    <span style="background-color: red">p</span>rotected function normalizeException(Throwable $e, int $depth = 0)
+    {
+        <span style="background-color: red">i</span>f ($depth &gt; $this-&gt;maxNormalizeDepth) {
+            return [&#039;Over &#039; . $this-&gt;maxNormalizeDepth . &#039; levels deep, aborting normalization&#039;];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($e instanceof \JsonSerializable) {
+            return (array) $e-&gt;jsonSerialize();
+        <span style="background-color: red">}</span>
+
+        $file = $e-&gt;getFile();
+        <span style="background-color: red">i</span>f ($this-&gt;basePath !== &#039;&#039;) {
+            $file = preg_replace(&#039;{^&#039;.preg_quote($this-&gt;basePath).&#039;}&#039;, &#039;&#039;, $file);
+        <span style="background-color: red">}</span>
+
+        $data = [
+            &#039;class&#039; =&gt; Utils::getClass($e),
+            &#039;message&#039; =&gt; $e-&gt;getMessage(),
+            &#039;code&#039; =&gt; (int) $e-&gt;getCode(),
+            &#039;file&#039; =&gt; $file.&#039;:&#039;.$e-&gt;getLine(),
+        ];
+
+        <span style="background-color: red">i</span>f ($e instanceof \SoapFault) {
+            <span style="background-color: red">i</span>f (isset($e-&gt;faultcode)) {
+                $data[&#039;faultcode&#039;] = $e-&gt;faultcode;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset($e-&gt;faultactor)) {
+                $data[&#039;faultactor&#039;] = $e-&gt;faultactor;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset($e-&gt;detail)) {
+                <span style="background-color: red">i</span>f (\is_string($e-&gt;detail)) {
+                    $data[&#039;detail&#039;] = $e-&gt;detail;
+                } <span style="background-color: red">e</span>lseif (\is_object($e-&gt;detail) || <span style="background-color: red">\</span>is_array($e-&gt;detail)) {
+                    $data[&#039;detail&#039;] = $this-&gt;toJson($e-&gt;detail, true);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $trace = $e-&gt;getTrace();
+        <span style="background-color: red">f</span>oreach ($trace as $frame) {
+            <span style="background-color: red">i</span>f (isset($frame[&#039;file&#039;], $frame[&#039;line&#039;])) {
+                $file = $frame[&#039;file&#039;];
+                <span style="background-color: red">i</span>f ($this-&gt;basePath !== &#039;&#039;) {
+                    $file = preg_replace(&#039;{^&#039;.preg_quote($this-&gt;basePath).&#039;}&#039;, &#039;&#039;, $file);
+                <span style="background-color: red">}</span>
+                $data[&#039;trace&#039;][] = $file.&#039;:&#039;.$frame[&#039;line&#039;];
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (($previous = $e-&gt;getPrevious()) instanceof \Throwable) {
+            $data[&#039;previous&#039;] = $this-&gt;normalizeException($previous, $depth + 1);
+        <span style="background-color: red">}</span>
+
+        return $data;
+    }
+
+    /**
+     * Return the JSON representation of a value
+     *
+     * @param  mixed             $data
+     * @throws \RuntimeException if encoding fails and errors are not ignored
+     * @return string            if encoding fails and ignoreErrors is true &#039;null&#039; is returned
+     */
+    <span style="background-color: green">p</span>rotected function toJson($data, bool $ignoreErrors = false): string
+    {
+        return Utils::jsonEncode($data, $this-&gt;jsonEncodeOptions, $ignoreErrors);
+    }
+
+    <span style="background-color: green">p</span>rotected function formatDate(\DateTimeInterface $date): string
+    {
+        // in case the date format isn&#039;t custom then we defer to the custom JsonSerializableDateTimeImmutable
+        // formatting logic, which will pick the right format based on whether useMicroseconds is on
+        <span style="background-color: red">i</span>f ($this-&gt;dateFormat === self::SIMPLE_DATE &amp;&amp; <span style="background-color: red">$</span>date instanceof JsonSerializableDateTimeImmutable) {
+            return (string) $date;
+        <span style="background-color: green">}</span>
+
+        return $date-&gt;format($this-&gt;dateFormat);
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function addJsonEncodeOption(int $option): self
+    {
+        $this-&gt;jsonEncodeOptions |= $option;
+
+        return $this;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function removeJsonEncodeOption(int $option): self
+    {
+        $this-&gt;jsonEncodeOptions &amp;= ~$option;
+
+        return $this;
+    }
+}
+</pre>

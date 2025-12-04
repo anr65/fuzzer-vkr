@@ -1,0 +1,403 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Input;
+
+use Symfony\Component\Console\Exception\RuntimeException;
+
+/**
+ * ArgvInput represents an input coming from the CLI arguments.
+ *
+ * Usage:
+ *
+ *     $input = new ArgvInput();
+ *
+ * By default, the `$_SERVER[&#039;argv&#039;]` array is used for the input values.
+ *
+ * This can be overridden by explicitly passing the input values in the constructor:
+ *
+ *     $input = new ArgvInput($_SERVER[&#039;argv&#039;]);
+ *
+ * If you pass it yourself, don&#039;t forget that the first element of the array
+ * is the name of the running application.
+ *
+ * When passing an argument to the constructor, be sure that it respects
+ * the same rules as the argv one. It&#039;s almost always better to use the
+ * `StringInput` when you want to provide your own input.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @see http://www.gnu.org/software/libc/manual/html_node/Argument-Syntax.html
+ * @see http://www.opengroup.org/onlinepubs/009695399/basedefs/xbd_chap12.html#tag_12_02
+ */
+class ArgvInput extends Input
+{
+    /** @var list&lt;string&gt; */
+    private array $tokens;
+    private array $parsed;
+
+    /** @param list&lt;string&gt;|null $argv */
+    <span style="background-color: green">p</span>ublic function __construct(?array $argv = null, ?InputDefinition $definition = null)
+    {
+        $argv ??= <span style="background-color: green">$</span>_SERVER[&#039;argv&#039;] ?? <span style="background-color: red">[</span>];
+
+        <span style="background-color: green">f</span>oreach ($argv as $arg) {
+            <span style="background-color: red">i</span>f (!\is_scalar($arg) &amp;&amp; <span style="background-color: red">!</span>$arg instanceof \Stringable) {
+                throw new RuntimeException(\sprintf(&#039;Argument values expected to be all scalars, got &quot;%s&quot;.&#039;, get_debug_type($arg)));
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        // strip the application name
+        array_shift($argv);
+
+        $this-&gt;tokens = $argv;
+
+        parent::__construct($definition);
+    }
+
+    /** @param list&lt;string&gt; $tokens */
+    <span style="background-color: red">p</span>rotected function setTokens(array $tokens): void
+    {
+        $this-&gt;tokens = $tokens;
+    }
+
+    <span style="background-color: red">p</span>rotected function parse(): void
+    {
+        $parseOptions = true;
+        $this-&gt;parsed = $this-&gt;tokens;
+        <span style="background-color: red">w</span>hile (null !== $token = array_shift($this-&gt;parsed)) {
+            $parseOptions = $this-&gt;parseToken($token, $parseOptions);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rotected function parseToken(string $token, bool $parseOptions): bool
+    {
+        <span style="background-color: red">i</span>f ($parseOptions &amp;&amp; <span style="background-color: red">'</span>&#039; == $token) {
+            $this-&gt;parseArgument($token);
+        } <span style="background-color: red">e</span>lseif ($parseOptions &amp;&amp; <span style="background-color: red">'</span>--&#039; == $token) {
+            return false;
+        } <span style="background-color: red">e</span>lseif ($parseOptions &amp;&amp; <span style="background-color: red">s</span>tr_starts_with($token, &#039;--&#039;)) {
+            $this-&gt;parseLongOption($token);
+        } <span style="background-color: red">e</span>lseif ($parseOptions &amp;&amp; <span style="background-color: red">'</span>-&#039; === $token[0] &amp;&amp; <span style="background-color: red">'</span>-&#039; !== $token) {
+            $this-&gt;parseShortOption($token);
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;parseArgument($token);
+        <span style="background-color: red">}</span>
+
+        return $parseOptions;
+    }
+
+    /**
+     * Parses a short option.
+     */
+    <span style="background-color: red">p</span>rivate function parseShortOption(string $token): void
+    {
+        $name = substr($token, 1);
+
+        <span style="background-color: red">i</span>f (\strlen($name) &gt; 1) {
+            <span style="background-color: red">i</span>f ($this-&gt;definition-&gt;hasShortcut($name[0]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;definition-&gt;getOptionForShortcut($name[0])-&gt;acceptValue()) {
+                // an option with a value (with no space)
+                $this-&gt;addShortOption($name[0], substr($name, 1));
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;parseShortOptionSet($name);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;addShortOption($name, null);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Parses a short option set.
+     *
+     * @throws RuntimeException When option given doesn&#039;t exist
+     */
+    <span style="background-color: red">p</span>rivate function parseShortOptionSet(string $name): void
+    {
+        $len = \strlen($name);
+        <span style="background-color: red">f</span>or ($i = 0; $i &lt; $len; ++$i) {
+            <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasShortcut($name[$i])) {
+                $encoding = mb_detect_encoding($name, null, true);
+                throw new RuntimeException(\sprintf(&#039;The &quot;-%s&quot; option does not exist.&#039;, false === $encoding ? $name[$i] : <span style="background-color: red">m</span>b_substr($name, $i, 1, $encoding)));
+            <span style="background-color: red">}</span>
+
+            $option = $this-&gt;definition-&gt;getOptionForShortcut($name[$i]);
+            <span style="background-color: red">i</span>f ($option-&gt;acceptValue()) {
+                $this-&gt;addLongOption($option-&gt;getName(), $i === $len - 1 ? null : <span style="background-color: red">s</span>ubstr($name, $i + 1));
+
+                break;
+            <span style="background-color: red">}</span>
+
+            $this-&gt;addLongOption($option-&gt;getName(), null);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Parses a long option.
+     */
+    <span style="background-color: red">p</span>rivate function parseLongOption(string $token): void
+    {
+        $name = substr($token, 2);
+
+        <span style="background-color: red">i</span>f (false !== $pos = strpos($name, &#039;=&#039;)) {
+            <span style="background-color: red">i</span>f (&#039;&#039; === $value = substr($name, $pos + 1)) {
+                array_unshift($this-&gt;parsed, $value);
+            <span style="background-color: red">}</span>
+            $this-&gt;addLongOption(substr($name, 0, $pos), $value);
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;addLongOption($name, null);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Parses an argument.
+     *
+     * @throws RuntimeException When too many arguments are given
+     */
+    <span style="background-color: red">p</span>rivate function parseArgument(string $token): void
+    {
+        $c = \count($this-&gt;arguments);
+
+        // if input is expecting another argument, add it
+        <span style="background-color: red">i</span>f ($this-&gt;definition-&gt;hasArgument($c)) {
+            $arg = $this-&gt;definition-&gt;getArgument($c);
+            $this-&gt;arguments[$arg-&gt;getName()] = $arg-&gt;isArray() ? [$token] : <span style="background-color: red">$</span>token;
+
+        // if last argument isArray(), append token to last argument
+        } <span style="background-color: red">e</span>lseif ($this-&gt;definition-&gt;hasArgument($c - 1) &amp;&amp; <span style="background-color: red">$</span>this-&gt;definition-&gt;getArgument($c - 1)-&gt;isArray()) {
+            $arg = $this-&gt;definition-&gt;getArgument($c - 1);
+            $this-&gt;arguments[$arg-&gt;getName()][] = $token;
+
+        // unexpected argument
+        } <span style="background-color: red">e</span>lse {
+            $all = $this-&gt;definition-&gt;getArguments();
+            $symfonyCommandName = null;
+            <span style="background-color: red">i</span>f (($inputArgument = $all[$key = array_key_first($all)] ?? <span style="background-color: red">n</span>ull) &amp;&amp; <span style="background-color: red">'</span>command&#039; === $inputArgument-&gt;getName()) {
+                $symfonyCommandName = $this-&gt;arguments[&#039;command&#039;] ?? <span style="background-color: red">n</span>ull;
+                unset($all[$key]);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (\count($all)) {
+                <span style="background-color: red">i</span>f ($symfonyCommandName) {
+                    $message = \sprintf(&#039;Too many arguments to &quot;%s&quot; command, expected arguments &quot;%s&quot;.&#039;, $symfonyCommandName, implode(&#039;&quot; &quot;&#039;, array_keys($all)));
+                } <span style="background-color: red">e</span>lse {
+                    $message = \sprintf(&#039;Too many arguments, expected arguments &quot;%s&quot;.&#039;, implode(&#039;&quot; &quot;&#039;, array_keys($all)));
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif ($symfonyCommandName) {
+                $message = \sprintf(&#039;No arguments expected for &quot;%s&quot; command, got &quot;%s&quot;.&#039;, $symfonyCommandName, $token);
+            } <span style="background-color: red">e</span>lse {
+                $message = \sprintf(&#039;No arguments expected, got &quot;%s&quot;.&#039;, $token);
+            <span style="background-color: red">}</span>
+
+            throw new RuntimeException($message);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Adds a short option value.
+     *
+     * @throws RuntimeException When option given doesn&#039;t exist
+     */
+    <span style="background-color: red">p</span>rivate function addShortOption(string $shortcut, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasShortcut($shortcut)) {
+            throw new RuntimeException(\sprintf(&#039;The &quot;-%s&quot; option does not exist.&#039;, $shortcut));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;addLongOption($this-&gt;definition-&gt;getOptionForShortcut($shortcut)-&gt;getName(), $value);
+    }
+
+    /**
+     * Adds a long option value.
+     *
+     * @throws RuntimeException When option given doesn&#039;t exist
+     */
+    <span style="background-color: red">p</span>rivate function addLongOption(string $name, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasOption($name)) {
+            <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasNegation($name)) {
+                throw new RuntimeException(\sprintf(&#039;The &quot;--%s&quot; option does not exist.&#039;, $name));
+            <span style="background-color: red">}</span>
+
+            $optionName = $this-&gt;definition-&gt;negationToName($name);
+            <span style="background-color: red">i</span>f (null !== $value) {
+                throw new RuntimeException(\sprintf(&#039;The &quot;--%s&quot; option does not accept a value.&#039;, $name));
+            <span style="background-color: red">}</span>
+            $this-&gt;options[$optionName] = false;
+
+            return;
+        <span style="background-color: red">}</span>
+
+        $option = $this-&gt;definition-&gt;getOption($name);
+
+        <span style="background-color: red">i</span>f (null !== $value &amp;&amp; <span style="background-color: red">!</span>$option-&gt;acceptValue()) {
+            throw new RuntimeException(\sprintf(&#039;The &quot;--%s&quot; option does not accept a value.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\in_array($value, [&#039;&#039;, null], true) &amp;&amp; <span style="background-color: red">$</span>option-&gt;acceptValue() &amp;&amp; <span style="background-color: red">\</span>count($this-&gt;parsed)) {
+            // if option accepts an optional or mandatory argument
+            // let&#039;s see if there is one provided
+            $next = array_shift($this-&gt;parsed);
+            <span style="background-color: red">i</span>f ((isset($next[0]) &amp;&amp; <span style="background-color: red">'</span>-&#039; !== $next[0]) || <span style="background-color: red">\</span>in_array($next, [&#039;&#039;, null], true)) {
+                $value = $next;
+            } <span style="background-color: red">e</span>lse {
+                array_unshift($this-&gt;parsed, $next);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (null === $value) {
+            <span style="background-color: red">i</span>f ($option-&gt;isValueRequired()) {
+                throw new RuntimeException(\sprintf(&#039;The &quot;--%s&quot; option requires a value.&#039;, $name));
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (!$option-&gt;isArray() &amp;&amp; <span style="background-color: red">!</span>$option-&gt;isValueOptional()) {
+                $value = true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($option-&gt;isArray()) {
+            $this-&gt;options[$name][] = $value;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;options[$name] = $value;
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function getFirstArgument(): ?string
+    {
+        $isOption = false;
+        <span style="background-color: red">f</span>oreach ($this-&gt;tokens as $i =&gt; $token) {
+            <span style="background-color: red">i</span>f ($token &amp;&amp; <span style="background-color: red">'</span>-&#039; === $token[0]) {
+                <span style="background-color: red">i</span>f (str_contains($token, &#039;=&#039;) || <span style="background-color: red">!</span>isset($this-&gt;tokens[$i + 1])) {
+                    continue;
+                <span style="background-color: red">}</span>
+
+                // If it&#039;s a long option, consider that everything after &quot;--&quot; is the option name.
+                // Otherwise, use the last char (if it&#039;s a short option set, only the last one can take a value with space separator)
+                $name = &#039;-&#039; === $token[1] ? substr($token, 2) : <span style="background-color: red">s</span>ubstr($token, -1);
+                <span style="background-color: red">i</span>f (!isset($this-&gt;options[$name]) &amp;&amp; <span style="background-color: red">!</span>$this-&gt;definition-&gt;hasShortcut($name)) {
+                    // noop
+                } <span style="background-color: red">e</span>lseif ((isset($this-&gt;options[$name]) || <span style="background-color: red">i</span>sset($this-&gt;options[$name = $this-&gt;definition-&gt;shortcutToName($name)])) &amp;&amp; <span style="background-color: red">$</span>this-&gt;tokens[$i + 1] === $this-&gt;options[$name]) {
+                    $isOption = true;
+                <span style="background-color: red">}</span>
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($isOption) {
+                $isOption = false;
+                continue;
+            <span style="background-color: red">}</span>
+
+            return $token;
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    <span style="background-color: green">p</span>ublic function hasParameterOption(string|array $values, bool $onlyParams = false): bool
+    {
+        $values = (array) $values;
+
+        <span style="background-color: green">f</span>oreach ($this-&gt;tokens as $token) {
+            <span style="background-color: red">i</span>f ($onlyParams &amp;&amp; <span style="background-color: red">'</span>--&#039; === $token) {
+                return false;
+            <span style="background-color: green">}</span>
+            <span style="background-color: green">f</span>oreach ($values as $value) {
+                // Options with values:
+                //   For long options, test for &#039;--option=&#039; at beginning
+                //   For short options, test for &#039;-o&#039; at beginning
+                $leading = str_starts_with($value, &#039;--&#039;) ? $value.&#039;=&#039; : <span style="background-color: red">$</span>value;
+                <span style="background-color: red">i</span>f ($token === $value || <span style="background-color: green">'</span>&#039; !== $leading &amp;&amp; <span style="background-color: green">s</span>tr_starts_with($token, $leading)) {
+                    return true;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    <span style="background-color: red">p</span>ublic function getParameterOption(string|array $values, string|bool|int|float|array|null $default = false, bool $onlyParams = false): mixed
+    {
+        $values = (array) $values;
+        $tokens = $this-&gt;tokens;
+
+        <span style="background-color: red">w</span>hile (0 &lt; \count($tokens)) {
+            $token = array_shift($tokens);
+            <span style="background-color: red">i</span>f ($onlyParams &amp;&amp; <span style="background-color: red">'</span>--&#039; === $token) {
+                return $default;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ($values as $value) {
+                <span style="background-color: red">i</span>f ($token === $value) {
+                    return array_shift($tokens);
+                <span style="background-color: red">}</span>
+                // Options with values:
+                //   For long options, test for &#039;--option=&#039; at beginning
+                //   For short options, test for &#039;-o&#039; at beginning
+                $leading = str_starts_with($value, &#039;--&#039;) ? $value.&#039;=&#039; : <span style="background-color: red">$</span>value;
+                <span style="background-color: red">i</span>f (&#039;&#039; !== $leading &amp;&amp; <span style="background-color: red">s</span>tr_starts_with($token, $leading)) {
+                    return substr($token, \strlen($leading));
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+
+    /**
+     * Returns un-parsed and not validated tokens.
+     *
+     * @param bool $strip Whether to return the raw parameters (false) or the values after the command name (true)
+     *
+     * @return list&lt;string&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getRawTokens(bool $strip = false): array
+    {
+        <span style="background-color: red">i</span>f (!$strip) {
+            return $this-&gt;tokens;
+        <span style="background-color: red">}</span>
+
+        $parameters = [];
+        $keep = false;
+        <span style="background-color: red">f</span>oreach ($this-&gt;tokens as $value) {
+            <span style="background-color: red">i</span>f (!$keep &amp;&amp; <span style="background-color: red">$</span>value === $this-&gt;getFirstArgument()) {
+                $keep = true;
+
+                continue;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ($keep) {
+                $parameters[] = $value;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $parameters;
+    }
+
+    /**
+     * Returns a stringified representation of the args passed to the command.
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        $tokens = array_map(<span style="background-color: red">f</span>unction ($token) {
+            <span style="background-color: red">i</span>f (preg_match(&#039;{^(-[^=]+=)(.+)}&#039;, $token, $match)) {
+                return $match[1].$this-&gt;escapeToken($match[2]);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($token &amp;&amp; <span style="background-color: red">'</span>-&#039; !== $token[0]) {
+                return $this-&gt;escapeToken($token);
+            <span style="background-color: red">}</span>
+
+            return $token;
+        }, $this-&gt;tokens);
+
+        return implode(&#039; &#039;, $tokens);
+    }
+}
+</pre>

@@ -1,0 +1,447 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Caster;
+
+use Symfony\Component\VarDumper\Cloner\Stub;
+
+/**
+ * Casts Reflector related classes to array representation.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ *
+ * @final
+ */
+class ReflectionCaster
+{
+    public const UNSET_CLOSURE_FILE_INFO = [&#039;Closure&#039; =&gt; __CLASS__.&#039;::unsetClosureFileInfo&#039;];
+
+    private const EXTRA_MAP = [
+        &#039;docComment&#039; =&gt; &#039;getDocComment&#039;,
+        &#039;extension&#039; =&gt; &#039;getExtensionName&#039;,
+        &#039;isDisabled&#039; =&gt; &#039;isDisabled&#039;,
+        &#039;isDeprecated&#039; =&gt; &#039;isDeprecated&#039;,
+        &#039;isInternal&#039; =&gt; &#039;isInternal&#039;,
+        &#039;isUserDefined&#039; =&gt; &#039;isUserDefined&#039;,
+        &#039;isGenerator&#039; =&gt; &#039;isGenerator&#039;,
+        &#039;isVariadic&#039; =&gt; &#039;isVariadic&#039;,
+    ];
+
+    <span style="background-color: red">p</span>ublic static function castClosure(\Closure $c, array $a, Stub $stub, bool $isNested, int $filter = 0): array
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+        $c = new \ReflectionFunction($c);
+
+        $a = static::castFunctionAbstract($c, $a, $stub, $isNested, $filter);
+
+        <span style="background-color: red">i</span>f (!$c-&gt;isAnonymous()) {
+            $stub-&gt;class = isset($a[$prefix.&#039;class&#039;]) ? $a[$prefix.&#039;class&#039;]-&gt;value.&#039;::&#039;.$c-&gt;name : <span style="background-color: red">$</span>c-&gt;name;
+            unset($a[$prefix.&#039;class&#039;]);
+        <span style="background-color: red">}</span>
+        unset($a[$prefix.&#039;extra&#039;]);
+
+        $stub-&gt;class .= self::getSignature($a);
+
+        <span style="background-color: red">i</span>f ($f = $c-&gt;getFileName()) {
+            $stub-&gt;attr[&#039;file&#039;] = $f;
+            $stub-&gt;attr[&#039;line&#039;] = $c-&gt;getStartLine();
+        <span style="background-color: red">}</span>
+
+        unset($a[$prefix.&#039;parameters&#039;]);
+
+        <span style="background-color: red">i</span>f ($filter &amp; Caster::EXCLUDE_VERBOSE) {
+            $stub-&gt;cut += ($c-&gt;getFileName() ? 2 : <span style="background-color: red">0</span>) + \count($a);
+
+            return [];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($f) {
+            $a[$prefix.&#039;file&#039;] = new LinkStub($f, $c-&gt;getStartLine());
+            $a[$prefix.&#039;line&#039;] = $c-&gt;getStartLine().&#039; to &#039;.$c-&gt;getEndLine();
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function unsetClosureFileInfo(\Closure $c, array $a): array
+    {
+        unset($a[Caster::PREFIX_VIRTUAL.&#039;file&#039;], $a[Caster::PREFIX_VIRTUAL.&#039;line&#039;]);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castGenerator(\Generator $c, array $a, Stub $stub, bool $isNested): array
+    {
+        // Cannot create ReflectionGenerator based on a terminated Generator
+        try {
+            $reflectionGenerator = new \ReflectionGenerator($c);
+
+            return self::castReflectionGenerator($reflectionGenerator, $a, $stub, $isNested);
+        } <span style="background-color: red">c</span>atch (\Exception) {
+            $a[Caster::PREFIX_VIRTUAL.&#039;closed&#039;] = true;
+
+            return $a;
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic static function castType(\ReflectionType $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        <span style="background-color: red">i</span>f ($c instanceof \ReflectionNamedType) {
+            $a += [
+                $prefix.&#039;name&#039; =&gt; $c-&gt;getName(),
+                $prefix.&#039;allowsNull&#039; =&gt; $c-&gt;allowsNull(),
+                $prefix.&#039;isBuiltin&#039; =&gt; $c-&gt;isBuiltin(),
+            ];
+        } <span style="background-color: red">e</span>lseif ($c instanceof \ReflectionUnionType || <span style="background-color: red">$</span>c instanceof \ReflectionIntersectionType) {
+            $a[$prefix.&#039;allowsNull&#039;] = $c-&gt;allowsNull();
+            self::addMap($a, $c, [
+                &#039;types&#039; =&gt; &#039;getTypes&#039;,
+            ]);
+        } <span style="background-color: red">e</span>lse {
+            $a[$prefix.&#039;allowsNull&#039;] = $c-&gt;allowsNull();
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castAttribute(\ReflectionAttribute $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $map = [
+            &#039;name&#039; =&gt; &#039;getName&#039;,
+            &#039;arguments&#039; =&gt; &#039;getArguments&#039;,
+        ];
+
+        <span style="background-color: red">i</span>f (\PHP_VERSION_ID &gt;= 80400) {
+            unset($map[&#039;name&#039;]);
+        <span style="background-color: red">}</span>
+
+        self::addMap($a, $c, $map);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castReflectionGenerator(\ReflectionGenerator $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        <span style="background-color: red">i</span>f ($c-&gt;getThis()) {
+            $a[$prefix.&#039;this&#039;] = new CutStub($c-&gt;getThis());
+        <span style="background-color: red">}</span>
+        $function = $c-&gt;getFunction();
+        $frame = [
+            &#039;class&#039; =&gt; $function-&gt;class ?? <span style="background-color: red">n</span>ull,
+            &#039;type&#039; =&gt; isset($function-&gt;class) ? ($function-&gt;isStatic() ? &#039;::&#039; : <span style="background-color: red">'</span>-&gt;&#039;) : <span style="background-color: red">n</span>ull,
+            &#039;function&#039; =&gt; $function-&gt;name,
+            &#039;file&#039; =&gt; $c-&gt;getExecutingFile(),
+            &#039;line&#039; =&gt; $c-&gt;getExecutingLine(),
+        ];
+        <span style="background-color: red">i</span>f ($trace = $c-&gt;getTrace(\DEBUG_BACKTRACE_IGNORE_ARGS)) {
+            $function = new \ReflectionGenerator($c-&gt;getExecutingGenerator());
+            array_unshift($trace, [
+                &#039;function&#039; =&gt; &#039;yield&#039;,
+                &#039;file&#039; =&gt; $function-&gt;getExecutingFile(),
+                &#039;line&#039; =&gt; $function-&gt;getExecutingLine(),
+            ]);
+            $trace[] = $frame;
+            $a[$prefix.&#039;trace&#039;] = new TraceStub($trace, false, 0, -1, -1);
+        } <span style="background-color: red">e</span>lse {
+            $function = new FrameStub($frame, false, true);
+            $function = ExceptionCaster::castFrameStub($function, [], $function, true);
+            $a[$prefix.&#039;executing&#039;] = $function[$prefix.&#039;src&#039;];
+        <span style="background-color: red">}</span>
+
+        $a[Caster::PREFIX_VIRTUAL.&#039;closed&#039;] = false;
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castClass(\ReflectionClass $c, array $a, Stub $stub, bool $isNested, int $filter = 0): array
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        <span style="background-color: red">i</span>f ($n = \Reflection::getModifierNames($c-&gt;getModifiers())) {
+            $a[$prefix.&#039;modifiers&#039;] = implode(&#039; &#039;, $n);
+        <span style="background-color: red">}</span>
+
+        self::addMap($a, $c, [
+            &#039;extends&#039; =&gt; &#039;getParentClass&#039;,
+            &#039;implements&#039; =&gt; &#039;getInterfaceNames&#039;,
+            &#039;constants&#039; =&gt; &#039;getReflectionConstants&#039;,
+        ]);
+
+        <span style="background-color: red">f</span>oreach ($c-&gt;getProperties() as $n) {
+            $a[$prefix.&#039;properties&#039;][$n-&gt;name] = $n;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($c-&gt;getMethods() as $n) {
+            $a[$prefix.&#039;methods&#039;][$n-&gt;name] = $n;
+        <span style="background-color: red">}</span>
+
+        self::addAttributes($a, $c, $prefix);
+
+        <span style="background-color: red">i</span>f (!($filter &amp; Caster::EXCLUDE_VERBOSE) &amp;&amp; <span style="background-color: red">!</span>$isNested) {
+            self::addExtra($a, $c);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castFunctionAbstract(\ReflectionFunctionAbstract $c, array $a, Stub $stub, bool $isNested, int $filter = 0): array
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        self::addMap($a, $c, [
+            &#039;returnsReference&#039; =&gt; &#039;returnsReference&#039;,
+            &#039;returnType&#039; =&gt; &#039;getReturnType&#039;,
+            &#039;class&#039; =&gt; &#039;getClosureCalledClass&#039;,
+            &#039;this&#039; =&gt; &#039;getClosureThis&#039;,
+        ]);
+
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;returnType&#039;])) {
+            $v = $a[$prefix.&#039;returnType&#039;];
+            $v = $v instanceof \ReflectionNamedType ? $v-&gt;getName() : <span style="background-color: red">(</span>string) $v;
+            $a[$prefix.&#039;returnType&#039;] = new ClassStub($a[$prefix.&#039;returnType&#039;] instanceof \ReflectionNamedType &amp;&amp; <span style="background-color: red">$</span>a[$prefix.&#039;returnType&#039;]-&gt;allowsNull() &amp;&amp; <span style="background-color: red">!</span>\in_array($v, [&#039;mixed&#039;, &#039;null&#039;], true) ? &#039;?&#039;.$v : <span style="background-color: red">$</span>v, [class_exists($v, false) || <span style="background-color: red">i</span>nterface_exists($v, false) || <span style="background-color: red">t</span>rait_exists($v, false) ? $v : <span style="background-color: red">'</span>&#039;, &#039;&#039;]);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;class&#039;])) {
+            $a[$prefix.&#039;class&#039;] = new ClassStub($a[$prefix.&#039;class&#039;]);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;this&#039;])) {
+            $a[$prefix.&#039;this&#039;] = new CutStub($a[$prefix.&#039;this&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($c-&gt;getParameters() as $v) {
+            $k = &#039;$&#039;.$v-&gt;name;
+            <span style="background-color: red">i</span>f ($v-&gt;isVariadic()) {
+                $k = &#039;...&#039;.$k;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ($v-&gt;isPassedByReference()) {
+                $k = &#039;&amp;&#039;.$k;
+            <span style="background-color: red">}</span>
+            $a[$prefix.&#039;parameters&#039;][$k] = $v;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;parameters&#039;])) {
+            $a[$prefix.&#039;parameters&#039;] = new EnumStub($a[$prefix.&#039;parameters&#039;]);
+        <span style="background-color: red">}</span>
+
+        self::addAttributes($a, $c, $prefix);
+
+        <span style="background-color: red">i</span>f (!($filter &amp; Caster::EXCLUDE_VERBOSE) &amp;&amp; <span style="background-color: red">$</span>v = $c-&gt;getStaticVariables()) {
+            <span style="background-color: red">f</span>oreach ($v as $k =&gt; &amp;$v) {
+                <span style="background-color: red">i</span>f (\is_object($v)) {
+                    $a[$prefix.&#039;use&#039;][&#039;$&#039;.$k] = new CutStub($v);
+                } <span style="background-color: red">e</span>lse {
+                    $a[$prefix.&#039;use&#039;][&#039;$&#039;.$k] = &amp;$v;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            unset($v);
+            $a[$prefix.&#039;use&#039;] = new EnumStub($a[$prefix.&#039;use&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!($filter &amp; Caster::EXCLUDE_VERBOSE) &amp;&amp; <span style="background-color: red">!</span>$isNested) {
+            self::addExtra($a, $c);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castClassConstant(\ReflectionClassConstant $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $a[Caster::PREFIX_VIRTUAL.&#039;modifiers&#039;] = implode(&#039; &#039;, \Reflection::getModifierNames($c-&gt;getModifiers()));
+        $a[Caster::PREFIX_VIRTUAL.&#039;value&#039;] = $c-&gt;getValue();
+
+        self::addAttributes($a, $c);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castMethod(\ReflectionMethod $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $a[Caster::PREFIX_VIRTUAL.&#039;modifiers&#039;] = implode(&#039; &#039;, \Reflection::getModifierNames($c-&gt;getModifiers()));
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castParameter(\ReflectionParameter $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        self::addMap($a, $c, [
+            &#039;position&#039; =&gt; &#039;getPosition&#039;,
+            &#039;isVariadic&#039; =&gt; &#039;isVariadic&#039;,
+            &#039;byReference&#039; =&gt; &#039;isPassedByReference&#039;,
+            &#039;allowsNull&#039; =&gt; &#039;allowsNull&#039;,
+        ]);
+
+        self::addAttributes($a, $c, $prefix);
+
+        <span style="background-color: red">i</span>f ($v = $c-&gt;getType()) {
+            $a[$prefix.&#039;typeHint&#039;] = $v instanceof \ReflectionNamedType ? $v-&gt;getName() : <span style="background-color: red">(</span>string) $v;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;typeHint&#039;])) {
+            $v = $a[$prefix.&#039;typeHint&#039;];
+            $a[$prefix.&#039;typeHint&#039;] = new ClassStub($v, [class_exists($v, false) || <span style="background-color: red">i</span>nterface_exists($v, false) || <span style="background-color: red">t</span>rait_exists($v, false) ? $v : <span style="background-color: red">'</span>&#039;, &#039;&#039;]);
+        } <span style="background-color: red">e</span>lse {
+            unset($a[$prefix.&#039;allowsNull&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($c-&gt;isOptional()) {
+            try {
+                $a[$prefix.&#039;default&#039;] = $v = $c-&gt;getDefaultValue();
+                <span style="background-color: red">i</span>f ($c-&gt;isDefaultValueConstant() &amp;&amp; <span style="background-color: red">!</span>\is_object($v)) {
+                    $a[$prefix.&#039;default&#039;] = new ConstStub($c-&gt;getDefaultValueConstantName(), $v);
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f (null === $v) {
+                    unset($a[$prefix.&#039;allowsNull&#039;]);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">c</span>atch (\ReflectionException) {
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castProperty(\ReflectionProperty $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $a[Caster::PREFIX_VIRTUAL.&#039;modifiers&#039;] = implode(&#039; &#039;, \Reflection::getModifierNames($c-&gt;getModifiers()));
+
+        self::addAttributes($a, $c);
+        self::addExtra($a, $c);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castReference(\ReflectionReference $c, array $a, Stub $stub, bool $isNested): array
+    {
+        $a[Caster::PREFIX_VIRTUAL.&#039;id&#039;] = $c-&gt;getId();
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castExtension(\ReflectionExtension $c, array $a, Stub $stub, bool $isNested): array
+    {
+        self::addMap($a, $c, [
+            &#039;version&#039; =&gt; &#039;getVersion&#039;,
+            &#039;dependencies&#039; =&gt; &#039;getDependencies&#039;,
+            &#039;iniEntries&#039; =&gt; &#039;getIniEntries&#039;,
+            &#039;isPersistent&#039; =&gt; &#039;isPersistent&#039;,
+            &#039;isTemporary&#039; =&gt; &#039;isTemporary&#039;,
+            &#039;constants&#039; =&gt; &#039;getConstants&#039;,
+            &#039;functions&#039; =&gt; &#039;getFunctions&#039;,
+            &#039;classes&#039; =&gt; &#039;getClasses&#039;,
+        ]);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castZendExtension(\ReflectionZendExtension $c, array $a, Stub $stub, bool $isNested): array
+    {
+        self::addMap($a, $c, [
+            &#039;version&#039; =&gt; &#039;getVersion&#039;,
+            &#039;author&#039; =&gt; &#039;getAuthor&#039;,
+            &#039;copyright&#039; =&gt; &#039;getCopyright&#039;,
+            &#039;url&#039; =&gt; &#039;getURL&#039;,
+        ]);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function getSignature(array $a): string
+    {
+        $prefix = Caster::PREFIX_VIRTUAL;
+        $signature = &#039;&#039;;
+
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;parameters&#039;])) {
+            <span style="background-color: red">f</span>oreach ($a[$prefix.&#039;parameters&#039;]-&gt;value as $k =&gt; $param) {
+                $signature .= &#039;, &#039;;
+                <span style="background-color: red">i</span>f ($type = $param-&gt;getType()) {
+                    <span style="background-color: red">i</span>f (!$type instanceof \ReflectionNamedType) {
+                        $signature .= $type.&#039; &#039;;
+                    } <span style="background-color: red">e</span>lse {
+                        <span style="background-color: red">i</span>f ($param-&gt;allowsNull() &amp;&amp; <span style="background-color: red">!</span>\in_array($type-&gt;getName(), [&#039;mixed&#039;, &#039;null&#039;], true)) {
+                            $signature .= &#039;?&#039;;
+                        <span style="background-color: red">}</span>
+                        $signature .= substr(strrchr(&#039;\\&#039;.$type-&gt;getName(), &#039;\\&#039;), 1).&#039; &#039;;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+                $signature .= $k;
+
+                <span style="background-color: red">i</span>f (!$param-&gt;isDefaultValueAvailable()) {
+                    continue;
+                <span style="background-color: red">}</span>
+                $v = $param-&gt;getDefaultValue();
+                $signature .= &#039; = &#039;;
+
+                <span style="background-color: red">i</span>f ($param-&gt;isDefaultValueConstant()) {
+                    $signature .= substr(strrchr(&#039;\\&#039;.$param-&gt;getDefaultValueConstantName(), &#039;\\&#039;), 1);
+                } <span style="background-color: red">e</span>lseif (null === $v) {
+                    $signature .= &#039;null&#039;;
+                } <span style="background-color: red">e</span>lseif (\is_array($v)) {
+                    $signature .= $v ? &#039;[…&#039;.\count($v).&#039;]&#039; : <span style="background-color: red">'</span>[]&#039;;
+                } <span style="background-color: red">e</span>lseif (\is_string($v)) {
+                    $signature .= 10 &gt; \strlen($v) &amp;&amp; <span style="background-color: red">!</span>str_contains($v, &#039;\\&#039;) ? &quot;&#039;{$v}&#039;&quot; : <span style="background-color: red">"</span>&#039;…&quot;.\strlen($v).&quot;&#039;&quot;;
+                } <span style="background-color: red">e</span>lseif (\is_bool($v)) {
+                    $signature .= $v ? &#039;true&#039; : <span style="background-color: red">'</span>false&#039;;
+                } <span style="background-color: red">e</span>lseif (\is_object($v)) {
+                    $signature .= &#039;new &#039;.substr(strrchr(&#039;\\&#039;.get_debug_type($v), &#039;\\&#039;), 1);
+                } <span style="background-color: red">e</span>lse {
+                    $signature .= $v;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+        $signature = (empty($a[$prefix.&#039;returnsReference&#039;]) ? &#039;&#039; : <span style="background-color: red">'</span>&amp;&#039;).&#039;(&#039;.substr($signature, 2).&#039;)&#039;;
+
+        <span style="background-color: red">i</span>f (isset($a[$prefix.&#039;returnType&#039;])) {
+            $signature .= &#039;: &#039;.substr(strrchr(&#039;\\&#039;.$a[$prefix.&#039;returnType&#039;], &#039;\\&#039;), 1);
+        <span style="background-color: red">}</span>
+
+        return $signature;
+    }
+
+    <span style="background-color: red">p</span>rivate static function addExtra(array &amp;$a, \Reflector $c): void
+    {
+        $x = isset($a[Caster::PREFIX_VIRTUAL.&#039;extra&#039;]) ? $a[Caster::PREFIX_VIRTUAL.&#039;extra&#039;]-&gt;value : <span style="background-color: red">[</span>];
+
+        <span style="background-color: red">i</span>f (method_exists($c, &#039;getFileName&#039;) &amp;&amp; <span style="background-color: red">$</span>m = $c-&gt;getFileName()) {
+            $x[&#039;file&#039;] = new LinkStub($m, $c-&gt;getStartLine());
+            $x[&#039;line&#039;] = $c-&gt;getStartLine().&#039; to &#039;.$c-&gt;getEndLine();
+        <span style="background-color: red">}</span>
+
+        self::addMap($x, $c, self::EXTRA_MAP, &#039;&#039;);
+
+        <span style="background-color: red">i</span>f ($x) {
+            $a[Caster::PREFIX_VIRTUAL.&#039;extra&#039;] = new EnumStub($x);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate static function addMap(array &amp;$a, object $c, array $map, string $prefix = Caster::PREFIX_VIRTUAL): void
+    {
+        <span style="background-color: red">f</span>oreach ($map as $k =&gt; $m) {
+            <span style="background-color: red">i</span>f (&#039;isDisabled&#039; === $k) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (method_exists($c, $m) &amp;&amp; <span style="background-color: red">f</span>alse !== ($m = $c-&gt;$m()) &amp;&amp; <span style="background-color: red">n</span>ull !== $m) {
+                $a[$prefix.$k] = $m instanceof \Reflector ? $m-&gt;name : <span style="background-color: red">$</span>m;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate static function addAttributes(array &amp;$a, \Reflector $c, string $prefix = Caster::PREFIX_VIRTUAL): void
+    {
+        <span style="background-color: red">f</span>oreach ($c-&gt;getAttributes() as $n) {
+            $a[$prefix.&#039;attributes&#039;][] = $n;
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

@@ -1,0 +1,35 @@
+<pre>&lt;?php
+
+namespace Illuminate\Pagination;
+
+use Illuminate\Support\ServiceProvider;
+
+class PaginationServiceProvider extends ServiceProvider
+{
+    /**
+     * Bootstrap any application services.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        $this-&gt;loadViewsFrom(__DIR__.&#039;/resources/views&#039;, &#039;pagination&#039;);
+
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;runningInConsole()) {
+            $this-&gt;publishes([
+                __DIR__.&#039;/resources/views&#039; =&gt; $this-&gt;app-&gt;resourcePath(&#039;views/vendor/pagination&#039;),
+            ], &#039;laravel-pagination&#039;);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        PaginationState::resolveUsing($this-&gt;app);
+    }
+}
+</pre>

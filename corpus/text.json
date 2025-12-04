@@ -1,0 +1,39 @@
+[
+  {
+    "method": "GET",
+    "url": "http://example.com/path?test=123&query=foo&par=456",
+    "headers": {
+      "User-Agent": "Fuzzer-Test",
+      "Accept": "application/json"
+    }
+  },
+  {
+    "method": "POST",
+    "url": "http://example.com/upload?id=1&type=image",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer fuzz-token-string"
+    },
+    "body": {
+      "name": "Test",
+      "age": 30
+    }
+  },
+  {
+    "method": "PUT",
+    "url": "http://example.com/item/100",
+    "headers": {
+      "User-Agent": "Fuzzer-Test-Agent"
+    },
+    "body": {
+      "key": "value"
+    }
+  },
+  {
+    "method": "DELETE",
+    "url": "http://example.com/delete/42?confirm=true",
+    "headers": {
+      "X-Confirm": "true"
+    }
+  }
+]

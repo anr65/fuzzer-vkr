@@ -1,0 +1,789 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log;
+
+use Closure;
+use Illuminate\Contracts\Log\ContextLogProcessor;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+use Monolog\Formatter\LineFormatter;
+use Monolog\Handler\ErrorLogHandler;
+use Monolog\Handler\FingersCrossedHandler;
+use Monolog\Handler\FormattableHandlerInterface;
+use Monolog\Handler\HandlerInterface;
+use Monolog\Handler\RotatingFileHandler;
+use Monolog\Handler\SlackWebhookHandler;
+use Monolog\Handler\StreamHandler;
+use Monolog\Handler\SyslogHandler;
+use Monolog\Handler\WhatFailureGroupHandler;
+use Monolog\Logger as Monolog;
+use Monolog\Processor\ProcessorInterface;
+use Monolog\Processor\PsrLogMessageProcessor;
+use Psr\Log\LoggerInterface;
+use Throwable;
+
+/**
+ * @mixin \Illuminate\Log\Logger
+ */
+class LogManager implements LoggerInterface
+{
+    use ParsesLogConfiguration;
+
+    /**
+     * The application instance.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected $app;
+
+    /**
+     * The array of resolved channels.
+     *
+     * @var array
+     */
+    protected $channels = [];
+
+    /**
+     * The context shared across channels and stacks.
+     *
+     * @var array
+     */
+    protected $sharedContext = [];
+
+    /**
+     * The registered custom driver creators.
+     *
+     * @var array
+     */
+    protected $customCreators = [];
+
+    /**
+     * The standard date format to use when writing logs.
+     *
+     * @var string
+     */
+    protected $dateFormat = &#039;Y-m-d H:i:s&#039;;
+
+    /**
+     * Create a new Log manager instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     */
+    <span style="background-color: green">p</span>ublic function __construct($app)
+    {
+        $this-&gt;app = $app;
+    }
+
+    /**
+     * Build an on-demand log channel.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>ublic function build(array $config)
+    {
+        unset($this-&gt;channels[&#039;ondemand&#039;]);
+
+        return $this-&gt;get(&#039;ondemand&#039;, $config);
+    }
+
+    /**
+     * Create a new, on-demand aggregate logger instance.
+     *
+     * @param  array  $channels
+     * @param  string|null  $channel
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>ublic function stack(array $channels, $channel = null)
+    {
+        return (new Logger(
+            $this-&gt;createStackDriver(compact(&#039;channels&#039;, &#039;channel&#039;)),
+            $this-&gt;app[&#039;events&#039;]
+        ))-&gt;withContext($this-&gt;sharedContext);
+    }
+
+    /**
+     * Get a log channel instance.
+     *
+     * @param  string|null  $channel
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>ublic function channel($channel = null)
+    {
+        return $this-&gt;driver($channel);
+    }
+
+    /**
+     * Get a log driver instance.
+     *
+     * @param  string|null  $driver
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>ublic function driver($driver = null)
+    {
+        return $this-&gt;get($this-&gt;parseDriver($driver));
+    }
+
+    /**
+     * Attempt to get the log from the local cache.
+     *
+     * @param  string  $name
+     * @param  array|null  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>rotected function get($name, ?array $config = null)
+    {
+        try {
+            return $this-&gt;channels[$name] ?? <span style="background-color: green">w</span>ith($this-&gt;resolve($name, $config), <span style="background-color: green">f</span>unction ($logger) use ($name) {
+                $loggerWithContext = $this-&gt;tap(
+                    $name,
+                    new Logger($logger, $this-&gt;app[&#039;events&#039;])
+                )-&gt;withContext($this-&gt;sharedContext);
+
+                <span style="background-color: green">i</span>f (method_exists($loggerWithContext-&gt;getLogger(), &#039;pushProcessor&#039;)) {
+                    $loggerWithContext-&gt;pushProcessor($this-&gt;app-&gt;make(ContextLogProcessor::class));
+                <span style="background-color: green">}</span>
+
+                return $this-&gt;channels[$name] = $loggerWithContext;
+            });
+        } <span style="background-color: red">c</span>atch (Throwable $e) {
+            return tap($this-&gt;createEmergencyLogger(), <span style="background-color: red">f</span>unction ($logger) use ($e) {
+                $logger-&gt;emergency(&#039;Unable to create configured logger. Using emergency logger.&#039;, [
+                    &#039;exception&#039; =&gt; $e,
+                ]);
+            });
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Apply the configured taps for the logger.
+     *
+     * @param  string  $name
+     * @param  \Illuminate\Log\Logger  $logger
+     * @return \Illuminate\Log\Logger
+     */
+    <span style="background-color: green">p</span>rotected function tap($name, Logger $logger)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;configurationFor($name)[&#039;tap&#039;] ?? <span style="background-color: green">[</span>] as $tap) {
+            [$class, $arguments] = $this-&gt;parseTap($tap);
+
+            $this-&gt;app-&gt;make($class)-&gt;__invoke($logger, ...explode(&#039;,&#039;, $arguments));
+        <span style="background-color: green">}</span>
+
+        return $logger;
+    }
+
+    /**
+     * Parse the given tap class string into a class name and arguments string.
+     *
+     * @param  string  $tap
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function parseTap($tap)
+    {
+        return str_contains($tap, &#039;:&#039;) ? explode(&#039;:&#039;, $tap, 2) : <span style="background-color: red">[</span>$tap, &#039;&#039;];
+    }
+
+    /**
+     * Create an emergency log handler to avoid white screens of death.
+     *
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>rotected function createEmergencyLogger()
+    {
+        $config = $this-&gt;configurationFor(&#039;emergency&#039;);
+
+        $handler = new StreamHandler(
+            $config[&#039;path&#039;] ?? <span style="background-color: red">$</span>this-&gt;app-&gt;storagePath().&#039;/logs/laravel.log&#039;,
+            $this-&gt;level([&#039;level&#039; =&gt; &#039;debug&#039;])
+        );
+
+        return new Logger(
+            new Monolog(&#039;laravel&#039;, $this-&gt;prepareHandlers([$handler])),
+            $this-&gt;app[&#039;events&#039;]
+        );
+    }
+
+    /**
+     * Resolve the given log instance by name.
+     *
+     * @param  string  $name
+     * @param  array|null  $config
+     * @return \Psr\Log\LoggerInterface
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function resolve($name, ?array $config = null)
+    {
+        $config ??= <span style="background-color: green">$</span>this-&gt;configurationFor($name);
+
+        <span style="background-color: red">i</span>f (is_null($config)) {
+            throw new InvalidArgumentException(&quot;Log [{$name}] is not defined.&quot;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;customCreators[$config[&#039;driver&#039;]])) {
+            return $this-&gt;callCustomCreator($config);
+        <span style="background-color: green">}</span>
+
+        $driverMethod = &#039;create&#039;.ucfirst($config[&#039;driver&#039;]).&#039;Driver&#039;;
+
+        <span style="background-color: green">i</span>f (method_exists($this, $driverMethod)) {
+            return $this-&gt;{$driverMethod}($config);
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&quot;Driver [{$config[&#039;driver&#039;]}] is not supported.&quot;);
+    }
+
+    /**
+     * Call a custom driver creator.
+     *
+     * @param  array  $config
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function callCustomCreator(array $config)
+    {
+        return $this-&gt;customCreators[$config[&#039;driver&#039;]]($this-&gt;app, $config);
+    }
+
+    /**
+     * Create a custom log driver instance.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>rotected function createCustomDriver(array $config)
+    {
+        $factory = is_callable($via = $config[&#039;via&#039;]) ? $via : <span style="background-color: red">$</span>this-&gt;app-&gt;make($via);
+
+        return $factory($config);
+    }
+
+    /**
+     * Create an aggregate log driver instance.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>rotected function createStackDriver(array $config)
+    {
+        <span style="background-color: red">i</span>f (is_string($config[&#039;channels&#039;])) {
+            $config[&#039;channels&#039;] = explode(&#039;,&#039;, $config[&#039;channels&#039;]);
+        <span style="background-color: green">}</span>
+
+        $handlers = (new Collection($config[&#039;channels&#039;]))-&gt;flatMap(<span style="background-color: green">f</span>unction ($channel) {
+            return $channel instanceof LoggerInterface
+                ? $channel-&gt;getHandlers()
+                : <span style="background-color: green">$</span>this-&gt;channel($channel)-&gt;getHandlers();
+        })-&gt;all();
+
+        $processors = (new Collection($config[&#039;channels&#039;]))-&gt;flatMap(<span style="background-color: green">f</span>unction ($channel) {
+            return $channel instanceof LoggerInterface
+                ? $channel-&gt;getProcessors()
+                : <span style="background-color: green">$</span>this-&gt;channel($channel)-&gt;getProcessors();
+        })-&gt;all();
+
+        <span style="background-color: red">i</span>f ($config[&#039;ignore_exceptions&#039;] ?? <span style="background-color: red">f</span>alse) {
+            $handlers = [new WhatFailureGroupHandler($handlers)];
+        <span style="background-color: green">}</span>
+
+        return new Monolog($this-&gt;parseChannel($config), $handlers, $processors);
+    }
+
+    /**
+     * Create an instance of the single file log driver.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>rotected function createSingleDriver(array $config)
+    {
+        return new Monolog($this-&gt;parseChannel($config), [
+            $this-&gt;prepareHandler(
+                new StreamHandler(
+                    $config[&#039;path&#039;], $this-&gt;level($config),
+                    $config[&#039;bubble&#039;] ?? <span style="background-color: green">t</span>rue, $config[&#039;permission&#039;] ?? <span style="background-color: green">n</span>ull, $config[&#039;locking&#039;] ?? <span style="background-color: green">f</span>alse
+                ), $config
+            ),
+        ], $config[&#039;replace_placeholders&#039;] ?? <span style="background-color: red">f</span>alse ? [new PsrLogMessageProcessor()] : <span style="background-color: red">[</span>]);
+    }
+
+    /**
+     * Create an instance of the daily file log driver.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>rotected function createDailyDriver(array $config)
+    {
+        return new Monolog($this-&gt;parseChannel($config), [
+            $this-&gt;prepareHandler(new RotatingFileHandler(
+                $config[&#039;path&#039;], $config[&#039;days&#039;] ?? <span style="background-color: red">7</span>, $this-&gt;level($config),
+                $config[&#039;bubble&#039;] ?? <span style="background-color: red">t</span>rue, $config[&#039;permission&#039;] ?? <span style="background-color: red">n</span>ull, $config[&#039;locking&#039;] ?? <span style="background-color: red">f</span>alse
+            ), $config),
+        ], $config[&#039;replace_placeholders&#039;] ?? <span style="background-color: red">f</span>alse ? [new PsrLogMessageProcessor()] : <span style="background-color: red">[</span>]);
+    }
+
+    /**
+     * Create an instance of the Slack log driver.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>rotected function createSlackDriver(array $config)
+    {
+        return new Monolog($this-&gt;parseChannel($config), [
+            $this-&gt;prepareHandler(new SlackWebhookHandler(
+                $config[&#039;url&#039;],
+                $config[&#039;channel&#039;] ?? <span style="background-color: red">n</span>ull,
+                $config[&#039;username&#039;] ?? <span style="background-color: red">'</span>Laravel&#039;,
+                $config[&#039;attachment&#039;] ?? <span style="background-color: red">t</span>rue,
+                $config[&#039;emoji&#039;] ?? <span style="background-color: red">'</span>:boom:&#039;,
+                $config[&#039;short&#039;] ?? <span style="background-color: red">f</span>alse,
+                $config[&#039;context&#039;] ?? <span style="background-color: red">t</span>rue,
+                $this-&gt;level($config),
+                $config[&#039;bubble&#039;] ?? <span style="background-color: red">t</span>rue,
+                $config[&#039;exclude_fields&#039;] ?? <span style="background-color: red">[</span>]
+            ), $config),
+        ], $config[&#039;replace_placeholders&#039;] ?? <span style="background-color: red">f</span>alse ? [new PsrLogMessageProcessor()] : <span style="background-color: red">[</span>]);
+    }
+
+    /**
+     * Create an instance of the syslog log driver.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>rotected function createSyslogDriver(array $config)
+    {
+        return new Monolog($this-&gt;parseChannel($config), [
+            $this-&gt;prepareHandler(new SyslogHandler(
+                Str::snake($this-&gt;app[&#039;config&#039;][&#039;app.name&#039;], &#039;-&#039;),
+                $config[&#039;facility&#039;] ?? <span style="background-color: red">L</span>OG_USER, $this-&gt;level($config)
+            ), $config),
+        ], $config[&#039;replace_placeholders&#039;] ?? <span style="background-color: red">f</span>alse ? [new PsrLogMessageProcessor()] : <span style="background-color: red">[</span>]);
+    }
+
+    /**
+     * Create an instance of the &quot;error log&quot; log driver.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: red">p</span>rotected function createErrorlogDriver(array $config)
+    {
+        return new Monolog($this-&gt;parseChannel($config), [
+            $this-&gt;prepareHandler(new ErrorLogHandler(
+                $config[&#039;type&#039;] ?? <span style="background-color: red">E</span>rrorLogHandler::OPERATING_SYSTEM, $this-&gt;level($config)
+            )),
+        ], $config[&#039;replace_placeholders&#039;] ?? <span style="background-color: red">f</span>alse ? [new PsrLogMessageProcessor()] : <span style="background-color: red">[</span>]);
+    }
+
+    /**
+     * Create an instance of any handler available in Monolog.
+     *
+     * @param  array  $config
+     * @return \Psr\Log\LoggerInterface
+     *
+     * @throws \InvalidArgumentException
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     */
+    <span style="background-color: red">p</span>rotected function createMonologDriver(array $config)
+    {
+        <span style="background-color: red">i</span>f (! is_a($config[&#039;handler&#039;], HandlerInterface::class, true)) {
+            throw new InvalidArgumentException(
+                $config[&#039;handler&#039;].&#039; must be an instance of &#039;.HandlerInterface::class
+            );
+        <span style="background-color: red">}</span>
+
+        (new Collection($config[&#039;processors&#039;] ?? <span style="background-color: red">[</span>]))-&gt;each(<span style="background-color: red">f</span>unction ($processor) {
+            $processor = $processor[&#039;processor&#039;] ?? <span style="background-color: red">$</span>processor;
+
+            <span style="background-color: red">i</span>f (! is_a($processor, ProcessorInterface::class, true)) {
+                throw new InvalidArgumentException(
+                    $processor.&#039; must be an instance of &#039;.ProcessorInterface::class
+                );
+            <span style="background-color: red">}</span>
+        });
+
+        $with = array_merge(
+            [&#039;level&#039; =&gt; $this-&gt;level($config)],
+            $config[&#039;with&#039;] ?? <span style="background-color: red">[</span>],
+            $config[&#039;handler_with&#039;] ?? <span style="background-color: red">[</span>]
+        );
+
+        $handler = $this-&gt;prepareHandler(
+            $this-&gt;app-&gt;make($config[&#039;handler&#039;], $with), $config
+        );
+
+        $processors = (new Collection($config[&#039;processors&#039;] ?? <span style="background-color: red">[</span>]))
+            -&gt;map(fn ($processor) =&gt; <span style="background-color: red">$</span>this-&gt;app-&gt;make($processor[&#039;processor&#039;] ?? <span style="background-color: red">$</span>processor, $processor[&#039;with&#039;] ?? <span style="background-color: red">[</span>]))
+            -&gt;toArray();
+
+        return new Monolog(
+            $this-&gt;parseChannel($config),
+            [$handler],
+            $processors,
+        );
+    }
+
+    /**
+     * Prepare the handlers for usage by Monolog.
+     *
+     * @param  array  $handlers
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function prepareHandlers(array $handlers)
+    {
+        <span style="background-color: red">f</span>oreach ($handlers as $key =&gt; $handler) {
+            $handlers[$key] = $this-&gt;prepareHandler($handler);
+        <span style="background-color: red">}</span>
+
+        return $handlers;
+    }
+
+    /**
+     * Prepare the handler for usage by Monolog.
+     *
+     * @param  \Monolog\Handler\HandlerInterface  $handler
+     * @param  array  $config
+     * @return \Monolog\Handler\HandlerInterface
+     */
+    <span style="background-color: green">p</span>rotected function prepareHandler(HandlerInterface $handler, array $config = [])
+    {
+        <span style="background-color: red">i</span>f (isset($config[&#039;action_level&#039;])) {
+            $handler = new FingersCrossedHandler(
+                $handler,
+                $this-&gt;actionLevel($config),
+                0,
+                true,
+                $config[&#039;stop_buffering&#039;] ?? <span style="background-color: red">t</span>rue
+            );
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! $handler instanceof FormattableHandlerInterface) {
+            return $handler;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (! isset($config[&#039;formatter&#039;])) {
+            $handler-&gt;setFormatter($this-&gt;formatter());
+        } <span style="background-color: red">e</span>lseif ($config[&#039;formatter&#039;] !== &#039;default&#039;) {
+            $handler-&gt;setFormatter($this-&gt;app-&gt;make($config[&#039;formatter&#039;], $config[&#039;formatter_with&#039;] ?? <span style="background-color: red">[</span>]));
+        <span style="background-color: green">}</span>
+
+        return $handler;
+    }
+
+    /**
+     * Get a Monolog formatter instance.
+     *
+     * @return \Monolog\Formatter\FormatterInterface
+     */
+    <span style="background-color: green">p</span>rotected function formatter()
+    {
+        return new LineFormatter(null, $this-&gt;dateFormat, true, true, true);
+    }
+
+    /**
+     * Share context across channels and stacks.
+     *
+     * @param  array  $context
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function shareContext(array $context)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;channels as $channel) {
+            $channel-&gt;withContext($context);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;sharedContext = array_merge($this-&gt;sharedContext, $context);
+
+        return $this;
+    }
+
+    /**
+     * The context shared across channels and stacks.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function sharedContext()
+    {
+        return $this-&gt;sharedContext;
+    }
+
+    /**
+     * Flush the log context on all currently resolved channels.
+     *
+     * @param  string[]|null  $keys
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutContext(?array $keys = null)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;channels as $channel) {
+            <span style="background-color: red">i</span>f (method_exists($channel, &#039;withoutContext&#039;)) {
+                $channel-&gt;withoutContext($keys);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Flush the shared context.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function flushSharedContext()
+    {
+        $this-&gt;sharedContext = [];
+
+        return $this;
+    }
+
+    /**
+     * Get fallback log channel name.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function getFallbackChannelName()
+    {
+        return $this-&gt;app-&gt;bound(&#039;env&#039;) ? $this-&gt;app-&gt;environment() : <span style="background-color: red">'</span>production&#039;;
+    }
+
+    /**
+     * Get the log connection configuration.
+     *
+     * @param  string  $name
+     * @return array|null
+     */
+    <span style="background-color: green">p</span>rotected function configurationFor($name)
+    {
+        return $this-&gt;app[&#039;config&#039;][&quot;logging.channels.{$name}&quot;];
+    }
+
+    /**
+     * Get the default log driver name.
+     *
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>ublic function getDefaultDriver()
+    {
+        return $this-&gt;app[&#039;config&#039;][&#039;logging.default&#039;];
+    }
+
+    /**
+     * Set the default log driver name.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setDefaultDriver($name)
+    {
+        $this-&gt;app[&#039;config&#039;][&#039;logging.default&#039;] = $name;
+    }
+
+    /**
+     * Register a custom driver creator Closure.
+     *
+     * @param  string  $driver
+     * @param  \Closure  $callback
+     *
+     * @param-closure-this  $this  $callback
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function extend($driver, Closure $callback)
+    {
+        $this-&gt;customCreators[$driver] = $callback-&gt;bindTo($this, $this);
+
+        return $this;
+    }
+
+    /**
+     * Unset the given channel instance.
+     *
+     * @param  string|null  $driver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forgetChannel($driver = null)
+    {
+        $driver = $this-&gt;parseDriver($driver);
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;channels[$driver])) {
+            unset($this-&gt;channels[$driver]);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Parse the driver name.
+     *
+     * @param  string|null  $driver
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>rotected function parseDriver($driver)
+    {
+        $driver ??= <span style="background-color: green">$</span>this-&gt;getDefaultDriver();
+
+        <span style="background-color: red">i</span>f ($this-&gt;app-&gt;runningUnitTests()) {
+            $driver ??= <span style="background-color: red">'</span>null&#039;;
+        <span style="background-color: green">}</span>
+
+        return trim($driver);
+    }
+
+    /**
+     * Get all of the resolved log channels.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getChannels()
+    {
+        return $this-&gt;channels;
+    }
+
+    /**
+     * System is unusable.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function emergency($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;emergency($message, $context);
+    }
+
+    /**
+     * Action must be taken immediately.
+     *
+     * Example: Entire website down, database unavailable, etc. This should
+     * trigger the SMS alerts and wake you up.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function alert($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;alert($message, $context);
+    }
+
+    /**
+     * Critical conditions.
+     *
+     * Example: Application component unavailable, unexpected exception.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function critical($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;critical($message, $context);
+    }
+
+    /**
+     * Runtime errors that do not require immediate action but should typically
+     * be logged and monitored.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function error($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;error($message, $context);
+    }
+
+    /**
+     * Exceptional occurrences that are not errors.
+     *
+     * Example: Use of deprecated APIs, poor use of an API, undesirable things
+     * that are not necessarily wrong.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function warning($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;warning($message, $context);
+    }
+
+    /**
+     * Normal but significant events.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function notice($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;notice($message, $context);
+    }
+
+    /**
+     * Interesting events.
+     *
+     * Example: User logs in, SQL logs.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function info($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;info($message, $context);
+    }
+
+    /**
+     * Detailed debug information.
+     *
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function debug($message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;debug($message, $context);
+    }
+
+    /**
+     * Logs with an arbitrary level.
+     *
+     * @param  mixed  $level
+     * @param  string|\Stringable  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function log($level, $message, array $context = []): void
+    {
+        $this-&gt;driver()-&gt;log($level, $message, $context);
+    }
+
+    /**
+     * Set the application instance used by the manager.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setApplication($app)
+    {
+        $this-&gt;app = $app;
+
+        return $this;
+    }
+
+    /**
+     * Dynamically call the default driver instance.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;driver()-&gt;$method(...$parameters);
+    }
+}
+</pre>

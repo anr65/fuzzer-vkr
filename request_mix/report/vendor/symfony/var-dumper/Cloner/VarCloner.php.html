@@ -1,0 +1,225 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Cloner;
+
+/**
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class VarCloner extends AbstractCloner
+{
+    private static array $arrayCache = [];
+
+    <span style="background-color: green">p</span>rotected function doClone(mixed $var): array
+    {
+        $len = 1;                       // Length of $queue
+        $pos = 0;                       // Number of cloned items past the minimum depth
+        $refsCounter = 0;               // Hard references counter
+        $queue = [[$var]];              // This breadth-first queue is the return value
+        $hardRefs = [];                 // Map of original zval ids to stub objects
+        $objRefs = [];                  // Map of original object handles to their stub object counterpart
+        $objects = [];                  // Keep a ref to objects to ensure their handle cannot be reused while cloning
+        $resRefs = [];                  // Map of original resource handles to their stub object counterpart
+        $values = [];                   // Map of stub objects&#039; ids to original values
+        $maxItems = $this-&gt;maxItems;
+        $maxString = $this-&gt;maxString;
+        $minDepth = $this-&gt;minDepth;
+        $currentDepth = 0;              // Current tree depth
+        $currentDepthFinalIndex = 0;    // Final $queue index for current tree depth
+        $minimumDepthReached = 0 === $minDepth; // Becomes true when minimum tree depth has been reached
+        $cookie = (object) [];          // Unique object used to detect hard references
+        $a = null;                      // Array cast for nested structures
+        $stub = null;                   // Stub capturing the main properties of an original item value
+                                        // or null if the original value is used directly
+
+        $arrayStub = new Stub();
+        $arrayStub-&gt;type = Stub::TYPE_ARRAY;
+
+        <span style="background-color: green">f</span>or ($i = 0; $i &lt; $len; ++$i) {
+            // Detect when we move on to the next tree depth
+            <span style="background-color: green">i</span>f ($i &gt; $currentDepthFinalIndex) {
+                ++$currentDepth;
+                $currentDepthFinalIndex = $len - 1;
+                <span style="background-color: green">i</span>f ($currentDepth &gt;= $minDepth) {
+                    $minimumDepthReached = true;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            $refs = $vals = $queue[$i];
+            <span style="background-color: green">f</span>oreach ($vals as $k =&gt; $v) {
+                // $v is the original value or a stub object in case of hard references
+
+                $zvalRef = ($r = \ReflectionReference::fromArrayElement($vals, $k)) ? $r-&gt;getId() : <span style="background-color: green">n</span>ull;
+
+                <span style="background-color: red">i</span>f ($zvalRef) {
+                    $vals[$k] = &amp;$stub;         // Break hard references to make $queue completely
+                    unset($stub);               // independent from the original structure
+                    <span style="background-color: red">i</span>f (null !== $vals[$k] = $hardRefs[$zvalRef] ?? <span style="background-color: red">n</span>ull) {
+                        $v = $vals[$k];
+                        <span style="background-color: red">i</span>f ($v-&gt;value instanceof Stub &amp;&amp; (<span style="background-color: red">S</span>tub::TYPE_OBJECT === $v-&gt;value-&gt;type || <span style="background-color: red">S</span>tub::TYPE_RESOURCE === $v-&gt;value-&gt;type)) {
+                            ++$v-&gt;value-&gt;refCount;
+                        <span style="background-color: red">}</span>
+                        ++$v-&gt;refCount;
+                        continue;
+                    <span style="background-color: red">}</span>
+                    $vals[$k] = new Stub();
+                    $vals[$k]-&gt;value = $v;
+                    $vals[$k]-&gt;handle = ++$refsCounter;
+                    $hardRefs[$zvalRef] = $vals[$k];
+                <span style="background-color: green">}</span>
+                // Create $stub when the original value $v cannot be used directly
+                // If $v is a nested structure, put that structure in array $a
+                switch (true) {
+                    <span style="background-color: red">c</span>ase null === $v:
+                    <span style="background-color: red">c</span>ase \is_bool($v):
+                    <span style="background-color: green">c</span>ase \is_int($v):
+                    <span style="background-color: green">c</span>ase \is_float($v):
+                        continue 2;
+                    <span style="background-color: red">c</span>ase \is_string($v):
+                        <span style="background-color: red">i</span>f (&#039;&#039; === $v) {
+                            continue 2;
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (!preg_match(&#039;//u&#039;, $v)) {
+                            $stub = new Stub();
+                            $stub-&gt;type = Stub::TYPE_STRING;
+                            $stub-&gt;class = Stub::STRING_BINARY;
+                            <span style="background-color: red">i</span>f (0 &lt;= $maxString &amp;&amp; <span style="background-color: red">0</span> &lt; $cut = \strlen($v) - $maxString) {
+                                $stub-&gt;cut = $cut;
+                                $stub-&gt;value = substr($v, 0, -$cut);
+                            } <span style="background-color: red">e</span>lse {
+                                $stub-&gt;value = $v;
+                            <span style="background-color: red">}</span>
+                        } <span style="background-color: red">e</span>lseif (0 &lt;= $maxString &amp;&amp; <span style="background-color: red">i</span>sset($v[1 + ($maxString &gt;&gt; 2)]) &amp;&amp; <span style="background-color: red">0</span> &lt; $cut = mb_strlen($v, &#039;UTF-8&#039;) - $maxString) {
+                            $stub = new Stub();
+                            $stub-&gt;type = Stub::TYPE_STRING;
+                            $stub-&gt;class = Stub::STRING_UTF8;
+                            $stub-&gt;cut = $cut;
+                            $stub-&gt;value = mb_substr($v, 0, $maxString, &#039;UTF-8&#039;);
+                        } <span style="background-color: red">e</span>lse {
+                            continue 2;
+                        <span style="background-color: red">}</span>
+                        $a = null;
+                        break;
+
+                    <span style="background-color: green">c</span>ase \is_array($v):
+                        <span style="background-color: green">i</span>f (!$v) {
+                            continue 2;
+                        <span style="background-color: red">}</span>
+                        $stub = $arrayStub;
+
+                        $stub-&gt;class = array_is_list($v) ? Stub::ARRAY_INDEXED : <span style="background-color: red">S</span>tub::ARRAY_ASSOC;
+                        $a = $v;
+                        break;
+
+                    <span style="background-color: green">c</span>ase \is_object($v):
+                        <span style="background-color: green">i</span>f (empty($objRefs[$h = spl_object_id($v)])) {
+                            $stub = new Stub();
+                            $stub-&gt;type = Stub::TYPE_OBJECT;
+                            $stub-&gt;class = $v::class;
+                            $stub-&gt;value = $v;
+                            $stub-&gt;handle = $h;
+                            $a = $this-&gt;castObject($stub, 0 &lt; $i);
+                            <span style="background-color: red">i</span>f ($v !== $stub-&gt;value) {
+                                <span style="background-color: red">i</span>f (Stub::TYPE_OBJECT !== $stub-&gt;type || <span style="background-color: red">n</span>ull === $stub-&gt;value) {
+                                    break;
+                                <span style="background-color: red">}</span>
+                                $stub-&gt;handle = $h = spl_object_id($stub-&gt;value);
+                            <span style="background-color: green">}</span>
+                            $stub-&gt;value = null;
+                            <span style="background-color: red">i</span>f (0 &lt;= $maxItems &amp;&amp; <span style="background-color: green">$</span>maxItems &lt;= $pos &amp;&amp; <span style="background-color: red">$</span>minimumDepthReached) {
+                                $stub-&gt;cut = \count($a);
+                                $a = null;
+                            <span style="background-color: green">}</span>
+                        <span style="background-color: green">}</span>
+                        <span style="background-color: green">i</span>f (empty($objRefs[$h])) {
+                            $objRefs[$h] = $stub;
+                            $objects[] = $v;
+                        } <span style="background-color: red">e</span>lse {
+                            $stub = $objRefs[$h];
+                            ++$stub-&gt;refCount;
+                            $a = null;
+                        <span style="background-color: green">}</span>
+                        break;
+
+                    <span style="background-color: red">d</span>efault: // resource
+                        <span style="background-color: red">i</span>f (empty($resRefs[$h = (int) $v])) {
+                            $stub = new Stub();
+                            $stub-&gt;type = Stub::TYPE_RESOURCE;
+                            <span style="background-color: red">i</span>f (&#039;Unknown&#039; === $stub-&gt;class = @get_resource_type($v)) {
+                                $stub-&gt;class = &#039;Closed&#039;;
+                            <span style="background-color: red">}</span>
+                            $stub-&gt;value = $v;
+                            $stub-&gt;handle = $h;
+                            $a = $this-&gt;castResource($stub, 0 &lt; $i);
+                            $stub-&gt;value = null;
+                            <span style="background-color: red">i</span>f (0 &lt;= $maxItems &amp;&amp; <span style="background-color: red">$</span>maxItems &lt;= $pos &amp;&amp; <span style="background-color: red">$</span>minimumDepthReached) {
+                                $stub-&gt;cut = \count($a);
+                                $a = null;
+                            <span style="background-color: red">}</span>
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (empty($resRefs[$h])) {
+                            $resRefs[$h] = $stub;
+                        } <span style="background-color: red">e</span>lse {
+                            $stub = $resRefs[$h];
+                            ++$stub-&gt;refCount;
+                            $a = null;
+                        <span style="background-color: red">}</span>
+                        break;
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: green">i</span>f ($a) {
+                    <span style="background-color: green">i</span>f (!$minimumDepthReached || <span style="background-color: red">0</span> &gt; $maxItems) {
+                        $queue[$len] = $a;
+                        $stub-&gt;position = $len++;
+                    } <span style="background-color: red">e</span>lseif ($pos &lt; $maxItems) {
+                        <span style="background-color: red">i</span>f ($maxItems &lt; $pos += \count($a)) {
+                            $a = \array_slice($a, 0, $maxItems - $pos, true);
+                            <span style="background-color: red">i</span>f ($stub-&gt;cut &gt;= 0) {
+                                $stub-&gt;cut += $pos - $maxItems;
+                            <span style="background-color: red">}</span>
+                        <span style="background-color: red">}</span>
+                        $queue[$len] = $a;
+                        $stub-&gt;position = $len++;
+                    } <span style="background-color: red">e</span>lseif ($stub-&gt;cut &gt;= 0) {
+                        $stub-&gt;cut += \count($a);
+                        $stub-&gt;position = 0;
+                    <span style="background-color: green">}</span>
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: red">i</span>f ($arrayStub === $stub) {
+                    <span style="background-color: red">i</span>f ($arrayStub-&gt;cut) {
+                        $stub = [$arrayStub-&gt;cut, $arrayStub-&gt;class =&gt; $arrayStub-&gt;position];
+                        $arrayStub-&gt;cut = 0;
+                    } <span style="background-color: red">e</span>lseif (isset(self::$arrayCache[$arrayStub-&gt;class][$arrayStub-&gt;position])) {
+                        $stub = self::$arrayCache[$arrayStub-&gt;class][$arrayStub-&gt;position];
+                    } <span style="background-color: red">e</span>lse {
+                        self::$arrayCache[$arrayStub-&gt;class][$arrayStub-&gt;position] = $stub = [$arrayStub-&gt;class =&gt; $arrayStub-&gt;position];
+                    <span style="background-color: red">}</span>
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: green">i</span>f (!$zvalRef) {
+                    $vals[$k] = $stub;
+                } <span style="background-color: red">e</span>lse {
+                    $hardRefs[$zvalRef]-&gt;value = $stub;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            $queue[$i] = $vals;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($values as $h =&gt; $v) {
+            $hardRefs[$h] = $v;
+        <span style="background-color: green">}</span>
+
+        return $queue;
+    }
+}
+</pre>

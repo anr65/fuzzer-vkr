@@ -1,0 +1,1167 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+use Closure;
+use Illuminate\Database\ClassMorphViolationException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\PendingHasThroughRelationship;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+
+trait HasRelationships
+{
+    /**
+     * The loaded relationships for the model.
+     *
+     * @var array
+     */
+    protected $relations = [];
+
+    /**
+     * The relationships that should be touched on save.
+     *
+     * @var array
+     */
+    protected $touches = [];
+
+    /**
+     * The relationship autoloader callback.
+     *
+     * @var \Closure|null
+     */
+    protected $relationAutoloadCallback = null;
+
+    /**
+     * The many to many relationship methods.
+     *
+     * @var string[]
+     */
+    public static $manyMethods = [
+        &#039;belongsToMany&#039;, &#039;morphToMany&#039;, &#039;morphedByMany&#039;,
+    ];
+
+    /**
+     * The relation resolver callbacks.
+     *
+     * @var array
+     */
+    protected static $relationResolvers = [];
+
+    /**
+     * Get the dynamic relation resolver if defined or inherited, or return null.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $class
+     * @param  string  $key
+     * @return Closure|null
+     */
+    <span style="background-color: red">p</span>ublic function relationResolver($class, $key)
+    {
+        <span style="background-color: red">i</span>f ($resolver = static::$relationResolvers[$class][$key] ?? <span style="background-color: red">n</span>ull) {
+            return $resolver;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($parent = get_parent_class($class)) {
+            return $this-&gt;relationResolver($parent, $key);
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Define a dynamic relation resolver.
+     *
+     * @param  string  $name
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function resolveRelationUsing($name, Closure $callback)
+    {
+        static::$relationResolvers = array_replace_recursive(
+            static::$relationResolvers,
+            [static::class =&gt; [$name =&gt; $callback]]
+        );
+    }
+
+    /**
+     * Determine if a relationship autoloader callback has been defined.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasRelationAutoloadCallback()
+    {
+        return ! is_null($this-&gt;relationAutoloadCallback);
+    }
+
+    /**
+     * Define an automatic relationship autoloader callback for this model and its relations.
+     *
+     * @param  \Closure  $callback
+     * @param  mixed  $context
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function autoloadRelationsUsing(Closure $callback, $context = null)
+    {
+        $this-&gt;relationAutoloadCallback = $callback;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;relations as $key =&gt; $value) {
+            $this-&gt;propagateRelationAutoloadCallbackToRelation($key, $value, $context);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Attempt to autoload the given relationship using the autoload callback.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function attemptToAutoloadRelation($key)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;hasRelationAutoloadCallback()) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;invokeRelationAutoloadCallbackFor($key, []);
+
+        return $this-&gt;relationLoaded($key);
+    }
+
+    /**
+     * Invoke the relationship autoloader callback for the given relationships.
+     *
+     * @param  string  $key
+     * @param  array  $tuples
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function invokeRelationAutoloadCallbackFor($key, $tuples)
+    {
+        $tuples = array_merge([[$key, get_class($this)]], $tuples);
+
+        call_user_func($this-&gt;relationAutoloadCallback, $tuples);
+    }
+
+    /**
+     * Propagate the relationship autoloader callback to the given related models.
+     *
+     * @param  string  $key
+     * @param  mixed  $values
+     * @param  mixed  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function propagateRelationAutoloadCallbackToRelation($key, $models, $context = null)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;hasRelationAutoloadCallback() || <span style="background-color: red">!</span> $models) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($models instanceof Model) {
+            $models = [$models];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! is_iterable($models)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $callback = fn (array $tuples) =&gt; <span style="background-color: red">$</span>this-&gt;invokeRelationAutoloadCallbackFor($key, $tuples);
+
+        <span style="background-color: red">f</span>oreach ($models as $model) {
+            // Check if relation autoload contexts are different to avoid circular relation autoload...
+            <span style="background-color: red">i</span>f (is_null($context) || <span style="background-color: red">$</span>context !== $model) {
+                $model-&gt;autoloadRelationsUsing($callback, $context);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Define a one-to-one relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string|null  $foreignKey
+     * @param  string|null  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function hasOne($related, $foreignKey = null, $localKey = null)
+    {
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        $foreignKey = $foreignKey ?: <span style="background-color: red">$</span>this-&gt;getForeignKey();
+
+        $localKey = $localKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName();
+
+        return $this-&gt;newHasOne($instance-&gt;newQuery(), $this, $instance-&gt;qualifyColumn($foreignKey), $localKey);
+    }
+
+    /**
+     * Instantiate a new HasOne relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string  $foreignKey
+     * @param  string  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newHasOne(Builder $query, Model $parent, $foreignKey, $localKey)
+    {
+        return new HasOne($query, $parent, $foreignKey, $localKey);
+    }
+
+    /**
+     * Define a has-one-through relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  class-string&lt;TIntermediateModel&gt;  $through
+     * @param  string|null  $firstKey
+     * @param  string|null  $secondKey
+     * @param  string|null  $localKey
+     * @param  string|null  $secondLocalKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasOneThrough&lt;TRelatedModel, TIntermediateModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function hasOneThrough($related, $through, $firstKey = null, $secondKey = null, $localKey = null, $secondLocalKey = null)
+    {
+        $through = $this-&gt;newRelatedThroughInstance($through);
+
+        $firstKey = $firstKey ?: <span style="background-color: red">$</span>this-&gt;getForeignKey();
+
+        $secondKey = $secondKey ?: <span style="background-color: red">$</span>through-&gt;getForeignKey();
+
+        return $this-&gt;newHasOneThrough(
+            $this-&gt;newRelatedInstance($related)-&gt;newQuery(),
+            $this,
+            $through,
+            $firstKey,
+            $secondKey,
+            $localKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName(),
+            $secondLocalKey ?: <span style="background-color: red">$</span>through-&gt;getKeyName(),
+        );
+    }
+
+    /**
+     * Instantiate a new HasOneThrough relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $farParent
+     * @param  TIntermediateModel  $throughParent
+     * @param  string  $firstKey
+     * @param  string  $secondKey
+     * @param  string  $localKey
+     * @param  string  $secondLocalKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasOneThrough&lt;TRelatedModel, TIntermediateModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newHasOneThrough(Builder $query, Model $farParent, Model $throughParent, $firstKey, $secondKey, $localKey, $secondLocalKey)
+    {
+        return new HasOneThrough($query, $farParent, $throughParent, $firstKey, $secondKey, $localKey, $secondLocalKey);
+    }
+
+    /**
+     * Define a polymorphic one-to-one relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string  $name
+     * @param  string|null  $type
+     * @param  string|null  $id
+     * @param  string|null  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphOne&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function morphOne($related, $name, $type = null, $id = null, $localKey = null)
+    {
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        [$type, $id] = $this-&gt;getMorphs($name, $type, $id);
+
+        $localKey = $localKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName();
+
+        return $this-&gt;newMorphOne($instance-&gt;newQuery(), $this, $instance-&gt;qualifyColumn($type), $instance-&gt;qualifyColumn($id), $localKey);
+    }
+
+    /**
+     * Instantiate a new MorphOne relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string  $type
+     * @param  string  $id
+     * @param  string  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphOne&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newMorphOne(Builder $query, Model $parent, $type, $id, $localKey)
+    {
+        return new MorphOne($query, $parent, $type, $id, $localKey);
+    }
+
+    /**
+     * Define an inverse one-to-one or many relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string|null  $foreignKey
+     * @param  string|null  $ownerKey
+     * @param  string|null  $relation
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function belongsTo($related, $foreignKey = null, $ownerKey = null, $relation = null)
+    {
+        // If no relation name was given, we will use this debug backtrace to extract
+        // the calling method&#039;s name and use that as the relationship name as most
+        // of the time this will be what we desire to use for the relationships.
+        <span style="background-color: red">i</span>f (is_null($relation)) {
+            $relation = $this-&gt;guessBelongsToRelation();
+        <span style="background-color: red">}</span>
+
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        // If no foreign key was supplied, we can use a backtrace to guess the proper
+        // foreign key name by using the name of the relationship function, which
+        // when combined with an &quot;_id&quot; should conventionally match the columns.
+        <span style="background-color: red">i</span>f (is_null($foreignKey)) {
+            $foreignKey = Str::snake($relation).&#039;_&#039;.$instance-&gt;getKeyName();
+        <span style="background-color: red">}</span>
+
+        // Once we have the foreign key names we&#039;ll just create a new Eloquent query
+        // for the related models and return the relationship instance which will
+        // actually be responsible for retrieving and hydrating every relation.
+        $ownerKey = $ownerKey ?: <span style="background-color: red">$</span>instance-&gt;getKeyName();
+
+        return $this-&gt;newBelongsTo(
+            $instance-&gt;newQuery(), $this, $foreignKey, $ownerKey, $relation
+        );
+    }
+
+    /**
+     * Instantiate a new BelongsTo relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $child
+     * @param  string  $foreignKey
+     * @param  string  $ownerKey
+     * @param  string  $relation
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newBelongsTo(Builder $query, Model $child, $foreignKey, $ownerKey, $relation)
+    {
+        return new BelongsTo($query, $child, $foreignKey, $ownerKey, $relation);
+    }
+
+    /**
+     * Define a polymorphic, inverse one-to-one or many relationship.
+     *
+     * @param  string|null  $name
+     * @param  string|null  $type
+     * @param  string|null  $id
+     * @param  string|null  $ownerKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphTo&lt;\Illuminate\Database\Eloquent\Model, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function morphTo($name = null, $type = null, $id = null, $ownerKey = null)
+    {
+        // If no name is provided, we will use the backtrace to get the function name
+        // since that is most likely the name of the polymorphic interface. We can
+        // use that to get both the class and foreign key that will be utilized.
+        $name = $name ?: <span style="background-color: red">$</span>this-&gt;guessBelongsToRelation();
+
+        [$type, $id] = $this-&gt;getMorphs(
+            Str::snake($name), $type, $id
+        );
+
+        // If the type value is null it is probably safe to assume we&#039;re eager loading
+        // the relationship. In this case we&#039;ll just pass in a dummy query where we
+        // need to remove any eager loads that may already be defined on a model.
+        return is_null($class = $this-&gt;getAttributeFromArray($type)) || <span style="background-color: red">$</span>class === &#039;&#039;
+            ? $this-&gt;morphEagerTo($name, $type, $id, $ownerKey)
+            : <span style="background-color: red">$</span>this-&gt;morphInstanceTo($class, $name, $type, $id, $ownerKey);
+    }
+
+    /**
+     * Define a polymorphic, inverse one-to-one or many relationship.
+     *
+     * @param  string  $name
+     * @param  string  $type
+     * @param  string  $id
+     * @param  string|null  $ownerKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphTo&lt;\Illuminate\Database\Eloquent\Model, $this&gt;
+     */
+    <span style="background-color: red">p</span>rotected function morphEagerTo($name, $type, $id, $ownerKey)
+    {
+        return $this-&gt;newMorphTo(
+            $this-&gt;newQuery()-&gt;setEagerLoads([]), $this, $id, $ownerKey, $type, $name
+        );
+    }
+
+    /**
+     * Define a polymorphic, inverse one-to-one or many relationship.
+     *
+     * @param  string  $target
+     * @param  string  $name
+     * @param  string  $type
+     * @param  string  $id
+     * @param  string|null  $ownerKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphTo&lt;\Illuminate\Database\Eloquent\Model, $this&gt;
+     */
+    <span style="background-color: red">p</span>rotected function morphInstanceTo($target, $name, $type, $id, $ownerKey)
+    {
+        $instance = $this-&gt;newRelatedInstance(
+            static::getActualClassNameForMorph($target)
+        );
+
+        return $this-&gt;newMorphTo(
+            $instance-&gt;newQuery(), $this, $id, $ownerKey ?? <span style="background-color: red">$</span>instance-&gt;getKeyName(), $type, $name
+        );
+    }
+
+    /**
+     * Instantiate a new MorphTo relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string  $foreignKey
+     * @param  string|null  $ownerKey
+     * @param  string  $type
+     * @param  string  $relation
+     * @return \Illuminate\Database\Eloquent\Relations\MorphTo&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newMorphTo(Builder $query, Model $parent, $foreignKey, $ownerKey, $type, $relation)
+    {
+        return new MorphTo($query, $parent, $foreignKey, $ownerKey, $type, $relation);
+    }
+
+    /**
+     * Retrieve the actual class name for a given morph class.
+     *
+     * @param  string  $class
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function getActualClassNameForMorph($class)
+    {
+        return Arr::get(Relation::morphMap() ?: <span style="background-color: red">[</span>], $class, $class);
+    }
+
+    /**
+     * Guess the &quot;belongs to&quot; relationship name.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function guessBelongsToRelation()
+    {
+        [$one, $two, $caller] = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
+
+        return $caller[&#039;function&#039;];
+    }
+
+    /**
+     * Create a pending has-many-through or has-one-through relationship.
+     *
+     * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  string|\Illuminate\Database\Eloquent\Relations\HasMany&lt;TIntermediateModel, covariant $this&gt;|\Illuminate\Database\Eloquent\Relations\HasOne&lt;TIntermediateModel, covariant $this&gt;  $relationship
+     * @return (
+     *     $relationship is string
+     *     ? \Illuminate\Database\Eloquent\PendingHasThroughRelationship&lt;\Illuminate\Database\Eloquent\Model, $this&gt;
+     *     : (
+     *          $relationship is \Illuminate\Database\Eloquent\Relations\HasMany&lt;TIntermediateModel, $this&gt;
+     *          ? \Illuminate\Database\Eloquent\PendingHasThroughRelationship&lt;TIntermediateModel, $this, \Illuminate\Database\Eloquent\Relations\HasMany&lt;TIntermediateModel, $this&gt;&gt;
+     *          : \Illuminate\Database\Eloquent\PendingHasThroughRelationship&lt;TIntermediateModel, $this, \Illuminate\Database\Eloquent\Relations\HasOne&lt;TIntermediateModel, $this&gt;&gt;
+     *     )
+     * )
+     */
+    <span style="background-color: red">p</span>ublic function through($relationship)
+    {
+        <span style="background-color: red">i</span>f (is_string($relationship)) {
+            $relationship = $this-&gt;{$relationship}();
+        <span style="background-color: red">}</span>
+
+        return new PendingHasThroughRelationship($this, $relationship);
+    }
+
+    /**
+     * Define a one-to-many relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string|null  $foreignKey
+     * @param  string|null  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function hasMany($related, $foreignKey = null, $localKey = null)
+    {
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        $foreignKey = $foreignKey ?: <span style="background-color: red">$</span>this-&gt;getForeignKey();
+
+        $localKey = $localKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName();
+
+        return $this-&gt;newHasMany(
+            $instance-&gt;newQuery(), $this, $instance-&gt;qualifyColumn($foreignKey), $localKey
+        );
+    }
+
+    /**
+     * Instantiate a new HasMany relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string  $foreignKey
+     * @param  string  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newHasMany(Builder $query, Model $parent, $foreignKey, $localKey)
+    {
+        return new HasMany($query, $parent, $foreignKey, $localKey);
+    }
+
+    /**
+     * Define a has-many-through relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  class-string&lt;TIntermediateModel&gt;  $through
+     * @param  string|null  $firstKey
+     * @param  string|null  $secondKey
+     * @param  string|null  $localKey
+     * @param  string|null  $secondLocalKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasManyThrough&lt;TRelatedModel, TIntermediateModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function hasManyThrough($related, $through, $firstKey = null, $secondKey = null, $localKey = null, $secondLocalKey = null)
+    {
+        $through = $this-&gt;newRelatedThroughInstance($through);
+
+        $firstKey = $firstKey ?: <span style="background-color: red">$</span>this-&gt;getForeignKey();
+
+        $secondKey = $secondKey ?: <span style="background-color: red">$</span>through-&gt;getForeignKey();
+
+        return $this-&gt;newHasManyThrough(
+            $this-&gt;newRelatedInstance($related)-&gt;newQuery(),
+            $this,
+            $through,
+            $firstKey,
+            $secondKey,
+            $localKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName(),
+            $secondLocalKey ?: <span style="background-color: red">$</span>through-&gt;getKeyName()
+        );
+    }
+
+    /**
+     * Instantiate a new HasManyThrough relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $farParent
+     * @param  TIntermediateModel  $throughParent
+     * @param  string  $firstKey
+     * @param  string  $secondKey
+     * @param  string  $localKey
+     * @param  string  $secondLocalKey
+     * @return \Illuminate\Database\Eloquent\Relations\HasManyThrough&lt;TRelatedModel, TIntermediateModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newHasManyThrough(Builder $query, Model $farParent, Model $throughParent, $firstKey, $secondKey, $localKey, $secondLocalKey)
+    {
+        return new HasManyThrough($query, $farParent, $throughParent, $firstKey, $secondKey, $localKey, $secondLocalKey);
+    }
+
+    /**
+     * Define a polymorphic one-to-many relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string  $name
+     * @param  string|null  $type
+     * @param  string|null  $id
+     * @param  string|null  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphMany&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function morphMany($related, $name, $type = null, $id = null, $localKey = null)
+    {
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        // Here we will gather up the morph type and ID for the relationship so that we
+        // can properly query the intermediate table of a relation. Finally, we will
+        // get the table and create the relationship instances for the developers.
+        [$type, $id] = $this-&gt;getMorphs($name, $type, $id);
+
+        $localKey = $localKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName();
+
+        return $this-&gt;newMorphMany($instance-&gt;newQuery(), $this, $instance-&gt;qualifyColumn($type), $instance-&gt;qualifyColumn($id), $localKey);
+    }
+
+    /**
+     * Instantiate a new MorphMany relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string  $type
+     * @param  string  $id
+     * @param  string  $localKey
+     * @return \Illuminate\Database\Eloquent\Relations\MorphMany&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newMorphMany(Builder $query, Model $parent, $type, $id, $localKey)
+    {
+        return new MorphMany($query, $parent, $type, $id, $localKey);
+    }
+
+    /**
+     * Define a many-to-many relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string|class-string&lt;\Illuminate\Database\Eloquent\Model&gt;|null  $table
+     * @param  string|null  $foreignPivotKey
+     * @param  string|null  $relatedPivotKey
+     * @param  string|null  $parentKey
+     * @param  string|null  $relatedKey
+     * @param  string|null  $relation
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany&lt;TRelatedModel, $this, \Illuminate\Database\Eloquent\Relations\Pivot&gt;
+     */
+    <span style="background-color: red">p</span>ublic function belongsToMany(
+        $related,
+        $table = null,
+        $foreignPivotKey = null,
+        $relatedPivotKey = null,
+        $parentKey = null,
+        $relatedKey = null,
+        $relation = null,
+    ) {
+        // If no relationship name was passed, we will pull backtraces to get the
+        // name of the calling function. We will use that function name as the
+        // title of this relation since that is a great convention to apply.
+        <span style="background-color: red">i</span>f (is_null($relation)) {
+            $relation = $this-&gt;guessBelongsToManyRelation();
+        <span style="background-color: red">}</span>
+
+        // First, we&#039;ll need to determine the foreign key and &quot;other key&quot; for the
+        // relationship. Once we have determined the keys we&#039;ll make the query
+        // instances as well as the relationship instances we need for this.
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        $foreignPivotKey = $foreignPivotKey ?: <span style="background-color: red">$</span>this-&gt;getForeignKey();
+
+        $relatedPivotKey = $relatedPivotKey ?: <span style="background-color: red">$</span>instance-&gt;getForeignKey();
+
+        // If no table name was provided, we can guess it by concatenating the two
+        // models using underscores in alphabetical order. The two model names
+        // are transformed to snake case from their default CamelCase also.
+        <span style="background-color: red">i</span>f (is_null($table)) {
+            $table = $this-&gt;joiningTable($related, $instance);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;newBelongsToMany(
+            $instance-&gt;newQuery(),
+            $this,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName(),
+            $relatedKey ?: <span style="background-color: red">$</span>instance-&gt;getKeyName(),
+            $relation,
+        );
+    }
+
+    /**
+     * Instantiate a new BelongsToMany relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string|class-string&lt;\Illuminate\Database\Eloquent\Model&gt;  $table
+     * @param  string  $foreignPivotKey
+     * @param  string  $relatedPivotKey
+     * @param  string  $parentKey
+     * @param  string  $relatedKey
+     * @param  string|null  $relationName
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany&lt;TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Relations\Pivot&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newBelongsToMany(
+        Builder $query,
+        Model $parent,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+    ) {
+        return new BelongsToMany($query, $parent, $table, $foreignPivotKey, $relatedPivotKey, $parentKey, $relatedKey, $relationName);
+    }
+
+    /**
+     * Define a polymorphic many-to-many relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string  $name
+     * @param  string|null  $table
+     * @param  string|null  $foreignPivotKey
+     * @param  string|null  $relatedPivotKey
+     * @param  string|null  $parentKey
+     * @param  string|null  $relatedKey
+     * @param  string|null  $relation
+     * @param  bool  $inverse
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function morphToMany(
+        $related,
+        $name,
+        $table = null,
+        $foreignPivotKey = null,
+        $relatedPivotKey = null,
+        $parentKey = null,
+        $relatedKey = null,
+        $relation = null,
+        $inverse = false,
+    ) {
+        $relation = $relation ?: <span style="background-color: red">$</span>this-&gt;guessBelongsToManyRelation();
+
+        // First, we will need to determine the foreign key and &quot;other key&quot; for the
+        // relationship. Once we have determined the keys we will make the query
+        // instances, as well as the relationship instances we need for these.
+        $instance = $this-&gt;newRelatedInstance($related);
+
+        $foreignPivotKey = $foreignPivotKey ?: <span style="background-color: red">$</span>name.&#039;_id&#039;;
+
+        $relatedPivotKey = $relatedPivotKey ?: <span style="background-color: red">$</span>instance-&gt;getForeignKey();
+
+        // Now we&#039;re ready to create a new query builder for the related model and
+        // the relationship instances for this relation. This relation will set
+        // appropriate query constraints then entirely manage the hydrations.
+        <span style="background-color: red">i</span>f (! $table) {
+            $words = preg_split(&#039;/(_)/u&#039;, $name, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+            $lastWord = array_pop($words);
+
+            $table = implode(&#039;&#039;, $words).Str::plural($lastWord);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;newMorphToMany(
+            $instance-&gt;newQuery(),
+            $this,
+            $name,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey ?: <span style="background-color: red">$</span>this-&gt;getKeyName(),
+            $relatedKey ?: <span style="background-color: red">$</span>instance-&gt;getKeyName(),
+            $relation,
+            $inverse,
+        );
+    }
+
+    /**
+     * Instantiate a new MorphToMany relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;TRelatedModel&gt;  $query
+     * @param  TDeclaringModel  $parent
+     * @param  string  $name
+     * @param  string  $table
+     * @param  string  $foreignPivotKey
+     * @param  string  $relatedPivotKey
+     * @param  string  $parentKey
+     * @param  string  $relatedKey
+     * @param  string|null  $relationName
+     * @param  bool  $inverse
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany&lt;TRelatedModel, TDeclaringModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function newMorphToMany(
+        Builder $query,
+        Model $parent,
+        $name,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+        $inverse = false,
+    ) {
+        return new MorphToMany(
+            $query,
+            $parent,
+            $name,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey,
+            $relatedKey,
+            $relationName,
+            $inverse,
+        );
+    }
+
+    /**
+     * Define a polymorphic, inverse many-to-many relationship.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $related
+     * @param  string  $name
+     * @param  string|null  $table
+     * @param  string|null  $foreignPivotKey
+     * @param  string|null  $relatedPivotKey
+     * @param  string|null  $parentKey
+     * @param  string|null  $relatedKey
+     * @param  string|null  $relation
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany&lt;TRelatedModel, $this&gt;
+     */
+    <span style="background-color: red">p</span>ublic function morphedByMany(
+        $related,
+        $name,
+        $table = null,
+        $foreignPivotKey = null,
+        $relatedPivotKey = null,
+        $parentKey = null,
+        $relatedKey = null,
+        $relation = null,
+    ) {
+        $foreignPivotKey = $foreignPivotKey ?: <span style="background-color: red">$</span>this-&gt;getForeignKey();
+
+        // For the inverse of the polymorphic many-to-many relations, we will change
+        // the way we determine the foreign and other keys, as it is the opposite
+        // of the morph-to-many method since we&#039;re figuring out these inverses.
+        $relatedPivotKey = $relatedPivotKey ?: <span style="background-color: red">$</span>name.&#039;_id&#039;;
+
+        return $this-&gt;morphToMany(
+            $related,
+            $name,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey,
+            $relatedKey,
+            $relation,
+            true,
+        );
+    }
+
+    /**
+     * Get the relationship name of the belongsToMany relationship.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function guessBelongsToManyRelation()
+    {
+        $caller = Arr::first(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), <span style="background-color: red">f</span>unction ($trace) {
+            return ! in_array(
+                $trace[&#039;function&#039;],
+                array_merge(static::$manyMethods, [&#039;guessBelongsToManyRelation&#039;])
+            );
+        });
+
+        return ! is_null($caller) ? $caller[&#039;function&#039;] : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get the joining table name for a many-to-many relation.
+     *
+     * @param  string  $related
+     * @param  \Illuminate\Database\Eloquent\Model|null  $instance
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function joiningTable($related, $instance = null)
+    {
+        // The joining table name, by convention, is simply the snake cased models
+        // sorted alphabetically and concatenated with an underscore, so we can
+        // just sort the models and join them together to get the table name.
+        $segments = [
+            $instance
+                ? $instance-&gt;joiningTableSegment()
+                : <span style="background-color: red">S</span>tr::snake(class_basename($related)),
+            $this-&gt;joiningTableSegment(),
+        ];
+
+        // Now that we have the model names in an array we can just sort them and
+        // use the implode function to join them together with an underscores,
+        // which is typically used by convention within the database system.
+        sort($segments);
+
+        return strtolower(implode(&#039;_&#039;, $segments));
+    }
+
+    /**
+     * Get this model&#039;s half of the intermediate table name for belongsToMany relationships.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function joiningTableSegment()
+    {
+        return Str::snake(class_basename($this));
+    }
+
+    /**
+     * Determine if the model touches a given relation.
+     *
+     * @param  string  $relation
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function touches($relation)
+    {
+        return in_array($relation, $this-&gt;getTouchedRelations());
+    }
+
+    /**
+     * Touch the owning relations of the model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function touchOwners()
+    {
+        $this-&gt;withoutRecursion(<span style="background-color: red">f</span>unction () {
+            <span style="background-color: red">f</span>oreach ($this-&gt;getTouchedRelations() as $relation) {
+                $this-&gt;$relation()-&gt;touch();
+
+                <span style="background-color: red">i</span>f ($this-&gt;$relation instanceof self) {
+                    $this-&gt;$relation-&gt;fireModelEvent(&#039;saved&#039;, false);
+
+                    $this-&gt;$relation-&gt;touchOwners();
+                } <span style="background-color: red">e</span>lseif ($this-&gt;$relation instanceof EloquentCollection) {
+                    $this-&gt;$relation-&gt;each-&gt;touchOwners();
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Get the polymorphic relationship columns.
+     *
+     * @param  string  $name
+     * @param  string  $type
+     * @param  string  $id
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getMorphs($name, $type, $id)
+    {
+        return [$type ?: <span style="background-color: red">$</span>name.&#039;_type&#039;, $id ?: <span style="background-color: red">$</span>name.&#039;_id&#039;];
+    }
+
+    /**
+     * Get the class name for polymorphic relations.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getMorphClass()
+    {
+        $morphMap = Relation::morphMap();
+
+        <span style="background-color: red">i</span>f (! empty($morphMap) &amp;&amp; <span style="background-color: red">i</span>n_array(static::class, $morphMap)) {
+            return array_search(static::class, $morphMap, true);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::class === Pivot::class) {
+            return static::class;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (Relation::requiresMorphMap()) {
+            throw new ClassMorphViolationException($this);
+        <span style="background-color: red">}</span>
+
+        return static::class;
+    }
+
+    /**
+     * Create a new model instance for a related model.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $class
+     * @return TRelatedModel
+     */
+    <span style="background-color: red">p</span>rotected function newRelatedInstance($class)
+    {
+        return tap(new $class, <span style="background-color: red">f</span>unction ($instance) {
+            <span style="background-color: red">i</span>f (! $instance-&gt;getConnectionName()) {
+                $instance-&gt;setConnection($this-&gt;connection);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Create a new model instance for a related &quot;through&quot; model.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  class-string&lt;TRelatedModel&gt;  $class
+     * @return TRelatedModel
+     */
+    <span style="background-color: red">p</span>rotected function newRelatedThroughInstance($class)
+    {
+        return new $class;
+    }
+
+    /**
+     * Get all the loaded relations for the instance.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getRelations()
+    {
+        return $this-&gt;relations;
+    }
+
+    /**
+     * Get a specified relationship.
+     *
+     * @param  string  $relation
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getRelation($relation)
+    {
+        return $this-&gt;relations[$relation];
+    }
+
+    /**
+     * Determine if the given relation is loaded.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function relationLoaded($key)
+    {
+        return array_key_exists($key, $this-&gt;relations);
+    }
+
+    /**
+     * Set the given relationship on the model.
+     *
+     * @param  string  $relation
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setRelation($relation, $value)
+    {
+        $this-&gt;relations[$relation] = $value;
+
+        $this-&gt;propagateRelationAutoloadCallbackToRelation($relation, $value, $this);
+
+        return $this;
+    }
+
+    /**
+     * Unset a loaded relationship.
+     *
+     * @param  string  $relation
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function unsetRelation($relation)
+    {
+        unset($this-&gt;relations[$relation]);
+
+        return $this;
+    }
+
+    /**
+     * Set the entire relations array on the model.
+     *
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setRelations(array $relations)
+    {
+        $this-&gt;relations = $relations;
+
+        return $this;
+    }
+
+    /**
+     * Duplicate the instance and unset all the loaded relations.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutRelations()
+    {
+        $model = clone $this;
+
+        return $model-&gt;unsetRelations();
+    }
+
+    /**
+     * Unset all the loaded relations for the instance.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function unsetRelations()
+    {
+        $this-&gt;relations = [];
+
+        return $this;
+    }
+
+    /**
+     * Get the relationships that are touched on save.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getTouchedRelations()
+    {
+        return $this-&gt;touches;
+    }
+
+    /**
+     * Set the relationships that are touched on save.
+     *
+     * @param  array  $touches
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setTouchedRelations(array $touches)
+    {
+        $this-&gt;touches = $touches;
+
+        return $this;
+    }
+}
+</pre>

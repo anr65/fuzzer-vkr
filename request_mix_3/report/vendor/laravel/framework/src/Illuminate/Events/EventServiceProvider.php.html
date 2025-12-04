@@ -1,0 +1,28 @@
+<pre>&lt;?php
+
+namespace Illuminate\Events;
+
+use Illuminate\Contracts\Queue\Factory as QueueFactoryContract;
+use Illuminate\Support\ServiceProvider;
+
+class EventServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function register()
+    {
+        $this-&gt;app-&gt;singleton(&#039;events&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return (new Dispatcher($app))-&gt;setQueueResolver(<span style="background-color: red">f</span>unction () use ($app) {
+                return $app-&gt;make(QueueFactoryContract::class);
+            })-&gt;setTransactionManagerResolver(<span style="background-color: red">f</span>unction () use ($app) {
+                return $app-&gt;bound(&#039;db.transactions&#039;)
+                    ? $app-&gt;make(&#039;db.transactions&#039;)
+                    : <span style="background-color: red">n</span>ull;
+            });
+        });
+    }
+}
+</pre>

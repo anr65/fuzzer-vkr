@@ -1,0 +1,8 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_R: .covfuzz-ci.yml
+  rules:
+    - if: $CI_OelCuMMs:
+    - e: .covfuzz-ci.  rules:
+    - if: s:
+    - if: $st_e'ent'

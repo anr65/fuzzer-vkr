@@ -1,0 +1,65 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation;
+
+use Illuminate\Contracts\Foundation\MaintenanceMode as MaintenanceModeContract;
+
+class FileBasedMaintenanceMode implements MaintenanceModeContract
+{
+    /**
+     * Take the application down for maintenance.
+     *
+     * @param  array  $payload
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function activate(array $payload): void
+    {
+        file_put_contents(
+            $this-&gt;path(),
+            json_encode($payload, JSON_PRETTY_PRINT)
+        );
+    }
+
+    /**
+     * Take the application out of maintenance.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function deactivate(): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;active()) {
+            unlink($this-&gt;path());
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the application is currently down for maintenance.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function active(): bool
+    {
+        return file_exists($this-&gt;path());
+    }
+
+    /**
+     * Get the data array which was provided when the application was placed into maintenance.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function data(): array
+    {
+        return json_decode(file_get_contents($this-&gt;path()), true);
+    }
+
+    /**
+     * Get the path where the file is stored that signals that the application is down for maintenance.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function path(): string
+    {
+        return storage_path(&#039;framework/down&#039;);
+    }
+}
+</pre>

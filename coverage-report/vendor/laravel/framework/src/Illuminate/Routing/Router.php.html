@@ -1,0 +1,1511 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use ArrayObject;
+use Closure;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Routing\BindingRegistrar;
+use Illuminate\Contracts\Routing\Registrar as RegistrarContract;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Routing\Events\PreparingResponse;
+use Illuminate\Routing\Events\ResponsePrepared;
+use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Routing\Events\Routing;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Stringable;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\Tappable;
+use JsonSerializable;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
+use ReflectionClass;
+use stdClass;
+use Symfony\Bridge\PsrHttpMessage\Factory\HttpFoundationFactory;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+
+/**
+ * @mixin \Illuminate\Routing\RouteRegistrar
+ */
+class Router implements BindingRegistrar, RegistrarContract
+{
+    use Macroable {
+        __call as macroCall;
+    }
+    use Tappable;
+
+    /**
+     * The event dispatcher instance.
+     *
+     * @var \Illuminate\Contracts\Events\Dispatcher
+     */
+    protected $events;
+
+    /**
+     * The IoC container instance.
+     *
+     * @var \Illuminate\Container\Container
+     */
+    protected $container;
+
+    /**
+     * The route collection instance.
+     *
+     * @var \Illuminate\Routing\RouteCollectionInterface
+     */
+    protected $routes;
+
+    /**
+     * The currently dispatched route instance.
+     *
+     * @var \Illuminate\Routing\Route|null
+     */
+    protected $current;
+
+    /**
+     * The request currently being dispatched.
+     *
+     * @var \Illuminate\Http\Request
+     */
+    protected $currentRequest;
+
+    /**
+     * All of the short-hand keys for middlewares.
+     *
+     * @var array
+     */
+    protected $middleware = [];
+
+    /**
+     * All of the middleware groups.
+     *
+     * @var array
+     */
+    protected $middlewareGroups = [];
+
+    /**
+     * The priority-sorted list of middleware.
+     *
+     * Forces the listed middleware to always be in the given order.
+     *
+     * @var array
+     */
+    public $middlewarePriority = [];
+
+    /**
+     * The registered route value binders.
+     *
+     * @var array
+     */
+    protected $binders = [];
+
+    /**
+     * The globally available parameter patterns.
+     *
+     * @var array
+     */
+    protected $patterns = [];
+
+    /**
+     * The route group attribute stack.
+     *
+     * @var array
+     */
+    protected $groupStack = [];
+
+    /**
+     * The registered custom implicit binding callback.
+     *
+     * @var array
+     */
+    protected $implicitBindingCallback;
+
+    /**
+     * All of the verbs supported by the router.
+     *
+     * @var string[]
+     */
+    public static $verbs = [&#039;GET&#039;, &#039;HEAD&#039;, &#039;POST&#039;, &#039;PUT&#039;, &#039;PATCH&#039;, &#039;DELETE&#039;, &#039;OPTIONS&#039;];
+
+    /**
+     * Create a new Router instance.
+     *
+     * @param  \Illuminate\Contracts\Events\Dispatcher  $events
+     * @param  \Illuminate\Container\Container|null  $container
+     */
+    <span style="background-color: red">p</span>ublic function __construct(Dispatcher $events, ?Container $container = null)
+    {
+        $this-&gt;events = $events;
+        $this-&gt;routes = new RouteCollection;
+        $this-&gt;container = $container ?: <span style="background-color: red">n</span>ew Container;
+    }
+
+    /**
+     * Register a new GET route with the router.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: green">p</span>ublic function get($uri, $action = null)
+    {
+        return $this-&gt;addRoute([&#039;GET&#039;, &#039;HEAD&#039;], $uri, $action);
+    }
+
+    /**
+     * Register a new POST route with the router.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function post($uri, $action = null)
+    {
+        return $this-&gt;addRoute(&#039;POST&#039;, $uri, $action);
+    }
+
+    /**
+     * Register a new PUT route with the router.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function put($uri, $action = null)
+    {
+        return $this-&gt;addRoute(&#039;PUT&#039;, $uri, $action);
+    }
+
+    /**
+     * Register a new PATCH route with the router.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function patch($uri, $action = null)
+    {
+        return $this-&gt;addRoute(&#039;PATCH&#039;, $uri, $action);
+    }
+
+    /**
+     * Register a new DELETE route with the router.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function delete($uri, $action = null)
+    {
+        return $this-&gt;addRoute(&#039;DELETE&#039;, $uri, $action);
+    }
+
+    /**
+     * Register a new OPTIONS route with the router.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function options($uri, $action = null)
+    {
+        return $this-&gt;addRoute(&#039;OPTIONS&#039;, $uri, $action);
+    }
+
+    /**
+     * Register a new route responding to all verbs.
+     *
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function any($uri, $action = null)
+    {
+        return $this-&gt;addRoute(self::$verbs, $uri, $action);
+    }
+
+    /**
+     * Register a new fallback route with the router.
+     *
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function fallback($action)
+    {
+        $placeholder = &#039;fallbackPlaceholder&#039;;
+
+        return $this-&gt;addRoute(
+            &#039;GET&#039;, &quot;{{$placeholder}}&quot;, $action
+        )-&gt;where($placeholder, &#039;.*&#039;)-&gt;fallback();
+    }
+
+    /**
+     * Create a redirect from one URI to another.
+     *
+     * @param  string  $uri
+     * @param  string  $destination
+     * @param  int  $status
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function redirect($uri, $destination, $status = 302)
+    {
+        return $this-&gt;any($uri, &#039;\Illuminate\Routing\RedirectController&#039;)
+            -&gt;defaults(&#039;destination&#039;, $destination)
+            -&gt;defaults(&#039;status&#039;, $status);
+    }
+
+    /**
+     * Create a permanent redirect from one URI to another.
+     *
+     * @param  string  $uri
+     * @param  string  $destination
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function permanentRedirect($uri, $destination)
+    {
+        return $this-&gt;redirect($uri, $destination, 301);
+    }
+
+    /**
+     * Register a new route that returns a view.
+     *
+     * @param  string  $uri
+     * @param  string  $view
+     * @param  array  $data
+     * @param  int|array  $status
+     * @param  array  $headers
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function view($uri, $view, $data = [], $status = 200, array $headers = [])
+    {
+        return $this-&gt;match([&#039;GET&#039;, &#039;HEAD&#039;], $uri, &#039;\Illuminate\Routing\ViewController&#039;)
+            -&gt;setDefaults([
+                &#039;view&#039; =&gt; $view,
+                &#039;data&#039; =&gt; $data,
+                &#039;status&#039; =&gt; is_array($status) ? 200 : <span style="background-color: red">$</span>status,
+                &#039;headers&#039; =&gt; is_array($status) ? $status : <span style="background-color: red">$</span>headers,
+            ]);
+    }
+
+    /**
+     * Register a new route with the given verbs.
+     *
+     * @param  array|string  $methods
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function match($methods, $uri, $action = null)
+    {
+        return $this-&gt;addRoute(array_map(strtoupper(...), (array) $methods), $uri, $action);
+    }
+
+    /**
+     * Register an array of resource controllers.
+     *
+     * @param  array  $resources
+     * @param  array  $options
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function resources(array $resources, array $options = [])
+    {
+        <span style="background-color: red">f</span>oreach ($resources as $name =&gt; $controller) {
+            $this-&gt;resource($name, $controller, $options);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Route a resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function resource($name, $controller, array $options = [])
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container &amp;&amp; <span style="background-color: red">$</span>this-&gt;container-&gt;bound(ResourceRegistrar::class)) {
+            $registrar = $this-&gt;container-&gt;make(ResourceRegistrar::class);
+        } <span style="background-color: red">e</span>lse {
+            $registrar = new ResourceRegistrar($this);
+        <span style="background-color: red">}</span>
+
+        return new PendingResourceRegistration(
+            $registrar, $name, $controller, $options
+        );
+    }
+
+    /**
+     * Register an array of API resource controllers.
+     *
+     * @param  array  $resources
+     * @param  array  $options
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function apiResources(array $resources, array $options = [])
+    {
+        <span style="background-color: red">f</span>oreach ($resources as $name =&gt; $controller) {
+            $this-&gt;apiResource($name, $controller, $options);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Route an API resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function apiResource($name, $controller, array $options = [])
+    {
+        $only = [&#039;index&#039;, &#039;show&#039;, &#039;store&#039;, &#039;update&#039;, &#039;destroy&#039;];
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;except&#039;])) {
+            $only = array_diff($only, (array) $options[&#039;except&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;resource($name, $controller, array_merge([
+            &#039;only&#039; =&gt; $only,
+        ], $options));
+    }
+
+    /**
+     * Register an array of singleton resource controllers.
+     *
+     * @param  array  $singletons
+     * @param  array  $options
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function singletons(array $singletons, array $options = [])
+    {
+        <span style="background-color: red">f</span>oreach ($singletons as $name =&gt; $controller) {
+            $this-&gt;singleton($name, $controller, $options);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Route a singleton resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingSingletonResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function singleton($name, $controller, array $options = [])
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container &amp;&amp; <span style="background-color: red">$</span>this-&gt;container-&gt;bound(ResourceRegistrar::class)) {
+            $registrar = $this-&gt;container-&gt;make(ResourceRegistrar::class);
+        } <span style="background-color: red">e</span>lse {
+            $registrar = new ResourceRegistrar($this);
+        <span style="background-color: red">}</span>
+
+        return new PendingSingletonResourceRegistration(
+            $registrar, $name, $controller, $options
+        );
+    }
+
+    /**
+     * Register an array of API singleton resource controllers.
+     *
+     * @param  array  $singletons
+     * @param  array  $options
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function apiSingletons(array $singletons, array $options = [])
+    {
+        <span style="background-color: red">f</span>oreach ($singletons as $name =&gt; $controller) {
+            $this-&gt;apiSingleton($name, $controller, $options);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Route an API singleton resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingSingletonResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function apiSingleton($name, $controller, array $options = [])
+    {
+        $only = [&#039;store&#039;, &#039;show&#039;, &#039;update&#039;, &#039;destroy&#039;];
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;except&#039;])) {
+            $only = array_diff($only, (array) $options[&#039;except&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;singleton($name, $controller, array_merge([
+            &#039;only&#039; =&gt; $only,
+        ], $options));
+    }
+
+    /**
+     * Create a route group with shared attributes.
+     *
+     * @param  array  $attributes
+     * @param  \Closure|array|string  $routes
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function group(array $attributes, $routes)
+    {
+        <span style="background-color: green">f</span>oreach (Arr::wrap($routes) as $groupRoutes) {
+            $this-&gt;updateGroupStack($attributes);
+
+            // Once we have updated the group stack, we&#039;ll load the provided routes and
+            // merge in the group&#039;s attributes when the routes are created. After we
+            // have created the routes, we will pop the attributes off the stack.
+            $this-&gt;loadRoutes($groupRoutes);
+
+            array_pop($this-&gt;groupStack);
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Update the group stack with the given attributes.
+     *
+     * @param  array  $attributes
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function updateGroupStack(array $attributes)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;hasGroupStack()) {
+            $attributes = $this-&gt;mergeWithLastGroup($attributes);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;groupStack[] = $attributes;
+    }
+
+    /**
+     * Merge the given array with the last group stack.
+     *
+     * @param  array  $new
+     * @param  bool  $prependExistingPrefix
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function mergeWithLastGroup($new, $prependExistingPrefix = true)
+    {
+        return RouteGroup::merge($new, end($this-&gt;groupStack), $prependExistingPrefix);
+    }
+
+    /**
+     * Load the provided routes.
+     *
+     * @param  \Closure|string  $routes
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function loadRoutes($routes)
+    {
+        <span style="background-color: red">i</span>f ($routes instanceof Closure) {
+            $routes($this);
+        } <span style="background-color: green">e</span>lse {
+            (new RouteFileRegistrar($this))-&gt;register($routes);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Get the prefix from the last group on the stack.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getLastGroupPrefix()
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;hasGroupStack()) {
+            $last = end($this-&gt;groupStack);
+
+            return $last[&#039;prefix&#039;] ?? <span style="background-color: green">'</span>&#039;;
+        <span style="background-color: green">}</span>
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * Add a route to the underlying route collection.
+     *
+     * @param  array|string  $methods
+     * @param  string  $uri
+     * @param  array|string|callable|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: green">p</span>ublic function addRoute($methods, $uri, $action)
+    {
+        return $this-&gt;routes-&gt;add($this-&gt;createRoute($methods, $uri, $action));
+    }
+
+    /**
+     * Create a new route instance.
+     *
+     * @param  array|string  $methods
+     * @param  string  $uri
+     * @param  mixed  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: green">p</span>rotected function createRoute($methods, $uri, $action)
+    {
+        // If the route is routing to a controller we will parse the route action into
+        // an acceptable array format before registering it and creating this route
+        // instance itself. We need to build the Closure that will call this out.
+        <span style="background-color: red">i</span>f ($this-&gt;actionReferencesController($action)) {
+            $action = $this-&gt;convertToControllerAction($action);
+        <span style="background-color: green">}</span>
+
+        $route = $this-&gt;newRoute(
+            $methods, $this-&gt;prefix($uri), $action
+        );
+
+        // If we have groups that need to be merged, we will merge them now after this
+        // route has already been created and is ready to go. After we&#039;re done with
+        // the merge we will be ready to return the route back out to the caller.
+        <span style="background-color: green">i</span>f ($this-&gt;hasGroupStack()) {
+            $this-&gt;mergeGroupAttributesIntoRoute($route);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;addWhereClausesToRoute($route);
+
+        return $route;
+    }
+
+    /**
+     * Determine if the action is routing to a controller.
+     *
+     * @param  mixed  $action
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function actionReferencesController($action)
+    {
+        <span style="background-color: red">i</span>f (! $action instanceof Closure) {
+            return is_string($action) || (<span style="background-color: red">i</span>sset($action[&#039;uses&#039;]) &amp;&amp; <span style="background-color: red">i</span>s_string($action[&#039;uses&#039;]));
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Add a controller based route action to the action array.
+     *
+     * @param  array|string  $action
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function convertToControllerAction($action)
+    {
+        <span style="background-color: red">i</span>f (is_string($action)) {
+            $action = [&#039;uses&#039; =&gt; $action];
+        <span style="background-color: red">}</span>
+
+        // Here we&#039;ll merge any group &quot;controller&quot; and &quot;uses&quot; statements if necessary so that
+        // the action has the proper clause for this property. Then, we can simply set the
+        // name of this controller on the action plus return the action array for usage.
+        <span style="background-color: red">i</span>f ($this-&gt;hasGroupStack()) {
+            $action[&#039;uses&#039;] = $this-&gt;prependGroupController($action[&#039;uses&#039;]);
+            $action[&#039;uses&#039;] = $this-&gt;prependGroupNamespace($action[&#039;uses&#039;]);
+        <span style="background-color: red">}</span>
+
+        // Here we will set this controller name on the action array just so we always
+        // have a copy of it for reference if we need it. This can be used while we
+        // search for a controller name or do some other type of fetch operation.
+        $action[&#039;controller&#039;] = $action[&#039;uses&#039;];
+
+        return $action;
+    }
+
+    /**
+     * Prepend the last group namespace onto the use clause.
+     *
+     * @param  string  $class
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function prependGroupNamespace($class)
+    {
+        $group = end($this-&gt;groupStack);
+
+        return isset($group[&#039;namespace&#039;]) &amp;&amp; <span style="background-color: red">!</span> str_starts_with($class, &#039;\\&#039;) &amp;&amp; <span style="background-color: red">!</span> str_starts_with($class, $group[&#039;namespace&#039;])
+            ? $group[&#039;namespace&#039;].&#039;\\&#039;.$class
+            : <span style="background-color: red">$</span>class;
+    }
+
+    /**
+     * Prepend the last group controller onto the use clause.
+     *
+     * @param  string  $class
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function prependGroupController($class)
+    {
+        $group = end($this-&gt;groupStack);
+
+        <span style="background-color: red">i</span>f (! isset($group[&#039;controller&#039;])) {
+            return $class;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (class_exists($class)) {
+            return $class;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (str_contains($class, &#039;@&#039;)) {
+            return $class;
+        <span style="background-color: red">}</span>
+
+        return $group[&#039;controller&#039;].&#039;@&#039;.$class;
+    }
+
+    /**
+     * Create a new Route object.
+     *
+     * @param  array|string  $methods
+     * @param  string  $uri
+     * @param  mixed  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: green">p</span>ublic function newRoute($methods, $uri, $action)
+    {
+        return (new Route($methods, $uri, $action))
+            -&gt;setRouter($this)
+            -&gt;setContainer($this-&gt;container);
+    }
+
+    /**
+     * Prefix the given URI with the last prefix.
+     *
+     * @param  string  $uri
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function prefix($uri)
+    {
+        return trim(trim($this-&gt;getLastGroupPrefix(), &#039;/&#039;).&#039;/&#039;.trim($uri, &#039;/&#039;), &#039;/&#039;) ?: <span style="background-color: green">'</span>/&#039;;
+    }
+
+    /**
+     * Add the necessary where clauses to the route based on its initial registration.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: green">p</span>rotected function addWhereClausesToRoute($route)
+    {
+        $route-&gt;where(array_merge(
+            $this-&gt;patterns, $route-&gt;getAction()[&#039;where&#039;] ?? <span style="background-color: green">[</span>]
+        ));
+
+        return $route;
+    }
+
+    /**
+     * Merge the group stack with the controller action.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function mergeGroupAttributesIntoRoute($route)
+    {
+        $route-&gt;setAction($this-&gt;mergeWithLastGroup(
+            $route-&gt;getAction(),
+            prependExistingPrefix: false
+        ));
+    }
+
+    /**
+     * Return the response returned by the given route.
+     *
+     * @param  string  $name
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>ublic function respondWithRoute($name)
+    {
+        $route = tap($this-&gt;routes-&gt;getByName($name))-&gt;bind($this-&gt;currentRequest);
+
+        return $this-&gt;runRoute($this-&gt;currentRequest, $route);
+    }
+
+    /**
+     * Dispatch the request to the application.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: green">p</span>ublic function dispatch(Request $request)
+    {
+        $this-&gt;currentRequest = $request;
+
+        return $this-&gt;dispatchToRoute($request);
+    }
+
+    /**
+     * Dispatch the request to a route and return the response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: green">p</span>ublic function dispatchToRoute(Request $request)
+    {
+        return $this-&gt;runRoute($request, $this-&gt;findRoute($request));
+    }
+
+    /**
+     * Find the route matching a given request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: green">p</span>rotected function findRoute($request)
+    {
+        $this-&gt;events-&gt;dispatch(new Routing($request));
+
+        $this-&gt;current = $route = $this-&gt;routes-&gt;match($request);
+
+        $route-&gt;setContainer($this-&gt;container);
+
+        $this-&gt;container-&gt;instance(Route::class, $route);
+
+        return $route;
+    }
+
+    /**
+     * Return the response for the given route.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Illuminate\Routing\Route  $route
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>rotected function runRoute(Request $request, Route $route)
+    {
+        $request-&gt;setRouteResolver(fn () =&gt; <span style="background-color: red">$</span>route);
+
+        $this-&gt;events-&gt;dispatch(new RouteMatched($route, $request));
+
+        return $this-&gt;prepareResponse($request,
+            $this-&gt;runRouteWithinStack($route, $request)
+        );
+    }
+
+    /**
+     * Run the given route within a Stack &quot;onion&quot; instance.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @param  \Illuminate\Http\Request  $request
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function runRouteWithinStack(Route $route, Request $request)
+    {
+        $shouldSkipMiddleware = $this-&gt;container-&gt;bound(&#039;middleware.disable&#039;) &amp;&amp;
+                                <span style="background-color: red">$</span>this-&gt;container-&gt;make(&#039;middleware.disable&#039;) === true;
+
+        $middleware = $shouldSkipMiddleware ? [] : <span style="background-color: red">$</span>this-&gt;gatherRouteMiddleware($route);
+
+        return (new Pipeline($this-&gt;container))
+            -&gt;send($request)
+            -&gt;through($middleware)
+            -&gt;then(fn ($request) =&gt; <span style="background-color: red">$</span>this-&gt;prepareResponse(
+                $request, $route-&gt;run()
+            ));
+    }
+
+    /**
+     * Gather the middleware for the given route with resolved class names.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function gatherRouteMiddleware(Route $route)
+    {
+        return $this-&gt;resolveMiddleware($route-&gt;gatherMiddleware(), $route-&gt;excludedMiddleware());
+    }
+
+    /**
+     * Resolve a flat array of middleware classes from the provided array.
+     *
+     * @param  array  $middleware
+     * @param  array  $excluded
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function resolveMiddleware(array $middleware, array $excluded = [])
+    {
+        $excluded = $excluded === []
+            ? $excluded
+            : <span style="background-color: red">(</span>new Collection($excluded))
+                -&gt;map(fn ($name) =&gt; <span style="background-color: red">(</span>array) MiddlewareNameResolver::resolve($name, $this-&gt;middleware, $this-&gt;middlewareGroups))
+                -&gt;flatten()
+                -&gt;values()
+                -&gt;all();
+
+        $middleware = (new Collection($middleware))-&gt;map(<span style="background-color: red">f</span>unction ($name) {
+            return (array) MiddlewareNameResolver::resolve($name, $this-&gt;middleware, $this-&gt;middlewareGroups);
+        })-&gt;flatten()
+            -&gt;when(
+                ! empty($excluded),
+                fn ($collection) =&gt; <span style="background-color: red">$</span>collection-&gt;reject(<span style="background-color: red">f</span>unction ($name) use ($excluded) {
+                    <span style="background-color: red">i</span>f ($name instanceof Closure) {
+                        return false;
+                    <span style="background-color: red">}</span>
+
+                    <span style="background-color: red">i</span>f (in_array($name, $excluded, true)) {
+                        return true;
+                    <span style="background-color: red">}</span>
+
+                    <span style="background-color: red">i</span>f (! class_exists($name)) {
+                        return false;
+                    <span style="background-color: red">}</span>
+
+                    $reflection = new ReflectionClass($name);
+
+                    return (new Collection($excluded))-&gt;contains(
+                        fn ($exclude) =&gt; <span style="background-color: red">c</span>lass_exists($exclude) &amp;&amp; <span style="background-color: red">$</span>reflection-&gt;isSubclassOf($exclude)
+                    );
+                })
+            )-&gt;values();
+
+        return $this-&gt;sortMiddleware($middleware);
+    }
+
+    /**
+     * Sort the given middleware by priority.
+     *
+     * @param  \Illuminate\Support\Collection  $middlewares
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function sortMiddleware(Collection $middlewares)
+    {
+        return (new SortedMiddleware($this-&gt;middlewarePriority, $middlewares))-&gt;all();
+    }
+
+    /**
+     * Create a response instance from the given value.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Request  $request
+     * @param  mixed  $response
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>ublic function prepareResponse($request, $response)
+    {
+        $this-&gt;events-&gt;dispatch(new PreparingResponse($request, $response));
+
+        return tap(static::toResponse($request, $response), <span style="background-color: red">f</span>unction ($response) use ($request) {
+            $this-&gt;events-&gt;dispatch(new ResponsePrepared($request, $response));
+        });
+    }
+
+    /**
+     * Static version of prepareResponse.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Request  $request
+     * @param  mixed  $response
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>ublic static function toResponse($request, $response)
+    {
+        <span style="background-color: red">i</span>f ($response instanceof Responsable) {
+            $response = $response-&gt;toResponse($request);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($response instanceof PsrResponseInterface) {
+            $response = (new HttpFoundationFactory)-&gt;createResponse($response);
+        } <span style="background-color: red">e</span>lseif ($response instanceof Model &amp;&amp; <span style="background-color: red">$</span>response-&gt;wasRecentlyCreated) {
+            $response = new JsonResponse($response, 201);
+        } <span style="background-color: red">e</span>lseif ($response instanceof Stringable) {
+            $response = new Response($response-&gt;__toString(), 200, [&#039;Content-Type&#039; =&gt; &#039;text/html&#039;]);
+        } <span style="background-color: red">e</span>lseif (! $response instanceof SymfonyResponse &amp;&amp;
+                   (<span style="background-color: red">$</span>response instanceof Arrayable ||
+                    <span style="background-color: red">$</span>response instanceof Jsonable ||
+                    <span style="background-color: red">$</span>response instanceof ArrayObject ||
+                    <span style="background-color: red">$</span>response instanceof JsonSerializable ||
+                    <span style="background-color: red">$</span>response instanceof stdClass ||
+                    <span style="background-color: red">i</span>s_array($response))) {
+            $response = new JsonResponse($response);
+        } <span style="background-color: red">e</span>lseif (! $response instanceof SymfonyResponse) {
+            $response = new Response($response, 200, [&#039;Content-Type&#039; =&gt; &#039;text/html&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($response-&gt;getStatusCode() === Response::HTTP_NOT_MODIFIED) {
+            $response-&gt;setNotModified();
+        <span style="background-color: red">}</span>
+
+        return $response-&gt;prepare($request);
+    }
+
+    /**
+     * Substitute the route bindings onto the route.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @return \Illuminate\Routing\Route
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException&lt;\Illuminate\Database\Eloquent\Model&gt;
+     * @throws \Illuminate\Routing\Exceptions\BackedEnumCaseNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function substituteBindings($route)
+    {
+        <span style="background-color: red">f</span>oreach ($route-&gt;parameters() as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (isset($this-&gt;binders[$key])) {
+                $route-&gt;setParameter($key, $this-&gt;performBinding($key, $value, $route));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $route;
+    }
+
+    /**
+     * Substitute the implicit route bindings for the given route.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @return void
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException&lt;\Illuminate\Database\Eloquent\Model&gt;
+     * @throws \Illuminate\Routing\Exceptions\BackedEnumCaseNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function substituteImplicitBindings($route)
+    {
+        $default = fn () =&gt; <span style="background-color: red">I</span>mplicitRouteBinding::resolveForRoute($this-&gt;container, $route);
+
+        return call_user_func(
+            $this-&gt;implicitBindingCallback ?? <span style="background-color: red">$</span>default, $this-&gt;container, $route, $default
+        );
+    }
+
+    /**
+     * Register a callback to run after implicit bindings are substituted.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function substituteImplicitBindingsUsing($callback)
+    {
+        $this-&gt;implicitBindingCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Call the binding callback for the given key.
+     *
+     * @param  string  $key
+     * @param  string  $value
+     * @param  \Illuminate\Routing\Route  $route
+     * @return mixed
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException&lt;\Illuminate\Database\Eloquent\Model&gt;
+     */
+    <span style="background-color: red">p</span>rotected function performBinding($key, $value, $route)
+    {
+        return call_user_func($this-&gt;binders[$key], $value, $route);
+    }
+
+    /**
+     * Register a route matched event listener.
+     *
+     * @param  string|callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function matched($callback)
+    {
+        $this-&gt;events-&gt;listen(Events\RouteMatched::class, $callback);
+    }
+
+    /**
+     * Get all of the defined middleware short-hand names.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getMiddleware()
+    {
+        return $this-&gt;middleware;
+    }
+
+    /**
+     * Register a short-hand name for a middleware.
+     *
+     * @param  string  $name
+     * @param  string  $class
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function aliasMiddleware($name, $class)
+    {
+        $this-&gt;middleware[$name] = $class;
+
+        return $this;
+    }
+
+    /**
+     * Check if a middlewareGroup with the given name exists.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasMiddlewareGroup($name)
+    {
+        return array_key_exists($name, $this-&gt;middlewareGroups);
+    }
+
+    /**
+     * Get all of the defined middleware groups.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getMiddlewareGroups()
+    {
+        return $this-&gt;middlewareGroups;
+    }
+
+    /**
+     * Register a group of middleware.
+     *
+     * @param  string  $name
+     * @param  array  $middleware
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function middlewareGroup($name, array $middleware)
+    {
+        $this-&gt;middlewareGroups[$name] = $middleware;
+
+        return $this;
+    }
+
+    /**
+     * Add a middleware to the beginning of a middleware group.
+     *
+     * If the middleware is already in the group, it will not be added again.
+     *
+     * @param  string  $group
+     * @param  string  $middleware
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function prependMiddlewareToGroup($group, $middleware)
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;middlewareGroups[$group]) &amp;&amp; <span style="background-color: red">!</span> in_array($middleware, $this-&gt;middlewareGroups[$group])) {
+            array_unshift($this-&gt;middlewareGroups[$group], $middleware);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a middleware to the end of a middleware group.
+     *
+     * If the middleware is already in the group, it will not be added again.
+     *
+     * @param  string  $group
+     * @param  string  $middleware
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function pushMiddlewareToGroup($group, $middleware)
+    {
+        <span style="background-color: red">i</span>f (! array_key_exists($group, $this-&gt;middlewareGroups)) {
+            $this-&gt;middlewareGroups[$group] = [];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! in_array($middleware, $this-&gt;middlewareGroups[$group])) {
+            $this-&gt;middlewareGroups[$group][] = $middleware;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Remove the given middleware from the specified group.
+     *
+     * @param  string  $group
+     * @param  string  $middleware
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function removeMiddlewareFromGroup($group, $middleware)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;hasMiddlewareGroup($group)) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $reversedMiddlewaresArray = array_flip($this-&gt;middlewareGroups[$group]);
+
+        <span style="background-color: red">i</span>f (! array_key_exists($middleware, $reversedMiddlewaresArray)) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $middlewareKey = $reversedMiddlewaresArray[$middleware];
+
+        unset($this-&gt;middlewareGroups[$group][$middlewareKey]);
+
+        return $this;
+    }
+
+    /**
+     * Flush the router&#039;s middleware groups.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function flushMiddlewareGroups()
+    {
+        $this-&gt;middlewareGroups = [];
+
+        return $this;
+    }
+
+    /**
+     * Add a new route parameter binder.
+     *
+     * @param  string  $key
+     * @param  string|callable  $binder
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function bind($key, $binder)
+    {
+        $this-&gt;binders[str_replace(&#039;-&#039;, &#039;_&#039;, $key)] = RouteBinding::forCallback(
+            $this-&gt;container, $binder
+        );
+    }
+
+    /**
+     * Register a model binder for a wildcard.
+     *
+     * @param  string  $key
+     * @param  string  $class
+     * @param  \Closure|null  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function model($key, $class, ?Closure $callback = null)
+    {
+        $this-&gt;bind($key, RouteBinding::forModel($this-&gt;container, $class, $callback));
+    }
+
+    /**
+     * Get the binding callback for a given binding.
+     *
+     * @param  string  $key
+     * @return \Closure|null
+     */
+    <span style="background-color: red">p</span>ublic function getBindingCallback($key)
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;binders[$key = str_replace(&#039;-&#039;, &#039;_&#039;, $key)])) {
+            return $this-&gt;binders[$key];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the global &quot;where&quot; patterns.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getPatterns()
+    {
+        return $this-&gt;patterns;
+    }
+
+    /**
+     * Set a global where pattern on all routes.
+     *
+     * @param  string  $key
+     * @param  string  $pattern
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function pattern($key, $pattern)
+    {
+        $this-&gt;patterns[$key] = $pattern;
+    }
+
+    /**
+     * Set a group of global where patterns on all routes.
+     *
+     * @param  array  $patterns
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function patterns($patterns)
+    {
+        <span style="background-color: red">f</span>oreach ($patterns as $key =&gt; $pattern) {
+            $this-&gt;pattern($key, $pattern);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the router currently has a group stack.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function hasGroupStack()
+    {
+        return ! empty($this-&gt;groupStack);
+    }
+
+    /**
+     * Get the current group stack for the router.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getGroupStack()
+    {
+        return $this-&gt;groupStack;
+    }
+
+    /**
+     * Get a route parameter for the current route.
+     *
+     * @param  string  $key
+     * @param  string|null  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function input($key, $default = null)
+    {
+        return $this-&gt;current()-&gt;parameter($key, $default);
+    }
+
+    /**
+     * Get the request currently being dispatched.
+     *
+     * @return \Illuminate\Http\Request
+     */
+    <span style="background-color: red">p</span>ublic function getCurrentRequest()
+    {
+        return $this-&gt;currentRequest;
+    }
+
+    /**
+     * Get the currently dispatched route instance.
+     *
+     * @return \Illuminate\Routing\Route|null
+     */
+    <span style="background-color: red">p</span>ublic function getCurrentRoute()
+    {
+        return $this-&gt;current();
+    }
+
+    /**
+     * Get the currently dispatched route instance.
+     *
+     * @return \Illuminate\Routing\Route|null
+     */
+    <span style="background-color: red">p</span>ublic function current()
+    {
+        return $this-&gt;current;
+    }
+
+    /**
+     * Check if a route with the given name exists.
+     *
+     * @param  string|array  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function has($name)
+    {
+        $names = is_array($name) ? $name : <span style="background-color: red">f</span>unc_get_args();
+
+        <span style="background-color: red">f</span>oreach ($names as $value) {
+            <span style="background-color: red">i</span>f (! $this-&gt;routes-&gt;hasNamedRoute($value)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Get the current route name.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function currentRouteName()
+    {
+        return $this-&gt;current() ? $this-&gt;current()-&gt;getName() : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Alias for the &quot;currentRouteNamed&quot; method.
+     *
+     * @param  mixed  ...$patterns
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function is(...$patterns)
+    {
+        return $this-&gt;currentRouteNamed(...$patterns);
+    }
+
+    /**
+     * Determine if the current route matches a pattern.
+     *
+     * @param  mixed  ...$patterns
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function currentRouteNamed(...$patterns)
+    {
+        return $this-&gt;current() &amp;&amp; <span style="background-color: red">$</span>this-&gt;current()-&gt;named(...$patterns);
+    }
+
+    /**
+     * Get the current route action.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function currentRouteAction()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;current()) {
+            return $this-&gt;current()-&gt;getAction()[&#039;controller&#039;] ?? <span style="background-color: red">n</span>ull;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Alias for the &quot;currentRouteUses&quot; method.
+     *
+     * @param  array|string  ...$patterns
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function uses(...$patterns)
+    {
+        <span style="background-color: red">f</span>oreach ($patterns as $pattern) {
+            <span style="background-color: red">i</span>f (Str::is($pattern, $this-&gt;currentRouteAction())) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Determine if the current route action matches a given action.
+     *
+     * @param  string  $action
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function currentRouteUses($action)
+    {
+        return $this-&gt;currentRouteAction() == $action;
+    }
+
+    /**
+     * Set the unmapped global resource parameters to singular.
+     *
+     * @param  bool  $singular
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function singularResourceParameters($singular = true)
+    {
+        ResourceRegistrar::singularParameters($singular);
+    }
+
+    /**
+     * Set the global resource parameter mapping.
+     *
+     * @param  array  $parameters
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function resourceParameters(array $parameters = [])
+    {
+        ResourceRegistrar::setParameters($parameters);
+    }
+
+    /**
+     * Get or set the verbs used in the resource URIs.
+     *
+     * @param  array  $verbs
+     * @return array|null
+     */
+    <span style="background-color: red">p</span>ublic function resourceVerbs(array $verbs = [])
+    {
+        return ResourceRegistrar::verbs($verbs);
+    }
+
+    /**
+     * Get the underlying route collection.
+     *
+     * @return \Illuminate\Routing\RouteCollectionInterface
+     */
+    <span style="background-color: green">p</span>ublic function getRoutes()
+    {
+        return $this-&gt;routes;
+    }
+
+    /**
+     * Set the route collection instance.
+     *
+     * @param  \Illuminate\Routing\RouteCollection  $routes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setRoutes(RouteCollection $routes)
+    {
+        <span style="background-color: red">f</span>oreach ($routes as $route) {
+            $route-&gt;setRouter($this)-&gt;setContainer($this-&gt;container);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;routes = $routes;
+
+        $this-&gt;container-&gt;instance(&#039;routes&#039;, $this-&gt;routes);
+    }
+
+    /**
+     * Set the compiled route collection instance.
+     *
+     * @param  array  $routes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setCompiledRoutes(array $routes)
+    {
+        $this-&gt;routes = (new CompiledRouteCollection($routes[&#039;compiled&#039;], $routes[&#039;attributes&#039;]))
+            -&gt;setRouter($this)
+            -&gt;setContainer($this-&gt;container);
+
+        $this-&gt;container-&gt;instance(&#039;routes&#039;, $this-&gt;routes);
+    }
+
+    /**
+     * Remove any duplicate middleware from the given array.
+     *
+     * @param  array  $middleware
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function uniqueMiddleware(array $middleware)
+    {
+        $seen = [];
+        $result = [];
+
+        <span style="background-color: red">f</span>oreach ($middleware as $value) {
+            $key = \is_object($value) ? \spl_object_id($value) : <span style="background-color: red">$</span>value;
+
+            <span style="background-color: red">i</span>f (! isset($seen[$key])) {
+                $seen[$key] = true;
+                $result[] = $value;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Set the container instance used by the router.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setContainer(Container $container)
+    {
+        $this-&gt;container = $container;
+
+        return $this;
+    }
+
+    /**
+     * Dynamically handle calls into the router instance.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (static::hasMacro($method)) {
+            return $this-&gt;macroCall($method, $parameters);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($method === &#039;middleware&#039;) {
+            return (new RouteRegistrar($this))-&gt;attribute($method, is_array($parameters[0]) ? $parameters[0] : <span style="background-color: green">$</span>parameters);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($method !== &#039;where&#039; &amp;&amp; <span style="background-color: red">S</span>tr::startsWith($method, &#039;where&#039;)) {
+            return (new RouteRegistrar($this))-&gt;{$method}(...$parameters);
+        <span style="background-color: red">}</span>
+
+        return (new RouteRegistrar($this))-&gt;attribute($method, array_key_exists(0, $parameters) ? $parameters[0] : <span style="background-color: red">t</span>rue);
+    }
+}
+</pre>

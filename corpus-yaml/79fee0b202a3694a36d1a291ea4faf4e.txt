@@ -1,0 +1,6 @@
+syn:
+s:
+- !GSes:
+- !OVUZARSe
+- !GSes:
+- !OV,

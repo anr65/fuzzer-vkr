@@ -1,0 +1,683 @@
+<pre>&lt;?php
+
+namespace Illuminate\Pagination;
+
+use ArrayAccess;
+use Closure;
+use Exception;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Tappable;
+use Stringable;
+use Traversable;
+
+/**
+ * @template TKey of array-key
+ *
+ * @template-covariant TValue
+ *
+ * @mixin \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+ */
+abstract class AbstractCursorPaginator implements Htmlable, Stringable
+{
+    use ForwardsCalls, Tappable;
+
+    /**
+     * All of the items being paginated.
+     *
+     * @var \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+     */
+    protected $items;
+
+    /**
+     * The number of items to be shown per page.
+     *
+     * @var int
+     */
+    protected $perPage;
+
+    /**
+     * The base path to assign to all URLs.
+     *
+     * @var string
+     */
+    protected $path = &#039;/&#039;;
+
+    /**
+     * The query parameters to add to all URLs.
+     *
+     * @var array
+     */
+    protected $query = [];
+
+    /**
+     * The URL fragment to add to all URLs.
+     *
+     * @var string|null
+     */
+    protected $fragment;
+
+    /**
+     * The cursor string variable used to store the page.
+     *
+     * @var string
+     */
+    protected $cursorName = &#039;cursor&#039;;
+
+    /**
+     * The current cursor.
+     *
+     * @var \Illuminate\Pagination\Cursor|null
+     */
+    protected $cursor;
+
+    /**
+     * The paginator parameters for the cursor.
+     *
+     * @var array
+     */
+    protected $parameters;
+
+    /**
+     * The paginator options.
+     *
+     * @var array
+     */
+    protected $options;
+
+    /**
+     * The current cursor resolver callback.
+     *
+     * @var \Closure
+     */
+    protected static $currentCursorResolver;
+
+    /**
+     * Get the URL for a given cursor.
+     *
+     * @param  \Illuminate\Pagination\Cursor|null  $cursor
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function url($cursor)
+    {
+        // If we have any extra query string key / value pairs that need to be added
+        // onto the URL, we will put them in query string form and then attach it
+        // to the URL. This allows for extra information like sortings storage.
+        $parameters = is_null($cursor) ? [] : <span style="background-color: red">[</span>$this-&gt;cursorName =&gt; $cursor-&gt;encode()];
+
+        <span style="background-color: red">i</span>f (count($this-&gt;query) &gt; 0) {
+            $parameters = array_merge($this-&gt;query, $parameters);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;path()
+            .(str_contains($this-&gt;path(), &#039;?&#039;) ? &#039;&amp;&#039; : <span style="background-color: red">'</span>?&#039;)
+            .Arr::query($parameters)
+            .$this-&gt;buildFragment();
+    }
+
+    /**
+     * Get the URL for the previous page.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function previousPageUrl()
+    {
+        <span style="background-color: red">i</span>f (is_null($previousCursor = $this-&gt;previousCursor())) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;url($previousCursor);
+    }
+
+    /**
+     * The URL for the next page, or null.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function nextPageUrl()
+    {
+        <span style="background-color: red">i</span>f (is_null($nextCursor = $this-&gt;nextCursor())) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;url($nextCursor);
+    }
+
+    /**
+     * Get the &quot;cursor&quot; that points to the previous set of items.
+     *
+     * @return \Illuminate\Pagination\Cursor|null
+     */
+    <span style="background-color: red">p</span>ublic function previousCursor()
+    {
+        <span style="background-color: red">i</span>f (is_null($this-&gt;cursor) ||
+            (<span style="background-color: red">$</span>this-&gt;cursor-&gt;pointsToPreviousItems() &amp;&amp; <span style="background-color: red">!</span> $this-&gt;hasMore)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;items-&gt;isEmpty()) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;getCursorForItem($this-&gt;items-&gt;first(), false);
+    }
+
+    /**
+     * Get the &quot;cursor&quot; that points to the next set of items.
+     *
+     * @return \Illuminate\Pagination\Cursor|null
+     */
+    <span style="background-color: red">p</span>ublic function nextCursor()
+    {
+        <span style="background-color: red">i</span>f ((is_null($this-&gt;cursor) &amp;&amp; <span style="background-color: red">!</span> $this-&gt;hasMore) ||
+            (<span style="background-color: red">!</span> is_null($this-&gt;cursor) &amp;&amp; <span style="background-color: red">$</span>this-&gt;cursor-&gt;pointsToNextItems() &amp;&amp; <span style="background-color: red">!</span> $this-&gt;hasMore)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;items-&gt;isEmpty()) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;getCursorForItem($this-&gt;items-&gt;last(), true);
+    }
+
+    /**
+     * Get a cursor instance for the given item.
+     *
+     * @param  \ArrayAccess|\stdClass  $item
+     * @param  bool  $isNext
+     * @return \Illuminate\Pagination\Cursor
+     */
+    <span style="background-color: red">p</span>ublic function getCursorForItem($item, $isNext = true)
+    {
+        return new Cursor($this-&gt;getParametersForItem($item), $isNext);
+    }
+
+    /**
+     * Get the cursor parameters for a given object.
+     *
+     * @param  \ArrayAccess|\stdClass  $item
+     * @return array
+     *
+     * @throws \Exception
+     */
+    <span style="background-color: red">p</span>ublic function getParametersForItem($item)
+    {
+        return (new Collection($this-&gt;parameters))
+            -&gt;filter()
+            -&gt;flip()
+            -&gt;map(<span style="background-color: red">f</span>unction ($_, $parameterName) use ($item) {
+                <span style="background-color: red">i</span>f ($item instanceof JsonResource) {
+                    $item = $item-&gt;resource;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($item instanceof Model &amp;&amp;
+                    <span style="background-color: red">!</span> is_null($parameter = $this-&gt;getPivotParameterForItem($item, $parameterName))) {
+                    return $parameter;
+                } <span style="background-color: red">e</span>lseif ($item instanceof ArrayAccess || <span style="background-color: red">i</span>s_array($item)) {
+                    return $this-&gt;ensureParameterIsPrimitive(
+                        $item[$parameterName] ?? <span style="background-color: red">$</span>item[Str::afterLast($parameterName, &#039;.&#039;)]
+                    );
+                } <span style="background-color: red">e</span>lseif (is_object($item)) {
+                    return $this-&gt;ensureParameterIsPrimitive(
+                        $item-&gt;{$parameterName} ?? <span style="background-color: red">$</span>item-&gt;{Str::afterLast($parameterName, &#039;.&#039;)}
+                    );
+                <span style="background-color: red">}</span>
+
+                throw new Exception(&#039;Only arrays and objects are supported when cursor paginating items.&#039;);
+            })-&gt;toArray();
+    }
+
+    /**
+     * Get the cursor parameter value from a pivot model if applicable.
+     *
+     * @param  \ArrayAccess|\stdClass  $item
+     * @param  string  $parameterName
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function getPivotParameterForItem($item, $parameterName)
+    {
+        $table = Str::beforeLast($parameterName, &#039;.&#039;);
+
+        <span style="background-color: red">f</span>oreach ($item-&gt;getRelations() as $relation) {
+            <span style="background-color: red">i</span>f ($relation instanceof Pivot &amp;&amp; <span style="background-color: red">$</span>relation-&gt;getTable() === $table) {
+                return $this-&gt;ensureParameterIsPrimitive(
+                    $relation-&gt;getAttribute(Str::afterLast($parameterName, &#039;.&#039;))
+                );
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Ensure the parameter is a primitive type.
+     *
+     * This can resolve issues that arise the developer uses a value object for an attribute.
+     *
+     * @param  mixed  $parameter
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function ensureParameterIsPrimitive($parameter)
+    {
+        return is_object($parameter) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($parameter, &#039;__toString&#039;)
+            ? (string) $parameter
+            : <span style="background-color: red">$</span>parameter;
+    }
+
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * @param  string|null  $fragment
+     * @return $this|string|null
+     */
+    <span style="background-color: red">p</span>ublic function fragment($fragment = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($fragment)) {
+            return $this-&gt;fragment;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;fragment = $fragment;
+
+        return $this;
+    }
+
+    /**
+     * Add a set of query string values to the paginator.
+     *
+     * @param  array|string|null  $key
+     * @param  string|null  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function appends($key, $value = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($key)) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_array($key)) {
+            return $this-&gt;appendArray($key);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;addQuery($key, $value);
+    }
+
+    /**
+     * Add an array of query string values.
+     *
+     * @param  array  $keys
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function appendArray(array $keys)
+    {
+        <span style="background-color: red">f</span>oreach ($keys as $key =&gt; $value) {
+            $this-&gt;addQuery($key, $value);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add all current query string values to the paginator.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withQueryString()
+    {
+        <span style="background-color: red">i</span>f (! is_null($query = Paginator::resolveQueryString())) {
+            return $this-&gt;appends($query);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a query string value to the paginator.
+     *
+     * @param  string  $key
+     * @param  string  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function addQuery($key, $value)
+    {
+        <span style="background-color: red">i</span>f ($key !== $this-&gt;cursorName) {
+            $this-&gt;query[$key] = $value;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Build the full fragment portion of a URL.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function buildFragment()
+    {
+        return $this-&gt;fragment ? &#039;#&#039;.$this-&gt;fragment : <span style="background-color: red">'</span>&#039;;
+    }
+
+    /**
+     * Load a set of relationships onto the mixed relationship collection.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorph($relation, $relations)
+    {
+        $this-&gt;getCollection()-&gt;loadMorph($relation, $relations);
+
+        return $this;
+    }
+
+    /**
+     * Load a set of relationship counts onto the mixed relationship collection.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphCount($relation, $relations)
+    {
+        $this-&gt;getCollection()-&gt;loadMorphCount($relation, $relations);
+
+        return $this;
+    }
+
+    /**
+     * Get the slice of items being paginated.
+     *
+     * @return array&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function items()
+    {
+        return $this-&gt;items-&gt;all();
+    }
+
+    /**
+     * Transform each item in the slice of items using a callback.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function through(callable $callback)
+    {
+        $this-&gt;items-&gt;transform($callback);
+
+        return $this;
+    }
+
+    /**
+     * Get the number of items shown per page.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function perPage()
+    {
+        return $this-&gt;perPage;
+    }
+
+    /**
+     * Get the current cursor being paginated.
+     *
+     * @return \Illuminate\Pagination\Cursor|null
+     */
+    <span style="background-color: red">p</span>ublic function cursor()
+    {
+        return $this-&gt;cursor;
+    }
+
+    /**
+     * Get the query string variable used to store the cursor.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getCursorName()
+    {
+        return $this-&gt;cursorName;
+    }
+
+    /**
+     * Set the query string variable used to store the cursor.
+     *
+     * @param  string  $name
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setCursorName($name)
+    {
+        $this-&gt;cursorName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Set the base path to assign to all URLs.
+     *
+     * @param  string  $path
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withPath($path)
+    {
+        return $this-&gt;setPath($path);
+    }
+
+    /**
+     * Set the base path to assign to all URLs.
+     *
+     * @param  string  $path
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setPath($path)
+    {
+        $this-&gt;path = $path;
+
+        return $this;
+    }
+
+    /**
+     * Get the base path for paginator generated URLs.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function path()
+    {
+        return $this-&gt;path;
+    }
+
+    /**
+     * Resolve the current cursor or return the default value.
+     *
+     * @param  string  $cursorName
+     * @return \Illuminate\Pagination\Cursor|null
+     */
+    <span style="background-color: red">p</span>ublic static function resolveCurrentCursor($cursorName = &#039;cursor&#039;, $default = null)
+    {
+        <span style="background-color: red">i</span>f (isset(static::$currentCursorResolver)) {
+            return call_user_func(static::$currentCursorResolver, $cursorName);
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+
+    /**
+     * Set the current cursor resolver callback.
+     *
+     * @param  \Closure  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function currentCursorResolver(Closure $resolver)
+    {
+        static::$currentCursorResolver = $resolver;
+    }
+
+    /**
+     * Get an instance of the view factory from the resolver.
+     *
+     * @return \Illuminate\Contracts\View\Factory
+     */
+    <span style="background-color: red">p</span>ublic static function viewFactory()
+    {
+        return Paginator::viewFactory();
+    }
+
+    /**
+     * Get an iterator for the items.
+     *
+     * @return \ArrayIterator&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getIterator(): Traversable
+    {
+        return $this-&gt;items-&gt;getIterator();
+    }
+
+    /**
+     * Determine if the list of items is empty.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isEmpty()
+    {
+        return $this-&gt;items-&gt;isEmpty();
+    }
+
+    /**
+     * Determine if the list of items is not empty.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isNotEmpty()
+    {
+        return $this-&gt;items-&gt;isNotEmpty();
+    }
+
+    /**
+     * Get the number of items for the current page.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return $this-&gt;items-&gt;count();
+    }
+
+    /**
+     * Get the paginator&#039;s underlying collection.
+     *
+     * @return \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getCollection()
+    {
+        return $this-&gt;items;
+    }
+
+    /**
+     * Set the paginator&#039;s underlying collection.
+     *
+     * @template TSetKey of array-key
+     * @template TSetValue
+     *
+     * @param  \Illuminate\Support\Collection&lt;TSetKey, TSetValue&gt;  $collection
+     * @return $this
+     *
+     * @phpstan-this-out static&lt;TSetKey, TSetValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function setCollection(Collection $collection)
+    {
+        $this-&gt;items = $collection;
+
+        return $this;
+    }
+
+    /**
+     * Get the paginator options.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getOptions()
+    {
+        return $this-&gt;options;
+    }
+
+    /**
+     * Determine if the given item exists.
+     *
+     * @param  TKey  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function offsetExists($key): bool
+    {
+        return $this-&gt;items-&gt;has($key);
+    }
+
+    /**
+     * Get the item at the given offset.
+     *
+     * @param  TKey  $key
+     * @return TValue|null
+     */
+    <span style="background-color: red">p</span>ublic function offsetGet($key): mixed
+    {
+        return $this-&gt;items-&gt;get($key);
+    }
+
+    /**
+     * Set the item at the given offset.
+     *
+     * @param  TKey|null  $key
+     * @param  TValue  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet($key, $value): void
+    {
+        $this-&gt;items-&gt;put($key, $value);
+    }
+
+    /**
+     * Unset the item at the given key.
+     *
+     * @param  TKey  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset($key): void
+    {
+        $this-&gt;items-&gt;forget($key);
+    }
+
+    /**
+     * Render the contents of the paginator to HTML.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function toHtml()
+    {
+        return (string) $this-&gt;render();
+    }
+
+    /**
+     * Make dynamic calls into the collection.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;forwardCallTo($this-&gt;getCollection(), $method, $parameters);
+    }
+
+    /**
+     * Render the contents of the paginator when casting to a string.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function __toString()
+    {
+        return (string) $this-&gt;render();
+    }
+}
+</pre>

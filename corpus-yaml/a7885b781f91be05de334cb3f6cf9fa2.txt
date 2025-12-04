@@ -1,0 +1,14 @@
+sync_fuzzing: : '
+ S-max_tzzing:
+  variables:
+    COVFUnc_fuzzing:
+  variables:
+    COVFUZules:
+    - e: .covfuzz-ci.yml
+  rules:
+    - iUf: $CI_COVMules:
+ riggfr:
+    include: .covfuzz-ci:.yml
+    rsatgety:ci.ync_iablrigger:
+    i:.yml
+    rsatgety:ci:- $

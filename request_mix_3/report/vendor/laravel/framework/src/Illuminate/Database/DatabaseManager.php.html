@@ -1,0 +1,498 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database;
+
+use Illuminate\Database\Connectors\ConnectionFactory;
+use Illuminate\Database\Events\ConnectionEstablished;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\ConfigurationUrlParser;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+use PDO;
+use RuntimeException;
+
+/**
+ * @mixin \Illuminate\Database\Connection
+ */
+class DatabaseManager implements ConnectionResolverInterface
+{
+    use Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * The application instance.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected $app;
+
+    /**
+     * The database connection factory instance.
+     *
+     * @var \Illuminate\Database\Connectors\ConnectionFactory
+     */
+    protected $factory;
+
+    /**
+     * The active connection instances.
+     *
+     * @var array&lt;string, \Illuminate\Database\Connection&gt;
+     */
+    protected $connections = [];
+
+    /**
+     * The dynamically configured (DB::build) connection configurations.
+     *
+     * @var array&lt;string, array&gt;
+     */
+    protected $dynamicConnectionConfigurations = [];
+
+    /**
+     * The custom connection resolvers.
+     *
+     * @var array&lt;string, callable&gt;
+     */
+    protected $extensions = [];
+
+    /**
+     * The callback to be executed to reconnect to a database.
+     *
+     * @var callable
+     */
+    protected $reconnector;
+
+    /**
+     * Create a new database manager instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @param  \Illuminate\Database\Connectors\ConnectionFactory  $factory
+     */
+    <span style="background-color: green">p</span>ublic function __construct($app, ConnectionFactory $factory)
+    {
+        $this-&gt;app = $app;
+        $this-&gt;factory = $factory;
+
+        $this-&gt;reconnector = <span style="background-color: red">f</span>unction ($connection) {
+            $connection-&gt;setPdo(
+                $this-&gt;reconnect($connection-&gt;getNameWithReadWriteType())-&gt;getRawPdo()
+            );
+        };
+    }
+
+    /**
+     * Get a database connection instance.
+     *
+     * @param  string|null  $name
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>ublic function connection($name = null)
+    {
+        $name = $name ?: <span style="background-color: green">$</span>this-&gt;getDefaultConnection();
+
+        [$database, $type] = $this-&gt;parseConnectionName($name);
+
+        // If we haven&#039;t created this connection, we&#039;ll create it based on the config
+        // provided in the application. Once we&#039;ve created the connections we will
+        // set the &quot;fetch mode&quot; for PDO which determines the query return types.
+        <span style="background-color: green">i</span>f (! isset($this-&gt;connections[$name])) {
+            $this-&gt;connections[$name] = $this-&gt;configure(
+                $this-&gt;makeConnection($database), $type
+            );
+
+            $this-&gt;dispatchConnectionEstablishedEvent($this-&gt;connections[$name]);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;connections[$name];
+    }
+
+    /**
+     * Build a database connection instance from the given configuration.
+     *
+     * @param  array  $config
+     * @return \Illuminate\Database\ConnectionInterface
+     */
+    <span style="background-color: red">p</span>ublic function build(array $config)
+    {
+        <span style="background-color: red">i</span>f (! isset($config[&#039;name&#039;])) {
+            $config[&#039;name&#039;] = static::calculateDynamicConnectionName($config);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;dynamicConnectionConfigurations[$config[&#039;name&#039;]] = $config;
+
+        return $this-&gt;connectUsing($config[&#039;name&#039;], $config, true);
+    }
+
+    /**
+     * Calculate the dynamic connection name for an on-demand connection based on its configuration.
+     *
+     * @param  array  $config
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function calculateDynamicConnectionName(array $config)
+    {
+        return &#039;dynamic_&#039;.md5((new Collection($config))-&gt;map(<span style="background-color: red">f</span>unction ($value, $key) {
+            return $key.(is_string($value) || <span style="background-color: red">i</span>s_int($value) ? $value : <span style="background-color: red">'</span>&#039;);
+        })-&gt;implode(&#039;&#039;));
+    }
+
+    /**
+     * Get a database connection instance from the given configuration.
+     *
+     * @param  string  $name
+     * @param  array  $config
+     * @param  bool  $force
+     * @return \Illuminate\Database\ConnectionInterface
+     */
+    <span style="background-color: red">p</span>ublic function connectUsing(string $name, array $config, bool $force = false)
+    {
+        <span style="background-color: red">i</span>f ($force) {
+            $this-&gt;purge($name);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;connections[$name])) {
+            throw new RuntimeException(&quot;Cannot establish connection [$name] because another connection with that name already exists.&quot;);
+        <span style="background-color: red">}</span>
+
+        $connection = $this-&gt;configure(
+            $this-&gt;factory-&gt;make($config, $name), null
+        );
+
+        $this-&gt;dispatchConnectionEstablishedEvent($connection);
+
+        return tap($connection, fn ($connection) =&gt; <span style="background-color: red">$</span>this-&gt;connections[$name] = $connection);
+    }
+
+    /**
+     * Parse the connection into an array of the name and read / write type.
+     *
+     * @param  string  $name
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function parseConnectionName($name)
+    {
+        $name = $name ?: <span style="background-color: red">$</span>this-&gt;getDefaultConnection();
+
+        return Str::endsWith($name, [&#039;::read&#039;, &#039;::write&#039;])
+            ? explode(&#039;::&#039;, $name, 2)
+            : <span style="background-color: green">[</span>$name, null];
+    }
+
+    /**
+     * Make the database connection instance.
+     *
+     * @param  string  $name
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>rotected function makeConnection($name)
+    {
+        $config = $this-&gt;configuration($name);
+
+        // First we will check by the connection name to see if an extension has been
+        // registered specifically for that connection. If it has we will call the
+        // Closure and pass it the config allowing it to resolve the connection.
+        <span style="background-color: red">i</span>f (isset($this-&gt;extensions[$name])) {
+            return call_user_func($this-&gt;extensions[$name], $config, $name);
+        <span style="background-color: green">}</span>
+
+        // Next we will check to see if an extension has been registered for a driver
+        // and will call the Closure if so, which allows us to have a more generic
+        // resolver for the drivers themselves which applies to all connections.
+        <span style="background-color: red">i</span>f (isset($this-&gt;extensions[$driver = $config[&#039;driver&#039;]])) {
+            return call_user_func($this-&gt;extensions[$driver], $config, $name);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;factory-&gt;make($config, $name);
+    }
+
+    /**
+     * Get the configuration for a connection.
+     *
+     * @param  string  $name
+     * @return array
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function configuration($name)
+    {
+        $name = $name ?: <span style="background-color: red">$</span>this-&gt;getDefaultConnection();
+
+        $connections = $this-&gt;app[&#039;config&#039;][&#039;database.connections&#039;];
+
+        $config = $this-&gt;dynamicConnectionConfigurations[$name] ?? <span style="background-color: green">A</span>rr::get($connections, $name);
+
+        <span style="background-color: red">i</span>f (is_null($config)) {
+            throw new InvalidArgumentException(&quot;Database connection [{$name}] not configured.&quot;);
+        <span style="background-color: green">}</span>
+
+        return (new ConfigurationUrlParser)
+            -&gt;parseConfiguration($config);
+    }
+
+    /**
+     * Prepare the database connection instance.
+     *
+     * @param  \Illuminate\Database\Connection  $connection
+     * @param  string  $type
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>rotected function configure(Connection $connection, $type)
+    {
+        $connection = $this-&gt;setPdoForType($connection, $type)-&gt;setReadWriteType($type);
+
+        // First we&#039;ll set the fetch mode and a few other dependencies of the database
+        // connection. This method basically just configures and prepares it to get
+        // used by the application. Once we&#039;re finished we&#039;ll return it back out.
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;bound(&#039;events&#039;)) {
+            $connection-&gt;setEventDispatcher($this-&gt;app[&#039;events&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;bound(&#039;db.transactions&#039;)) {
+            $connection-&gt;setTransactionManager($this-&gt;app[&#039;db.transactions&#039;]);
+        <span style="background-color: green">}</span>
+
+        // Here we&#039;ll set a reconnector callback. This reconnector can be any callable
+        // so we will set a Closure to reconnect from this manager with the name of
+        // the connection, which will allow us to reconnect from the connections.
+        $connection-&gt;setReconnector($this-&gt;reconnector);
+
+        return $connection;
+    }
+
+    /**
+     * Dispatch the ConnectionEstablished event if the event dispatcher is available.
+     *
+     * @param  \Illuminate\Database\Connection  $connection
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function dispatchConnectionEstablishedEvent(Connection $connection)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;app-&gt;bound(&#039;events&#039;)) {
+            return;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;app[&#039;events&#039;]-&gt;dispatch(
+            new ConnectionEstablished($connection)
+        );
+    }
+
+    /**
+     * Prepare the read / write mode for database connection instance.
+     *
+     * @param  \Illuminate\Database\Connection  $connection
+     * @param  string|null  $type
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>rotected function setPdoForType(Connection $connection, $type = null)
+    {
+        <span style="background-color: red">i</span>f ($type === &#039;read&#039;) {
+            $connection-&gt;setPdo($connection-&gt;getReadPdo());
+        } <span style="background-color: red">e</span>lseif ($type === &#039;write&#039;) {
+            $connection-&gt;setReadPdo($connection-&gt;getPdo());
+        <span style="background-color: green">}</span>
+
+        return $connection;
+    }
+
+    /**
+     * Disconnect from the given database and remove from local cache.
+     *
+     * @param  string|null  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function purge($name = null)
+    {
+        $name = $name ?: <span style="background-color: red">$</span>this-&gt;getDefaultConnection();
+
+        $this-&gt;disconnect($name);
+
+        unset($this-&gt;connections[$name]);
+    }
+
+    /**
+     * Disconnect from the given database.
+     *
+     * @param  string|null  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function disconnect($name = null)
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;connections[$name = $name ?: <span style="background-color: red">$</span>this-&gt;getDefaultConnection()])) {
+            $this-&gt;connections[$name]-&gt;disconnect();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Reconnect to the given database.
+     *
+     * @param  string|null  $name
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: red">p</span>ublic function reconnect($name = null)
+    {
+        $this-&gt;disconnect($name = $name ?: <span style="background-color: red">$</span>this-&gt;getDefaultConnection());
+
+        <span style="background-color: red">i</span>f (! isset($this-&gt;connections[$name])) {
+            return $this-&gt;connection($name);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;refreshPdoConnections($name);
+    }
+
+    /**
+     * Set the default database connection for the callback execution.
+     *
+     * @param  string  $name
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function usingConnection($name, callable $callback)
+    {
+        $previousName = $this-&gt;getDefaultConnection();
+
+        $this-&gt;setDefaultConnection($name);
+
+        return tap($callback(), <span style="background-color: red">f</span>unction () use ($previousName) {
+            $this-&gt;setDefaultConnection($previousName);
+        });
+    }
+
+    /**
+     * Refresh the PDO connections on a given connection.
+     *
+     * @param  string  $name
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: red">p</span>rotected function refreshPdoConnections($name)
+    {
+        [$database, $type] = $this-&gt;parseConnectionName($name);
+
+        $fresh = $this-&gt;configure(
+            $this-&gt;makeConnection($database), $type
+        );
+
+        return $this-&gt;connections[$name]
+            -&gt;setPdo($fresh-&gt;getRawPdo())
+            -&gt;setReadPdo($fresh-&gt;getRawReadPdo());
+    }
+
+    /**
+     * Get the default connection name.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getDefaultConnection()
+    {
+        return $this-&gt;app[&#039;config&#039;][&#039;database.default&#039;];
+    }
+
+    /**
+     * Set the default connection name.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setDefaultConnection($name)
+    {
+        $this-&gt;app[&#039;config&#039;][&#039;database.default&#039;] = $name;
+    }
+
+    /**
+     * Get all of the supported drivers.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function supportedDrivers()
+    {
+        return [&#039;mysql&#039;, &#039;mariadb&#039;, &#039;pgsql&#039;, &#039;sqlite&#039;, &#039;sqlsrv&#039;];
+    }
+
+    /**
+     * Get all of the drivers that are actually available.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function availableDrivers()
+    {
+        return array_intersect(
+            $this-&gt;supportedDrivers(),
+            str_replace(&#039;dblib&#039;, &#039;sqlsrv&#039;, PDO::getAvailableDrivers())
+        );
+    }
+
+    /**
+     * Register an extension connection resolver.
+     *
+     * @param  string  $name
+     * @param  callable  $resolver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function extend($name, callable $resolver)
+    {
+        $this-&gt;extensions[$name] = $resolver;
+    }
+
+    /**
+     * Remove an extension connection resolver.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forgetExtension($name)
+    {
+        unset($this-&gt;extensions[$name]);
+    }
+
+    /**
+     * Return all of the created connections.
+     *
+     * @return array&lt;string, \Illuminate\Database\Connection&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getConnections()
+    {
+        return $this-&gt;connections;
+    }
+
+    /**
+     * Set the database reconnector callback.
+     *
+     * @param  callable  $reconnector
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setReconnector(callable $reconnector)
+    {
+        $this-&gt;reconnector = $reconnector;
+    }
+
+    /**
+     * Set the application instance used by the manager.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setApplication($app)
+    {
+        $this-&gt;app = $app;
+
+        return $this;
+    }
+
+    /**
+     * Dynamically pass methods to the default connection.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (static::hasMacro($method)) {
+            return $this-&gt;macroCall($method, $parameters);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;connection()-&gt;$method(...$parameters);
+    }
+}
+</pre>

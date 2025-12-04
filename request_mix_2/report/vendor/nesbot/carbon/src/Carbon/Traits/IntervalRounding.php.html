@@ -1,0 +1,60 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonInterval;
+use Carbon\Exceptions\InvalidIntervalException;
+use DateInterval;
+
+/**
+ * Trait to call rounding methods to interval or the interval of a period.
+ */
+trait IntervalRounding
+{
+    <span style="background-color: red">p</span>rotected function callRoundMethod(string $method, array $parameters): ?static
+    {
+        $action = substr($method, 0, 4);
+
+        <span style="background-color: red">i</span>f ($action !== &#039;ceil&#039;) {
+            $action = substr($method, 0, 5);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\in_array($action, [&#039;round&#039;, &#039;floor&#039;, &#039;ceil&#039;])) {
+            return $this-&gt;{$action.&#039;Unit&#039;}(substr($method, \strlen($action)), ...$parameters);
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    <span style="background-color: red">p</span>rotected function roundWith(DateInterval|string|float|int $precision, callable|string $function): ?static
+    {
+        $unit = &#039;second&#039;;
+
+        <span style="background-color: red">i</span>f ($precision instanceof DateInterval) {
+            $precision = CarbonInterval::instance($precision)-&gt;forHumans([&#039;locale&#039; =&gt; &#039;en&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($precision) &amp;&amp; <span style="background-color: red">p</span>reg_match(&#039;/^\s*(?&lt;precision&gt;\d+)?\s*(?&lt;unit&gt;\w+)(?&lt;other&gt;\W.*)?$/&#039;, $precision, $match)) {
+            <span style="background-color: red">i</span>f (trim($match[&#039;other&#039;] ?? <span style="background-color: red">'</span>&#039;) !== &#039;&#039;) {
+                throw new InvalidIntervalException(&#039;Rounding is only possible with single unit intervals.&#039;);
+            <span style="background-color: red">}</span>
+
+            $precision = (int) ($match[&#039;precision&#039;] ?: <span style="background-color: red">1</span>);
+            $unit = $match[&#039;unit&#039;];
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;roundUnit($unit, $precision, $function);
+    }
+}
+</pre>

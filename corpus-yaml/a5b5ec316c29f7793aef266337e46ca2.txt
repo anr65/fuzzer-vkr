@@ -1,0 +1,6 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_tosync_fuzzing:
+  variables: '-max_total_tosync_fuzzing:
+  variables:
+    r 

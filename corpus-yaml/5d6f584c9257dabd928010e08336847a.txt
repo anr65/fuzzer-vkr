@@ -1,0 +1,2 @@
+: wync_vr,
+ "*\\\\r\uDDDDDDDD(u\n" z

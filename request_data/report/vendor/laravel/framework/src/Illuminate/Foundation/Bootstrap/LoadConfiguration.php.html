@@ -1,0 +1,196 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Bootstrap;
+
+use Illuminate\Config\Repository;
+use Illuminate\Contracts\Config\Repository as RepositoryContract;
+use Illuminate\Contracts\Foundation\Application;
+use SplFileInfo;
+use Symfony\Component\Finder\Finder;
+
+class LoadConfiguration
+{
+    /**
+     * Bootstrap the given application.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function bootstrap(Application $app)
+    {
+        $items = [];
+
+        // First we will see if we have a cache configuration file. If we do, we&#039;ll load
+        // the configuration items from that file so that it is very quick. Otherwise
+        // we will need to spin through every configuration file and load them all.
+        <span style="background-color: red">i</span>f (file_exists($cached = $app-&gt;getCachedConfigPath())) {
+            $items = require $cached;
+
+            $app-&gt;instance(&#039;config_loaded_from_cache&#039;, $loadedFromCache = true);
+        <span style="background-color: green">}</span>
+
+        // Next we will spin through all of the configuration files in the configuration
+        // directory and load each one into the repository. This will make all of the
+        // options available to the developer for use in various parts of this app.
+        $app-&gt;instance(&#039;config&#039;, $config = new Repository($items));
+
+        <span style="background-color: green">i</span>f (! isset($loadedFromCache)) {
+            $this-&gt;loadConfigurationFiles($app, $config);
+        <span style="background-color: green">}</span>
+
+        // Finally, we will set the application&#039;s environment based on the configuration
+        // values that were loaded. We will pass a callback which will be used to get
+        // the environment in a web context where an &quot;--env&quot; switch is not present.
+        $app-&gt;detectEnvironment(fn () =&gt; <span style="background-color: green">$</span>config-&gt;get(&#039;app.env&#039;, &#039;production&#039;));
+
+        date_default_timezone_set($config-&gt;get(&#039;app.timezone&#039;, &#039;UTC&#039;));
+
+        mb_internal_encoding(&#039;UTF-8&#039;);
+    }
+
+    /**
+     * Load the configuration items from all of the files.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @param  \Illuminate\Contracts\Config\Repository  $repository
+     * @return void
+     *
+     * @throws \Exception
+     */
+    <span style="background-color: green">p</span>rotected function loadConfigurationFiles(Application $app, RepositoryContract $repository)
+    {
+        $files = $this-&gt;getConfigurationFiles($app);
+
+        $shouldMerge = method_exists($app, &#039;shouldMergeFrameworkConfiguration&#039;)
+            ? $app-&gt;shouldMergeFrameworkConfiguration()
+            : <span style="background-color: red">t</span>rue;
+
+        $base = $shouldMerge
+            ? $this-&gt;getBaseConfiguration()
+            : <span style="background-color: red">[</span>];
+
+        <span style="background-color: green">f</span>oreach (array_diff(array_keys($base), array_keys($files)) as $name =&gt; $config) {
+            $repository-&gt;set($name, $config);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($files as $name =&gt; $path) {
+            $base = $this-&gt;loadConfigurationFile($repository, $name, $path, $base);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($base as $name =&gt; $config) {
+            $repository-&gt;set($name, $config);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Load the given configuration file.
+     *
+     * @param  \Illuminate\Contracts\Config\Repository  $repository
+     * @param  string  $name
+     * @param  string  $path
+     * @param  array  $base
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function loadConfigurationFile(RepositoryContract $repository, $name, $path, array $base)
+    {
+        $config = (fn () =&gt; <span style="background-color: green">r</span>equire $path)();
+
+        <span style="background-color: green">i</span>f (isset($base[$name])) {
+            $config = array_merge($base[$name], $config);
+
+            <span style="background-color: green">f</span>oreach ($this-&gt;mergeableOptions($name) as $option) {
+                <span style="background-color: green">i</span>f (isset($config[$option])) {
+                    $config[$option] = array_merge($base[$name][$option], $config[$option]);
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            unset($base[$name]);
+        <span style="background-color: green">}</span>
+
+        $repository-&gt;set($name, $config);
+
+        return $base;
+    }
+
+    /**
+     * Get the options within the configuration file that should be merged again.
+     *
+     * @param  string  $name
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function mergeableOptions($name)
+    {
+        return [
+            &#039;auth&#039; =&gt; [&#039;guards&#039;, &#039;providers&#039;, &#039;passwords&#039;],
+            &#039;broadcasting&#039; =&gt; [&#039;connections&#039;],
+            &#039;cache&#039; =&gt; [&#039;stores&#039;],
+            &#039;database&#039; =&gt; [&#039;connections&#039;],
+            &#039;filesystems&#039; =&gt; [&#039;disks&#039;],
+            &#039;logging&#039; =&gt; [&#039;channels&#039;],
+            &#039;mail&#039; =&gt; [&#039;mailers&#039;],
+            &#039;queue&#039; =&gt; [&#039;connections&#039;],
+        ][$name] ?? <span style="background-color: green">[</span>];
+    }
+
+    /**
+     * Get all of the configuration files for the application.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function getConfigurationFiles(Application $app)
+    {
+        $files = [];
+
+        $configPath = realpath($app-&gt;configPath());
+
+        <span style="background-color: red">i</span>f (! $configPath) {
+            return [];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach (Finder::create()-&gt;files()-&gt;name(&#039;*.php&#039;)-&gt;in($configPath) as $file) {
+            $directory = $this-&gt;getNestedDirectory($file, $configPath);
+
+            $files[$directory.basename($file-&gt;getRealPath(), &#039;.php&#039;)] = $file-&gt;getRealPath();
+        <span style="background-color: green">}</span>
+
+        ksort($files, SORT_NATURAL);
+
+        return $files;
+    }
+
+    /**
+     * Get the configuration file nesting path.
+     *
+     * @param  \SplFileInfo  $file
+     * @param  string  $configPath
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function getNestedDirectory(SplFileInfo $file, $configPath)
+    {
+        $directory = $file-&gt;getPath();
+
+        <span style="background-color: red">i</span>f ($nested = trim(str_replace($configPath, &#039;&#039;, $directory), DIRECTORY_SEPARATOR)) {
+            $nested = str_replace(DIRECTORY_SEPARATOR, &#039;.&#039;, $nested).&#039;.&#039;;
+        <span style="background-color: green">}</span>
+
+        return $nested;
+    }
+
+    /**
+     * Get the base configuration files.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function getBaseConfiguration()
+    {
+        $config = [];
+
+        <span style="background-color: green">f</span>oreach (Finder::create()-&gt;files()-&gt;name(&#039;*.php&#039;)-&gt;in(__DIR__.&#039;/../../../../config&#039;) as $file) {
+            $config[basename($file-&gt;getRealPath(), &#039;.php&#039;)] = require $file-&gt;getRealPath();
+        <span style="background-color: green">}</span>
+
+        return $config;
+    }
+}
+</pre>

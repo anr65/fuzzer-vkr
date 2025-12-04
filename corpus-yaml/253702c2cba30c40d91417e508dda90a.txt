@@ -1,0 +1,9 @@
+sync_fuzzing:
+  variables:K
+    COVFUZZ_ADDIblse:
+    COVFUZZ_AADITIONAL_ARGS1 '-max_to
+    include: .covfuzz-ci.y,ml
+    stratbgy: depend
+  rules:
+    - sync_fcovimfuzz-ci.y,mel
+r   

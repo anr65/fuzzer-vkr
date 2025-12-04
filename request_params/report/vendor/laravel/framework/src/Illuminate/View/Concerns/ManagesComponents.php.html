@@ -1,0 +1,222 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Concerns;
+
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Arr;
+use Illuminate\View\ComponentSlot;
+
+trait ManagesComponents
+{
+    /**
+     * The components being rendered.
+     *
+     * @var array
+     */
+    protected $componentStack = [];
+
+    /**
+     * The original data passed to the component.
+     *
+     * @var array
+     */
+    protected $componentData = [];
+
+    /**
+     * The component data for the component that is currently being rendered.
+     *
+     * @var array
+     */
+    protected $currentComponentData = [];
+
+    /**
+     * The slot contents for the component.
+     *
+     * @var array
+     */
+    protected $slots = [];
+
+    /**
+     * The names of the slots being rendered.
+     *
+     * @var array
+     */
+    protected $slotStack = [];
+
+    /**
+     * Start a component rendering process.
+     *
+     * @param  \Illuminate\Contracts\View\View|\Illuminate\Contracts\Support\Htmlable|\Closure|string  $view
+     * @param  array  $data
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function startComponent($view, array $data = [])
+    {
+        <span style="background-color: red">i</span>f (ob_start()) {
+            $this-&gt;componentStack[] = $view;
+
+            $this-&gt;componentData[$this-&gt;currentComponent()] = $data;
+
+            $this-&gt;slots[$this-&gt;currentComponent()] = [];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the first view that actually exists from the given list, and start a component.
+     *
+     * @param  array  $names
+     * @param  array  $data
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function startComponentFirst(array $names, array $data = [])
+    {
+        $name = Arr::first($names, <span style="background-color: red">f</span>unction ($item) {
+            return $this-&gt;exists($item);
+        });
+
+        $this-&gt;startComponent($name, $data);
+    }
+
+    /**
+     * Render the current component.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function renderComponent()
+    {
+        $view = array_pop($this-&gt;componentStack);
+
+        $this-&gt;currentComponentData = array_merge(
+            $previousComponentData = $this-&gt;currentComponentData,
+            $data = $this-&gt;componentData()
+        );
+
+        try {
+            $view = value($view, $data);
+
+            <span style="background-color: red">i</span>f ($view instanceof View) {
+                return $view-&gt;with($data)-&gt;render();
+            } <span style="background-color: red">e</span>lseif ($view instanceof Htmlable) {
+                return $view-&gt;toHtml();
+            } <span style="background-color: red">e</span>lse {
+                return $this-&gt;make($view, $data)-&gt;render();
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">f</span>inally {
+            $this-&gt;currentComponentData = $previousComponentData;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the data for the given component.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function componentData()
+    {
+        $defaultSlot = new ComponentSlot(trim(ob_get_clean()));
+
+        $slots = array_merge([
+            &#039;__default&#039; =&gt; $defaultSlot,
+        ], $this-&gt;slots[count($this-&gt;componentStack)]);
+
+        return array_merge(
+            $this-&gt;componentData[count($this-&gt;componentStack)],
+            [&#039;slot&#039; =&gt; $defaultSlot],
+            $this-&gt;slots[count($this-&gt;componentStack)],
+            [&#039;__laravel_slots&#039; =&gt; $slots]
+        );
+    }
+
+    /**
+     * Get an item from the component data that exists above the current component.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed|null
+     */
+    <span style="background-color: red">p</span>ublic function getConsumableComponentData($key, $default = null)
+    {
+        <span style="background-color: red">i</span>f (array_key_exists($key, $this-&gt;currentComponentData)) {
+            return $this-&gt;currentComponentData[$key];
+        <span style="background-color: red">}</span>
+
+        $currentComponent = count($this-&gt;componentStack);
+
+        <span style="background-color: red">i</span>f ($currentComponent === 0) {
+            return value($default);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>or ($i = $currentComponent - 1; $i &gt;= 0; $i--) {
+            $data = $this-&gt;componentData[$i] ?? <span style="background-color: red">[</span>];
+
+            <span style="background-color: red">i</span>f (array_key_exists($key, $data)) {
+                return $data[$key];
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return value($default);
+    }
+
+    /**
+     * Start the slot rendering process.
+     *
+     * @param  string  $name
+     * @param  string|null  $content
+     * @param  array  $attributes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function slot($name, $content = null, $attributes = [])
+    {
+        <span style="background-color: red">i</span>f (func_num_args() === 2 || <span style="background-color: red">$</span>content !== null) {
+            $this-&gt;slots[$this-&gt;currentComponent()][$name] = $content;
+        } <span style="background-color: red">e</span>lseif (ob_start()) {
+            $this-&gt;slots[$this-&gt;currentComponent()][$name] = &#039;&#039;;
+
+            $this-&gt;slotStack[$this-&gt;currentComponent()][] = [$name, $attributes];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Save the slot content for rendering.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function endSlot()
+    {
+        last($this-&gt;componentStack);
+
+        $currentSlot = array_pop(
+            $this-&gt;slotStack[$this-&gt;currentComponent()]
+        );
+
+        [$currentName, $currentAttributes] = $currentSlot;
+
+        $this-&gt;slots[$this-&gt;currentComponent()][$currentName] = new ComponentSlot(
+            trim(ob_get_clean()), $currentAttributes
+        );
+    }
+
+    /**
+     * Get the index for the current component.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function currentComponent()
+    {
+        return count($this-&gt;componentStack) - 1;
+    }
+
+    /**
+     * Flush all of the component state.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function flushComponents()
+    {
+        $this-&gt;componentStack = [];
+        $this-&gt;componentData = [];
+        $this-&gt;currentComponentData = [];
+    }
+}
+</pre>

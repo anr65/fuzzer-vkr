@@ -1,0 +1,508 @@
+<pre>&lt;?php
+
+namespace Illuminate\View;
+
+use ArrayAccess;
+use BadMethodCallException;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\Support\MessageProvider;
+use Illuminate\Contracts\Support\Renderable;
+use Illuminate\Contracts\View\Engine;
+use Illuminate\Contracts\View\View as ViewContract;
+use Illuminate\Support\Collection;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\ViewErrorBag;
+use Stringable;
+use Throwable;
+
+class View implements ArrayAccess, Htmlable, Stringable, ViewContract
+{
+    use Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * The view factory instance.
+     *
+     * @var \Illuminate\View\Factory
+     */
+    protected $factory;
+
+    /**
+     * The engine implementation.
+     *
+     * @var \Illuminate\Contracts\View\Engine
+     */
+    protected $engine;
+
+    /**
+     * The name of the view.
+     *
+     * @var string
+     */
+    protected $view;
+
+    /**
+     * The array of view data.
+     *
+     * @var array
+     */
+    protected $data;
+
+    /**
+     * The path to the view file.
+     *
+     * @var string
+     */
+    protected $path;
+
+    /**
+     * Create a new view instance.
+     *
+     * @param  \Illuminate\View\Factory  $factory
+     * @param  \Illuminate\Contracts\View\Engine  $engine
+     * @param  string  $view
+     * @param  string  $path
+     * @param  mixed  $data
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Factory $factory, Engine $engine, $view, $path, $data = [])
+    {
+        $this-&gt;view = $view;
+        $this-&gt;path = $path;
+        $this-&gt;engine = $engine;
+        $this-&gt;factory = $factory;
+
+        $this-&gt;data = $data instanceof Arrayable ? $data-&gt;toArray() : <span style="background-color: green">(</span>array) $data;
+    }
+
+    /**
+     * Get the evaluated contents of a given fragment.
+     *
+     * @param  string  $fragment
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function fragment($fragment)
+    {
+        return $this-&gt;render(<span style="background-color: red">f</span>unction () use ($fragment) {
+            return $this-&gt;factory-&gt;getFragment($fragment);
+        });
+    }
+
+    /**
+     * Get the evaluated contents for a given array of fragments or return all fragments.
+     *
+     * @param  array|null  $fragments
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function fragments(?array $fragments = null)
+    {
+        return is_null($fragments)
+            ? $this-&gt;allFragments()
+            : <span style="background-color: red">(</span>new Collection($fragments))-&gt;map(fn ($f) =&gt; <span style="background-color: red">$</span>this-&gt;fragment($f))-&gt;implode(&#039;&#039;);
+    }
+
+    /**
+     * Get the evaluated contents of a given fragment if the given condition is true.
+     *
+     * @param  bool  $boolean
+     * @param  string  $fragment
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function fragmentIf($boolean, $fragment)
+    {
+        <span style="background-color: red">i</span>f (value($boolean)) {
+            return $this-&gt;fragment($fragment);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;render();
+    }
+
+    /**
+     * Get the evaluated contents for a given array of fragments if the given condition is true.
+     *
+     * @param  bool  $boolean
+     * @param  array|null  $fragments
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function fragmentsIf($boolean, ?array $fragments = null)
+    {
+        <span style="background-color: red">i</span>f (value($boolean)) {
+            return $this-&gt;fragments($fragments);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;render();
+    }
+
+    /**
+     * Get all fragments as a single string.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function allFragments()
+    {
+        return (new Collection($this-&gt;render(fn () =&gt; <span style="background-color: red">$</span>this-&gt;factory-&gt;getFragments())))-&gt;implode(&#039;&#039;);
+    }
+
+    /**
+     * Get the string contents of the view.
+     *
+     * @param  callable|null  $callback
+     * @return string
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: green">p</span>ublic function render(?callable $callback = null)
+    {
+        try {
+            $contents = $this-&gt;renderContents();
+
+            $response = isset($callback) ? $callback($this, $contents) : <span style="background-color: green">n</span>ull;
+
+            // Once we have the contents of the view, we will flush the sections if we are
+            // done rendering all views so that there is nothing left hanging over when
+            // another view gets rendered in the future by the application developer.
+            $this-&gt;factory-&gt;flushStateIfDoneRendering();
+
+            return ! is_null($response) ? $response : <span style="background-color: green">$</span>contents;
+        } <span style="background-color: red">c</span>atch (Throwable $e) {
+            $this-&gt;factory-&gt;flushState();
+
+            throw $e;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the contents of the view instance.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function renderContents()
+    {
+        // We will keep track of the number of views being rendered so we can flush
+        // the section after the complete rendering operation is done. This will
+        // clear out the sections for any separate views that may be rendered.
+        $this-&gt;factory-&gt;incrementRender();
+
+        $this-&gt;factory-&gt;callComposer($this);
+
+        $contents = $this-&gt;getContents();
+
+        // Once we&#039;ve finished rendering the view, we&#039;ll decrement the render count
+        // so that each section gets flushed out next time a view is created and
+        // no old sections are staying around in the memory of an environment.
+        $this-&gt;factory-&gt;decrementRender();
+
+        return $contents;
+    }
+
+    /**
+     * Get the evaluated contents of the view.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function getContents()
+    {
+        return $this-&gt;engine-&gt;get($this-&gt;path, $this-&gt;gatherData());
+    }
+
+    /**
+     * Get the data bound to the view instance.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function gatherData()
+    {
+        $data = array_merge($this-&gt;factory-&gt;getShared(), $this-&gt;data);
+
+        <span style="background-color: green">f</span>oreach ($data as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f ($value instanceof Renderable) {
+                $data[$key] = $value-&gt;render();
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $data;
+    }
+
+    /**
+     * Get the sections of the rendered view.
+     *
+     * @return array
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function renderSections()
+    {
+        return $this-&gt;render(<span style="background-color: red">f</span>unction () {
+            return $this-&gt;factory-&gt;getSections();
+        });
+    }
+
+    /**
+     * Add a piece of data to the view.
+     *
+     * @param  string|array  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function with($key, $value = null)
+    {
+        <span style="background-color: red">i</span>f (is_array($key)) {
+            $this-&gt;data = array_merge($this-&gt;data, $key);
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;data[$key] = $value;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a view instance to the view data.
+     *
+     * @param  string  $key
+     * @param  string  $view
+     * @param  array  $data
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function nest($key, $view, array $data = [])
+    {
+        return $this-&gt;with($key, $this-&gt;factory-&gt;make($view, $data));
+    }
+
+    /**
+     * Add validation errors to the view.
+     *
+     * @param  \Illuminate\Contracts\Support\MessageProvider|array|string  $provider
+     * @param  string  $bag
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withErrors($provider, $bag = &#039;default&#039;)
+    {
+        return $this-&gt;with(&#039;errors&#039;, (new ViewErrorBag)-&gt;put(
+            $bag, $this-&gt;formatErrors($provider)
+        ));
+    }
+
+    /**
+     * Parse the given errors into an appropriate value.
+     *
+     * @param  \Illuminate\Contracts\Support\MessageProvider|array|string  $provider
+     * @return \Illuminate\Support\MessageBag
+     */
+    <span style="background-color: red">p</span>rotected function formatErrors($provider)
+    {
+        return $provider instanceof MessageProvider
+            ? $provider-&gt;getMessageBag()
+            : <span style="background-color: red">n</span>ew MessageBag((array) $provider);
+    }
+
+    /**
+     * Get the name of the view.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function name()
+    {
+        return $this-&gt;getName();
+    }
+
+    /**
+     * Get the name of the view.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getName()
+    {
+        return $this-&gt;view;
+    }
+
+    /**
+     * Get the array of view data.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getData()
+    {
+        return $this-&gt;data;
+    }
+
+    /**
+     * Get the path to the view file.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getPath()
+    {
+        return $this-&gt;path;
+    }
+
+    /**
+     * Set the path to the view.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setPath($path)
+    {
+        $this-&gt;path = $path;
+    }
+
+    /**
+     * Get the view factory instance.
+     *
+     * @return \Illuminate\View\Factory
+     */
+    <span style="background-color: red">p</span>ublic function getFactory()
+    {
+        return $this-&gt;factory;
+    }
+
+    /**
+     * Get the view&#039;s rendering engine.
+     *
+     * @return \Illuminate\Contracts\View\Engine
+     */
+    <span style="background-color: red">p</span>ublic function getEngine()
+    {
+        return $this-&gt;engine;
+    }
+
+    /**
+     * Determine if a piece of data is bound.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function offsetExists($key): bool
+    {
+        return array_key_exists($key, $this-&gt;data);
+    }
+
+    /**
+     * Get a piece of bound data to the view.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function offsetGet($key): mixed
+    {
+        return $this-&gt;data[$key];
+    }
+
+    /**
+     * Set a piece of data on the view.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet($key, $value): void
+    {
+        $this-&gt;with($key, $value);
+    }
+
+    /**
+     * Unset a piece of data from the view.
+     *
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset($key): void
+    {
+        unset($this-&gt;data[$key]);
+    }
+
+    /**
+     * Get a piece of data from the view.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function &amp;__get($key)
+    {
+        return $this-&gt;data[$key];
+    }
+
+    /**
+     * Set a piece of data on the view.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __set($key, $value)
+    {
+        $this-&gt;with($key, $value);
+    }
+
+    /**
+     * Check if a piece of data is bound to the view.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function __isset($key)
+    {
+        return isset($this-&gt;data[$key]);
+    }
+
+    /**
+     * Remove a piece of bound data from the view.
+     *
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __unset($key)
+    {
+        unset($this-&gt;data[$key]);
+    }
+
+    /**
+     * Dynamically bind parameters to the view.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return \Illuminate\View\View
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (static::hasMacro($method)) {
+            return $this-&gt;macroCall($method, $parameters);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! str_starts_with($method, &#039;with&#039;)) {
+            throw new BadMethodCallException(sprintf(
+                &#039;Method %s::%s does not exist.&#039;, static::class, $method
+            ));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;with(Str::camel(substr($method, 4)), $parameters[0]);
+    }
+
+    /**
+     * Get content as a string of HTML.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function toHtml()
+    {
+        return $this-&gt;render();
+    }
+
+    /**
+     * Get the string contents of the view.
+     *
+     * @return string
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function __toString()
+    {
+        return $this-&gt;render();
+    }
+}
+</pre>

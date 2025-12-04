@@ -1,0 +1,4 @@
+ng:
+  vmr:
+    inue: .
+  inle: .cot'

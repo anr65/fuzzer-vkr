@@ -1,0 +1,95 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Callback;
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Closure;
+use DateTimeImmutable;
+use DateTimeInterface;
+
+trait IntervalStep
+{
+    /**
+     * Step to apply instead of a fixed interval to get the new date.
+     *
+     * @var Closure|null
+     */
+    protected $step;
+
+    /**
+     * Get the dynamic step in use.
+     *
+     * @return Closure
+     */
+    <span style="background-color: red">p</span>ublic function getStep(): ?Closure
+    {
+        return $this-&gt;step;
+    }
+
+    /**
+     * Set a step to apply instead of a fixed interval to get the new date.
+     *
+     * Or pass null to switch to fixed interval.
+     *
+     * @param Closure|null $step
+     */
+    <span style="background-color: red">p</span>ublic function setStep(?Closure $step): void
+    {
+        $this-&gt;step = $step;
+    }
+
+    /**
+     * Take a date and apply either the step if set, or the current interval else.
+     *
+     * The interval/step is applied negatively (typically subtraction instead of addition) if $negated is true.
+     *
+     * @param DateTimeInterface $dateTime
+     * @param bool              $negated
+     *
+     * @return CarbonInterface
+     */
+    <span style="background-color: red">p</span>ublic function convertDate(DateTimeInterface $dateTime, bool $negated = false): CarbonInterface
+    {
+        /** @var CarbonInterface $carbonDate */
+        $carbonDate = $dateTime instanceof CarbonInterface ? $dateTime : <span style="background-color: red">$</span>this-&gt;resolveCarbon($dateTime);
+
+        <span style="background-color: red">i</span>f ($this-&gt;step) {
+            $carbonDate = Callback::parameter($this-&gt;step, $carbonDate-&gt;avoidMutation());
+
+            return $carbonDate-&gt;modify(($this-&gt;step)($carbonDate, $negated)-&gt;format(&#039;Y-m-d H:i:s.u e O&#039;));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($negated) {
+            return $carbonDate-&gt;rawSub($this);
+        <span style="background-color: red">}</span>
+
+        return $carbonDate-&gt;rawAdd($this);
+    }
+
+    /**
+     * Convert DateTimeImmutable instance to CarbonImmutable instance and DateTime instance to Carbon instance.
+     */
+    <span style="background-color: red">p</span>rivate function resolveCarbon(DateTimeInterface $dateTime): Carbon|CarbonImmutable
+    {
+        <span style="background-color: red">i</span>f ($dateTime instanceof DateTimeImmutable) {
+            return CarbonImmutable::instance($dateTime);
+        <span style="background-color: red">}</span>
+
+        return Carbon::instance($dateTime);
+    }
+}
+</pre>

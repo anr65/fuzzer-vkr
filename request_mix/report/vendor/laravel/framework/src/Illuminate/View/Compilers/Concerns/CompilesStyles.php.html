@@ -1,0 +1,20 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesStyles
+{
+    /**
+     * Compile the conditional style statement into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileStyle($expression)
+    {
+        $expression = is_null($expression) ? &#039;([])&#039; : <span style="background-color: red">$</span>expression;
+
+        return &quot;style=\&quot;&lt;?php echo \Illuminate\Support\Arr::toCssStyles{$expression} ?&gt;\&quot;&quot;;
+    }
+}
+</pre>

@@ -1,0 +1,140 @@
+<pre>&lt;?php
+
+namespace Illuminate\Filesystem;
+
+use Illuminate\Contracts\Foundation\CachesRoutes;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+
+class FilesystemServiceProvider extends ServiceProvider
+{
+    /**
+     * Bootstrap the filesystem.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        $this-&gt;serveFiles();
+    }
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;registerNativeFilesystem();
+        $this-&gt;registerFlysystem();
+    }
+
+    /**
+     * Register the native filesystem implementation.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerNativeFilesystem()
+    {
+        $this-&gt;app-&gt;singleton(&#039;files&#039;, <span style="background-color: green">f</span>unction () {
+            return new Filesystem;
+        });
+    }
+
+    /**
+     * Register the driver based filesystem.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerFlysystem()
+    {
+        $this-&gt;registerManager();
+
+        $this-&gt;app-&gt;singleton(&#039;filesystem.disk&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return $app[&#039;filesystem&#039;]-&gt;disk($this-&gt;getDefaultDriver());
+        });
+
+        $this-&gt;app-&gt;singleton(&#039;filesystem.cloud&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return $app[&#039;filesystem&#039;]-&gt;disk($this-&gt;getCloudDriver());
+        });
+    }
+
+    /**
+     * Register the filesystem manager.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerManager()
+    {
+        $this-&gt;app-&gt;singleton(&#039;filesystem&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return new FilesystemManager($app);
+        });
+    }
+
+    /**
+     * Register protected file serving.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function serveFiles()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;app instanceof CachesRoutes &amp;&amp; <span style="background-color: green">$</span>this-&gt;app-&gt;routesAreCached()) {
+            return;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($this-&gt;app[&#039;config&#039;][&#039;filesystems.disks&#039;] ?? <span style="background-color: red">[</span>] as $disk =&gt; $config) {
+            <span style="background-color: green">i</span>f (! $this-&gt;shouldServeFiles($config)) {
+                continue;
+            <span style="background-color: green">}</span>
+
+            $this-&gt;app-&gt;booted(<span style="background-color: green">f</span>unction ($app) use ($disk, $config) {
+                $uri = isset($config[&#039;url&#039;])
+                    ? rtrim(parse_url($config[&#039;url&#039;])[&#039;path&#039;], &#039;/&#039;)
+                    : <span style="background-color: green">'</span>/storage&#039;;
+
+                $isProduction = $app-&gt;isProduction();
+
+                Route::get($uri.&#039;/{path}&#039;, <span style="background-color: red">f</span>unction (Request $request, string $path) use ($disk, $config, $isProduction) {
+                    return (new ServeFile(
+                        $disk,
+                        $config,
+                        $isProduction
+                    ))($request, $path);
+                })-&gt;where(&#039;path&#039;, &#039;.*&#039;)-&gt;name(&#039;storage.&#039;.$disk);
+            });
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Determine if the disk is serveable.
+     *
+     * @param  array  $config
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function shouldServeFiles(array $config)
+    {
+        return $config[&#039;driver&#039;] === &#039;local&#039; &amp;&amp; (<span style="background-color: green">$</span>config[&#039;serve&#039;] ?? <span style="background-color: green">f</span>alse);
+    }
+
+    /**
+     * Get the default file driver.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function getDefaultDriver()
+    {
+        return $this-&gt;app[&#039;config&#039;][&#039;filesystems.default&#039;];
+    }
+
+    /**
+     * Get the default cloud based file driver.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function getCloudDriver()
+    {
+        return $this-&gt;app[&#039;config&#039;][&#039;filesystems.cloud&#039;];
+    }
+}
+</pre>

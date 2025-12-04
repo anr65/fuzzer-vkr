@@ -1,0 +1,172 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Closure;
+use Illuminate\Support\Stringable;
+
+trait CompilesEchos
+{
+    /**
+     * Custom rendering callbacks for stringable objects.
+     *
+     * @var array
+     */
+    protected $echoHandlers = [];
+
+    /**
+     * Add a handler to be executed before echoing a given class.
+     *
+     * @param  string|callable  $class
+     * @param  callable|null  $handler
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function stringable($class, $handler = null)
+    {
+        <span style="background-color: red">i</span>f ($class instanceof Closure) {
+            [$class, $handler] = [$this-&gt;firstClosureParameterType($class), $class];
+        <span style="background-color: red">}</span>
+
+        $this-&gt;echoHandlers[$class] = $handler;
+    }
+
+    /**
+     * Compile Blade echos into valid PHP.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileEchos($value)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;getEchoMethods() as $method) {
+            $value = $this-&gt;$method($value);
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get the echo methods in the proper order for compilation.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getEchoMethods()
+    {
+        return [
+            &#039;compileRawEchos&#039;,
+            &#039;compileEscapedEchos&#039;,
+            &#039;compileRegularEchos&#039;,
+        ];
+    }
+
+    /**
+     * Compile the &quot;raw&quot; echo statements.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileRawEchos($value)
+    {
+        $pattern = sprintf(&#039;/(@)?%s\s*(.+?)\s*%s(\r?\n)?/s&#039;, $this-&gt;rawTags[0], $this-&gt;rawTags[1]);
+
+        $callback = <span style="background-color: red">f</span>unction ($matches) {
+            $whitespace = empty($matches[3]) ? &#039;&#039; : <span style="background-color: red">$</span>matches[3].$matches[3];
+
+            return $matches[1]
+                ? substr($matches[0], 1)
+                : <span style="background-color: red">"</span>&lt;?php echo {$this-&gt;wrapInEchoHandler($matches[2])}; ?&gt;{$whitespace}&quot;;
+        };
+
+        return preg_replace_callback($pattern, $callback, $value);
+    }
+
+    /**
+     * Compile the &quot;regular&quot; echo statements.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileRegularEchos($value)
+    {
+        $pattern = sprintf(&#039;/(@)?%s\s*(.+?)\s*%s(\r?\n)?/s&#039;, $this-&gt;contentTags[0], $this-&gt;contentTags[1]);
+
+        $callback = <span style="background-color: red">f</span>unction ($matches) {
+            $whitespace = empty($matches[3]) ? &#039;&#039; : <span style="background-color: red">$</span>matches[3].$matches[3];
+
+            $wrapped = sprintf($this-&gt;echoFormat, $this-&gt;wrapInEchoHandler($matches[2]));
+
+            return $matches[1] ? substr($matches[0], 1) : <span style="background-color: red">"</span>&lt;?php echo {$wrapped}; ?&gt;{$whitespace}&quot;;
+        };
+
+        return preg_replace_callback($pattern, $callback, $value);
+    }
+
+    /**
+     * Compile the escaped echo statements.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEscapedEchos($value)
+    {
+        $pattern = sprintf(&#039;/(@)?%s\s*(.+?)\s*%s(\r?\n)?/s&#039;, $this-&gt;escapedTags[0], $this-&gt;escapedTags[1]);
+
+        $callback = <span style="background-color: red">f</span>unction ($matches) {
+            $whitespace = empty($matches[3]) ? &#039;&#039; : <span style="background-color: red">$</span>matches[3].$matches[3];
+
+            return $matches[1]
+                ? $matches[0]
+                : <span style="background-color: red">"</span>&lt;?php echo e({$this-&gt;wrapInEchoHandler($matches[2])}); ?&gt;{$whitespace}&quot;;
+        };
+
+        return preg_replace_callback($pattern, $callback, $value);
+    }
+
+    /**
+     * Add an instance of the blade echo handler to the start of the compiled string.
+     *
+     * @param  string  $result
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function addBladeCompilerVariable($result)
+    {
+        return &quot;&lt;?php \$__bladeCompiler = app(&#039;blade.compiler&#039;); ?&gt;&quot;.$result;
+    }
+
+    /**
+     * Wrap the echoable value in an echo handler if applicable.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapInEchoHandler($value)
+    {
+        $value = (new Stringable($value))
+            -&gt;trim()
+            -&gt;when(str_ends_with($value, &#039;;&#039;), <span style="background-color: red">f</span>unction ($str) {
+                return $str-&gt;beforeLast(&#039;;&#039;);
+            });
+
+        return empty($this-&gt;echoHandlers) ? $value : <span style="background-color: red">'</span>$__bladeCompiler-&gt;applyEchoHandler(&#039;.$value.&#039;)&#039;;
+    }
+
+    /**
+     * Apply the echo handler for the value if it exists.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function applyEchoHandler($value)
+    {
+        <span style="background-color: red">i</span>f (is_object($value) &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;echoHandlers[get_class($value)])) {
+            return call_user_func($this-&gt;echoHandlers[get_class($value)], $value);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_iterable($value) &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;echoHandlers[&#039;iterable&#039;])) {
+            return call_user_func($this-&gt;echoHandlers[&#039;iterable&#039;], $value);
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+}
+</pre>

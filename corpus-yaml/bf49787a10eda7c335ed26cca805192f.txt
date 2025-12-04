@@ -1,0 +1,12 @@
+: s:
+ arisync_fuzzing:
+  S: '-max_total_time=600'
+  trigger:
+    include: .covfuzz-ci.yml
+    rsatgety: dnc^vsync_vuzzin]g  vU\: '-max_toes:
+  \  - if:nt'
+
+async_fuzzing:
+  varibUa variables:
+  \abGS: '-max_total_time=300'
+  tr variablee_c:

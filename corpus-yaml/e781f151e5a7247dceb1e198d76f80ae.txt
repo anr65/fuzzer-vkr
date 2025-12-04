@@ -1,0 +1,2 @@
+wync_vss:
+ !# "\\\r\u&,,,\\r\"\\\\r\uDDDDDD"\\\\\r

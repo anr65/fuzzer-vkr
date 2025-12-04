@@ -1,0 +1,4 @@
+syncc_fuzzing:
+  igger:
+    inclu  - if: A$CItrigger:
+    inclu  - if: $CI_COMMIT_BRANouous_fuzt_event'

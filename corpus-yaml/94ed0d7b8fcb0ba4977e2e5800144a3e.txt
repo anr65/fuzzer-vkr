@@ -1,0 +1,4 @@
+empty_string: ""
+null_value: null
+special_chaery_small_nul_value: null
+special_chamber: -10000000

@@ -1,0 +1,8 @@
+sync_vuzzgivr  naiables:
+  #  synctime=75'
+  trigger:
+   zzal_time=75'
+  trigger:
+   !i 
+  '# tr\
+  varCOFU[[[:

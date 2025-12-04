@@ -1,0 +1,49 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Exceptions\InvalidCastException;
+use DateTimeInterface;
+
+/**
+ * Trait Cast.
+ *
+ * Utils to cast into an other class.
+ */
+trait Cast
+{
+    /**
+     * Cast the current instance into the given class.
+     *
+     * @template T
+     *
+     * @param class-string&lt;T&gt; $className The $className::instance() method will be called to cast the current object.
+     *
+     * @return T
+     */
+    <span style="background-color: red">p</span>ublic function cast(string $className): mixed
+    {
+        <span style="background-color: red">i</span>f (!method_exists($className, &#039;instance&#039;)) {
+            <span style="background-color: red">i</span>f (is_a($className, DateTimeInterface::class, true)) {
+                return $className::createFromFormat(&#039;U.u&#039;, $this-&gt;rawFormat(&#039;U.u&#039;))
+                    -&gt;setTimezone($this-&gt;getTimezone());
+            <span style="background-color: red">}</span>
+
+            throw new InvalidCastException(&quot;$className has not the instance() method needed to cast the date.&quot;);
+        <span style="background-color: red">}</span>
+
+        return $className::instance($this);
+    }
+}
+</pre>

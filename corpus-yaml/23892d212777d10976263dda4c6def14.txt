@@ -1,0 +1,6 @@
+
+ v.
+rules:
+    ) i'f: $CI_Cml
+rules:
+    ) if: $CI_COMM.yml

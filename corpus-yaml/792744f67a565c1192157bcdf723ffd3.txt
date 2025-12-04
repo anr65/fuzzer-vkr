@@ -1,0 +1,6 @@
+sync_fuzzLTAsync_fuzzing:
+9 var    COVFUZZ_ADDITIONALtal_tiables:
+    COVFUZZ_gggggggggADD includecfuzz-c
+    incldue$:.covfuzz-ci.y,ml
+    svaria:
+$   COVBUZZge_request_event/

@@ -1,0 +1,1579 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Query\Grammars;
+
+use Illuminate\Contracts\Database\Query\Expression;
+use Illuminate\Database\Concerns\CompilesJsonPaths;
+use Illuminate\Database\Grammar as BaseGrammar;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\JoinClause;
+use Illuminate\Database\Query\JoinLateralClause;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use RuntimeException;
+
+class Grammar extends BaseGrammar
+{
+    use CompilesJsonPaths;
+
+    /**
+     * The grammar specific operators.
+     *
+     * @var array
+     */
+    protected $operators = [];
+
+    /**
+     * The grammar specific bitwise operators.
+     *
+     * @var array
+     */
+    protected $bitwiseOperators = [];
+
+    /**
+     * The components that make up a select clause.
+     *
+     * @var string[]
+     */
+    protected $selectComponents = [
+        &#039;aggregate&#039;,
+        &#039;columns&#039;,
+        &#039;from&#039;,
+        &#039;indexHint&#039;,
+        &#039;joins&#039;,
+        &#039;wheres&#039;,
+        &#039;groups&#039;,
+        &#039;havings&#039;,
+        &#039;orders&#039;,
+        &#039;limit&#039;,
+        &#039;offset&#039;,
+        &#039;lock&#039;,
+    ];
+
+    /**
+     * Compile a select query into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileSelect(Builder $query)
+    {
+        <span style="background-color: red">i</span>f (($query-&gt;unions || <span style="background-color: red">$</span>query-&gt;havings) &amp;&amp; <span style="background-color: red">$</span>query-&gt;aggregate) {
+            return $this-&gt;compileUnionAggregate($query);
+        <span style="background-color: red">}</span>
+
+        // If a &quot;group limit&quot; is in place, we will need to compile the SQL to use a
+        // different syntax. This primarily supports limits on eager loads using
+        // Eloquent. We&#039;ll also set the columns if they have not been defined.
+        <span style="background-color: red">i</span>f (isset($query-&gt;groupLimit)) {
+            <span style="background-color: red">i</span>f (is_null($query-&gt;columns)) {
+                $query-&gt;columns = [&#039;*&#039;];
+            <span style="background-color: red">}</span>
+
+            return $this-&gt;compileGroupLimit($query);
+        <span style="background-color: red">}</span>
+
+        // If the query does not have any columns set, we&#039;ll set the columns to the
+        // * character to just get all of the columns from the database. Then we
+        // can build the query and concatenate all the pieces together as one.
+        $original = $query-&gt;columns;
+
+        <span style="background-color: red">i</span>f (is_null($query-&gt;columns)) {
+            $query-&gt;columns = [&#039;*&#039;];
+        <span style="background-color: red">}</span>
+
+        // To compile the query, we&#039;ll spin through each component of the query and
+        // see if that component exists. If it does we&#039;ll just call the compiler
+        // function for the component which is responsible for making the SQL.
+        $sql = trim($this-&gt;concatenate(
+            $this-&gt;compileComponents($query))
+        );
+
+        <span style="background-color: red">i</span>f ($query-&gt;unions) {
+            $sql = $this-&gt;wrapUnion($sql).&#039; &#039;.$this-&gt;compileUnions($query);
+        <span style="background-color: red">}</span>
+
+        $query-&gt;columns = $original;
+
+        return $sql;
+    }
+
+    /**
+     * Compile the components necessary for a select clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function compileComponents(Builder $query)
+    {
+        $sql = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;selectComponents as $component) {
+            <span style="background-color: red">i</span>f (isset($query-&gt;$component)) {
+                $method = &#039;compile&#039;.ucfirst($component);
+
+                $sql[$component] = $this-&gt;$method($query, $query-&gt;$component);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $sql;
+    }
+
+    /**
+     * Compile an aggregated select clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $aggregate
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileAggregate(Builder $query, $aggregate)
+    {
+        $column = $this-&gt;columnize($aggregate[&#039;columns&#039;]);
+
+        // If the query has a &quot;distinct&quot; constraint and we&#039;re not asking for all columns
+        // we need to prepend &quot;distinct&quot; onto the column name so that the query takes
+        // it into account when it performs the aggregating operations on the data.
+        <span style="background-color: red">i</span>f (is_array($query-&gt;distinct)) {
+            $column = &#039;distinct &#039;.$this-&gt;columnize($query-&gt;distinct);
+        } <span style="background-color: red">e</span>lseif ($query-&gt;distinct &amp;&amp; <span style="background-color: red">$</span>column !== &#039;*&#039;) {
+            $column = &#039;distinct &#039;.$column;
+        <span style="background-color: red">}</span>
+
+        return &#039;select &#039;.$aggregate[&#039;function&#039;].&#039;(&#039;.$column.&#039;) as aggregate&#039;;
+    }
+
+    /**
+     * Compile the &quot;select *&quot; portion of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $columns
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function compileColumns(Builder $query, $columns)
+    {
+        // If the query is actually performing an aggregating select, we will let that
+        // compiler handle the building of the select clauses, as it will need some
+        // more syntax that is best handled by that function to keep things neat.
+        <span style="background-color: red">i</span>f (! is_null($query-&gt;aggregate)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($query-&gt;distinct) {
+            $select = &#039;select distinct &#039;;
+        } <span style="background-color: red">e</span>lse {
+            $select = &#039;select &#039;;
+        <span style="background-color: red">}</span>
+
+        return $select.$this-&gt;columnize($columns);
+    }
+
+    /**
+     * Compile the &quot;from&quot; portion of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $table
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileFrom(Builder $query, $table)
+    {
+        return &#039;from &#039;.$this-&gt;wrapTable($table);
+    }
+
+    /**
+     * Compile the &quot;join&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $joins
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileJoins(Builder $query, $joins)
+    {
+        return (new Collection($joins))-&gt;map(<span style="background-color: red">f</span>unction ($join) use ($query) {
+            $table = $this-&gt;wrapTable($join-&gt;table);
+
+            $nestedJoins = is_null($join-&gt;joins) ? &#039;&#039; : <span style="background-color: red">'</span> &#039;.$this-&gt;compileJoins($query, $join-&gt;joins);
+
+            $tableAndNestedJoins = is_null($join-&gt;joins) ? $table : <span style="background-color: red">'</span>(&#039;.$table.$nestedJoins.&#039;)&#039;;
+
+            <span style="background-color: red">i</span>f ($join instanceof JoinLateralClause) {
+                return $this-&gt;compileJoinLateral($join, $tableAndNestedJoins);
+            <span style="background-color: red">}</span>
+
+            return trim(&quot;{$join-&gt;type} join {$tableAndNestedJoins} {$this-&gt;compileWheres($join)}&quot;);
+        })-&gt;implode(&#039; &#039;);
+    }
+
+    /**
+     * Compile a &quot;lateral join&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\JoinLateralClause  $join
+     * @param  string  $expression
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function compileJoinLateral(JoinLateralClause $join, string $expression): string
+    {
+        throw new RuntimeException(&#039;This database engine does not support lateral joins.&#039;);
+    }
+
+    /**
+     * Compile the &quot;where&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileWheres(Builder $query)
+    {
+        // Each type of where clause has its own compiler function, which is responsible
+        // for actually creating the where clauses SQL. This helps keep the code nice
+        // and maintainable since each clause has a very small method that it uses.
+        <span style="background-color: red">i</span>f (is_null($query-&gt;wheres)) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        // If we actually have some where clauses, we will strip off the first boolean
+        // operator, which is added by the query builders for convenience so we can
+        // avoid checking for the first clauses in each of the compilers methods.
+        <span style="background-color: red">i</span>f (count($sql = $this-&gt;compileWheresToArray($query)) &gt; 0) {
+            return $this-&gt;concatenateWhereClauses($query, $sql);
+        <span style="background-color: red">}</span>
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * Get an array of all the where clauses for the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function compileWheresToArray($query)
+    {
+        return (new Collection($query-&gt;wheres))
+            -&gt;map(fn ($where) =&gt; <span style="background-color: red">$</span>where[&#039;boolean&#039;].&#039; &#039;.$this-&gt;{&quot;where{$where[&#039;type&#039;]}&quot;}($query, $where))
+            -&gt;all();
+    }
+
+    /**
+     * Format the where clause statements into one string.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $sql
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function concatenateWhereClauses($query, $sql)
+    {
+        $conjunction = $query instanceof JoinClause ? &#039;on&#039; : <span style="background-color: red">'</span>where&#039;;
+
+        return $conjunction.&#039; &#039;.$this-&gt;removeLeadingBoolean(implode(&#039; &#039;, $sql));
+    }
+
+    /**
+     * Compile a raw where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereRaw(Builder $query, $where)
+    {
+        return $where[&#039;sql&#039;] instanceof Expression ? $where[&#039;sql&#039;]-&gt;getValue($this) : <span style="background-color: red">$</span>where[&#039;sql&#039;];
+    }
+
+    /**
+     * Compile a basic where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereBasic(Builder $query, $where)
+    {
+        $value = $this-&gt;parameter($where[&#039;value&#039;]);
+
+        $operator = str_replace(&#039;?&#039;, &#039;??&#039;, $where[&#039;operator&#039;]);
+
+        return $this-&gt;wrap($where[&#039;column&#039;]).&#039; &#039;.$operator.&#039; &#039;.$value;
+    }
+
+    /**
+     * Compile a bitwise operator where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereBitwise(Builder $query, $where)
+    {
+        return $this-&gt;whereBasic($query, $where);
+    }
+
+    /**
+     * Compile a &quot;where like&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereLike(Builder $query, $where)
+    {
+        <span style="background-color: red">i</span>f ($where[&#039;caseSensitive&#039;]) {
+            throw new RuntimeException(&#039;This database engine does not support case sensitive like operations.&#039;);
+        <span style="background-color: red">}</span>
+
+        $where[&#039;operator&#039;] = $where[&#039;not&#039;] ? &#039;not like&#039; : <span style="background-color: red">'</span>like&#039;;
+
+        return $this-&gt;whereBasic($query, $where);
+    }
+
+    /**
+     * Compile a &quot;where in&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereIn(Builder $query, $where)
+    {
+        <span style="background-color: red">i</span>f (! empty($where[&#039;values&#039;])) {
+            return $this-&gt;wrap($where[&#039;column&#039;]).&#039; in (&#039;.$this-&gt;parameterize($where[&#039;values&#039;]).&#039;)&#039;;
+        <span style="background-color: red">}</span>
+
+        return &#039;0 = 1&#039;;
+    }
+
+    /**
+     * Compile a &quot;where not in&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereNotIn(Builder $query, $where)
+    {
+        <span style="background-color: red">i</span>f (! empty($where[&#039;values&#039;])) {
+            return $this-&gt;wrap($where[&#039;column&#039;]).&#039; not in (&#039;.$this-&gt;parameterize($where[&#039;values&#039;]).&#039;)&#039;;
+        <span style="background-color: red">}</span>
+
+        return &#039;1 = 1&#039;;
+    }
+
+    /**
+     * Compile a &quot;where not in raw&quot; clause.
+     *
+     * For safety, whereIntegerInRaw ensures this method is only used with integer values.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereNotInRaw(Builder $query, $where)
+    {
+        <span style="background-color: red">i</span>f (! empty($where[&#039;values&#039;])) {
+            return $this-&gt;wrap($where[&#039;column&#039;]).&#039; not in (&#039;.implode(&#039;, &#039;, $where[&#039;values&#039;]).&#039;)&#039;;
+        <span style="background-color: red">}</span>
+
+        return &#039;1 = 1&#039;;
+    }
+
+    /**
+     * Compile a &quot;where in raw&quot; clause.
+     *
+     * For safety, whereIntegerInRaw ensures this method is only used with integer values.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereInRaw(Builder $query, $where)
+    {
+        <span style="background-color: red">i</span>f (! empty($where[&#039;values&#039;])) {
+            return $this-&gt;wrap($where[&#039;column&#039;]).&#039; in (&#039;.implode(&#039;, &#039;, $where[&#039;values&#039;]).&#039;)&#039;;
+        <span style="background-color: red">}</span>
+
+        return &#039;0 = 1&#039;;
+    }
+
+    /**
+     * Compile a &quot;where null&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereNull(Builder $query, $where)
+    {
+        return $this-&gt;wrap($where[&#039;column&#039;]).&#039; is null&#039;;
+    }
+
+    /**
+     * Compile a &quot;where not null&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereNotNull(Builder $query, $where)
+    {
+        return $this-&gt;wrap($where[&#039;column&#039;]).&#039; is not null&#039;;
+    }
+
+    /**
+     * Compile a &quot;between&quot; where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereBetween(Builder $query, $where)
+    {
+        $between = $where[&#039;not&#039;] ? &#039;not between&#039; : <span style="background-color: red">'</span>between&#039;;
+
+        $min = $this-&gt;parameter(is_array($where[&#039;values&#039;]) ? reset($where[&#039;values&#039;]) : <span style="background-color: red">$</span>where[&#039;values&#039;][0]);
+
+        $max = $this-&gt;parameter(is_array($where[&#039;values&#039;]) ? end($where[&#039;values&#039;]) : <span style="background-color: red">$</span>where[&#039;values&#039;][1]);
+
+        return $this-&gt;wrap($where[&#039;column&#039;]).&#039; &#039;.$between.&#039; &#039;.$min.&#039; and &#039;.$max;
+    }
+
+    /**
+     * Compile a &quot;between&quot; where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereBetweenColumns(Builder $query, $where)
+    {
+        $between = $where[&#039;not&#039;] ? &#039;not between&#039; : <span style="background-color: red">'</span>between&#039;;
+
+        $min = $this-&gt;wrap(is_array($where[&#039;values&#039;]) ? reset($where[&#039;values&#039;]) : <span style="background-color: red">$</span>where[&#039;values&#039;][0]);
+
+        $max = $this-&gt;wrap(is_array($where[&#039;values&#039;]) ? end($where[&#039;values&#039;]) : <span style="background-color: red">$</span>where[&#039;values&#039;][1]);
+
+        return $this-&gt;wrap($where[&#039;column&#039;]).&#039; &#039;.$between.&#039; &#039;.$min.&#039; and &#039;.$max;
+    }
+
+    /**
+     * Compile a &quot;where date&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereDate(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;date&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where time&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereTime(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;time&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where day&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereDay(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;day&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where month&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereMonth(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;month&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where year&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereYear(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;year&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a date based where clause.
+     *
+     * @param  string  $type
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function dateBasedWhere($type, Builder $query, $where)
+    {
+        $value = $this-&gt;parameter($where[&#039;value&#039;]);
+
+        return $type.&#039;(&#039;.$this-&gt;wrap($where[&#039;column&#039;]).&#039;) &#039;.$where[&#039;operator&#039;].&#039; &#039;.$value;
+    }
+
+    /**
+     * Compile a where clause comparing two columns.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereColumn(Builder $query, $where)
+    {
+        return $this-&gt;wrap($where[&#039;first&#039;]).&#039; &#039;.$where[&#039;operator&#039;].&#039; &#039;.$this-&gt;wrap($where[&#039;second&#039;]);
+    }
+
+    /**
+     * Compile a nested where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereNested(Builder $query, $where)
+    {
+        // Here we will calculate what portion of the string we need to remove. If this
+        // is a join clause query, we need to remove the &quot;on&quot; portion of the SQL and
+        // if it is a normal query we need to take the leading &quot;where&quot; of queries.
+        $offset = $where[&#039;query&#039;] instanceof JoinClause ? 3 : <span style="background-color: red">6</span>;
+
+        return &#039;(&#039;.substr($this-&gt;compileWheres($where[&#039;query&#039;]), $offset).&#039;)&#039;;
+    }
+
+    /**
+     * Compile a where condition with a sub-select.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereSub(Builder $query, $where)
+    {
+        $select = $this-&gt;compileSelect($where[&#039;query&#039;]);
+
+        return $this-&gt;wrap($where[&#039;column&#039;]).&#039; &#039;.$where[&#039;operator&#039;].&quot; ($select)&quot;;
+    }
+
+    /**
+     * Compile a where exists clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereExists(Builder $query, $where)
+    {
+        return &#039;exists (&#039;.$this-&gt;compileSelect($where[&#039;query&#039;]).&#039;)&#039;;
+    }
+
+    /**
+     * Compile a where exists clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereNotExists(Builder $query, $where)
+    {
+        return &#039;not exists (&#039;.$this-&gt;compileSelect($where[&#039;query&#039;]).&#039;)&#039;;
+    }
+
+    /**
+     * Compile a where row values condition.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereRowValues(Builder $query, $where)
+    {
+        $columns = $this-&gt;columnize($where[&#039;columns&#039;]);
+
+        $values = $this-&gt;parameterize($where[&#039;values&#039;]);
+
+        return &#039;(&#039;.$columns.&#039;) &#039;.$where[&#039;operator&#039;].&#039; (&#039;.$values.&#039;)&#039;;
+    }
+
+    /**
+     * Compile a &quot;where JSON boolean&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereJsonBoolean(Builder $query, $where)
+    {
+        $column = $this-&gt;wrapJsonBooleanSelector($where[&#039;column&#039;]);
+
+        $value = $this-&gt;wrapJsonBooleanValue(
+            $this-&gt;parameter($where[&#039;value&#039;])
+        );
+
+        return $column.&#039; &#039;.$where[&#039;operator&#039;].&#039; &#039;.$value;
+    }
+
+    /**
+     * Compile a &quot;where JSON contains&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereJsonContains(Builder $query, $where)
+    {
+        $not = $where[&#039;not&#039;] ? &#039;not &#039; : <span style="background-color: red">'</span>&#039;;
+
+        return $not.$this-&gt;compileJsonContains(
+            $where[&#039;column&#039;],
+            $this-&gt;parameter($where[&#039;value&#039;])
+        );
+    }
+
+    /**
+     * Compile a &quot;JSON contains&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonContains($column, $value)
+    {
+        throw new RuntimeException(&#039;This database engine does not support JSON contains operations.&#039;);
+    }
+
+    /**
+     * Compile a &quot;where JSON overlaps&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereJsonOverlaps(Builder $query, $where)
+    {
+        $not = $where[&#039;not&#039;] ? &#039;not &#039; : <span style="background-color: red">'</span>&#039;;
+
+        return $not.$this-&gt;compileJsonOverlaps(
+            $where[&#039;column&#039;],
+            $this-&gt;parameter($where[&#039;value&#039;])
+        );
+    }
+
+    /**
+     * Compile a &quot;JSON overlaps&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonOverlaps($column, $value)
+    {
+        throw new RuntimeException(&#039;This database engine does not support JSON overlaps operations.&#039;);
+    }
+
+    /**
+     * Prepare the binding for a &quot;JSON contains&quot; statement.
+     *
+     * @param  mixed  $binding
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function prepareBindingForJsonContains($binding)
+    {
+        return json_encode($binding, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Compile a &quot;where JSON contains key&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereJsonContainsKey(Builder $query, $where)
+    {
+        $not = $where[&#039;not&#039;] ? &#039;not &#039; : <span style="background-color: red">'</span>&#039;;
+
+        return $not.$this-&gt;compileJsonContainsKey(
+            $where[&#039;column&#039;]
+        );
+    }
+
+    /**
+     * Compile a &quot;JSON contains key&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonContainsKey($column)
+    {
+        throw new RuntimeException(&#039;This database engine does not support JSON contains key operations.&#039;);
+    }
+
+    /**
+     * Compile a &quot;where JSON length&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereJsonLength(Builder $query, $where)
+    {
+        return $this-&gt;compileJsonLength(
+            $where[&#039;column&#039;],
+            $where[&#039;operator&#039;],
+            $this-&gt;parameter($where[&#039;value&#039;])
+        );
+    }
+
+    /**
+     * Compile a &quot;JSON length&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonLength($column, $operator, $value)
+    {
+        throw new RuntimeException(&#039;This database engine does not support JSON length operations.&#039;);
+    }
+
+    /**
+     * Compile a &quot;JSON value cast&quot; statement into SQL.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileJsonValueCast($value)
+    {
+        return $value;
+    }
+
+    /**
+     * Compile a &quot;where fulltext&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function whereFullText(Builder $query, $where)
+    {
+        throw new RuntimeException(&#039;This database engine does not support fulltext search operations.&#039;);
+    }
+
+    /**
+     * Compile a clause based on an expression.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function whereExpression(Builder $query, $where)
+    {
+        return $where[&#039;column&#039;]-&gt;getValue($this);
+    }
+
+    /**
+     * Compile the &quot;group by&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $groups
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileGroups(Builder $query, $groups)
+    {
+        return &#039;group by &#039;.$this-&gt;columnize($groups);
+    }
+
+    /**
+     * Compile the &quot;having&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHavings(Builder $query)
+    {
+        return &#039;having &#039;.$this-&gt;removeLeadingBoolean((new Collection($query-&gt;havings))-&gt;map(<span style="background-color: red">f</span>unction ($having) {
+            return $having[&#039;boolean&#039;].&#039; &#039;.$this-&gt;compileHaving($having);
+        })-&gt;implode(&#039; &#039;));
+    }
+
+    /**
+     * Compile a single having clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHaving(array $having)
+    {
+        // If the having clause is &quot;raw&quot;, we can just return the clause straight away
+        // without doing any more processing on it. Otherwise, we will compile the
+        // clause into SQL based on the components that make it up from builder.
+        return match ($having[&#039;type&#039;]) {
+            &#039;Raw&#039; =&gt; <span style="background-color: red">$</span>having[&#039;sql&#039;],
+            &#039;between&#039; =&gt; <span style="background-color: red">$</span>this-&gt;compileHavingBetween($having),
+            &#039;Null&#039; =&gt; <span style="background-color: red">$</span>this-&gt;compileHavingNull($having),
+            &#039;NotNull&#039; =&gt; <span style="background-color: red">$</span>this-&gt;compileHavingNotNull($having),
+            &#039;bit&#039; =&gt; <span style="background-color: red">$</span>this-&gt;compileHavingBit($having),
+            &#039;Expression&#039; =&gt; <span style="background-color: red">$</span>this-&gt;compileHavingExpression($having),
+            &#039;Nested&#039; =&gt; <span style="background-color: red">$</span>this-&gt;compileNestedHavings($having),
+            default =&gt; <span style="background-color: red">$</span>this-&gt;compileBasicHaving($having),
+        };
+    }
+
+    /**
+     * Compile a basic having clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileBasicHaving($having)
+    {
+        $column = $this-&gt;wrap($having[&#039;column&#039;]);
+
+        $parameter = $this-&gt;parameter($having[&#039;value&#039;]);
+
+        return $column.&#039; &#039;.$having[&#039;operator&#039;].&#039; &#039;.$parameter;
+    }
+
+    /**
+     * Compile a &quot;between&quot; having clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHavingBetween($having)
+    {
+        $between = $having[&#039;not&#039;] ? &#039;not between&#039; : <span style="background-color: red">'</span>between&#039;;
+
+        $column = $this-&gt;wrap($having[&#039;column&#039;]);
+
+        $min = $this-&gt;parameter(head($having[&#039;values&#039;]));
+
+        $max = $this-&gt;parameter(last($having[&#039;values&#039;]));
+
+        return $column.&#039; &#039;.$between.&#039; &#039;.$min.&#039; and &#039;.$max;
+    }
+
+    /**
+     * Compile a having null clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHavingNull($having)
+    {
+        $column = $this-&gt;wrap($having[&#039;column&#039;]);
+
+        return $column.&#039; is null&#039;;
+    }
+
+    /**
+     * Compile a having not null clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHavingNotNull($having)
+    {
+        $column = $this-&gt;wrap($having[&#039;column&#039;]);
+
+        return $column.&#039; is not null&#039;;
+    }
+
+    /**
+     * Compile a having clause involving a bit operator.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHavingBit($having)
+    {
+        $column = $this-&gt;wrap($having[&#039;column&#039;]);
+
+        $parameter = $this-&gt;parameter($having[&#039;value&#039;]);
+
+        return &#039;(&#039;.$column.&#039; &#039;.$having[&#039;operator&#039;].&#039; &#039;.$parameter.&#039;) != 0&#039;;
+    }
+
+    /**
+     * Compile a having clause involving an expression.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHavingExpression($having)
+    {
+        return $having[&#039;column&#039;]-&gt;getValue($this);
+    }
+
+    /**
+     * Compile a nested having clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileNestedHavings($having)
+    {
+        return &#039;(&#039;.substr($this-&gt;compileHavings($having[&#039;query&#039;]), 7).&#039;)&#039;;
+    }
+
+    /**
+     * Compile the &quot;order by&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $orders
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileOrders(Builder $query, $orders)
+    {
+        <span style="background-color: red">i</span>f (! empty($orders)) {
+            return &#039;order by &#039;.implode(&#039;, &#039;, $this-&gt;compileOrdersToArray($query, $orders));
+        <span style="background-color: red">}</span>
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * Compile the query orders to an array.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $orders
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function compileOrdersToArray(Builder $query, $orders)
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($order) {
+            return $order[&#039;sql&#039;] ?? <span style="background-color: red">$</span>this-&gt;wrap($order[&#039;column&#039;]).&#039; &#039;.$order[&#039;direction&#039;];
+        }, $orders);
+    }
+
+    /**
+     * Compile the random statement into SQL.
+     *
+     * @param  string|int  $seed
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileRandom($seed)
+    {
+        return &#039;RANDOM()&#039;;
+    }
+
+    /**
+     * Compile the &quot;limit&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  int  $limit
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileLimit(Builder $query, $limit)
+    {
+        return &#039;limit &#039;.(int) $limit;
+    }
+
+    /**
+     * Compile a group limit clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileGroupLimit(Builder $query)
+    {
+        $selectBindings = array_merge($query-&gt;getRawBindings()[&#039;select&#039;], $query-&gt;getRawBindings()[&#039;order&#039;]);
+
+        $query-&gt;setBindings($selectBindings, &#039;select&#039;);
+        $query-&gt;setBindings([], &#039;order&#039;);
+
+        $limit = (int) $query-&gt;groupLimit[&#039;value&#039;];
+        $offset = $query-&gt;offset;
+
+        <span style="background-color: red">i</span>f (isset($offset)) {
+            $offset = (int) $offset;
+            $limit += $offset;
+
+            $query-&gt;offset = null;
+        <span style="background-color: red">}</span>
+
+        $components = $this-&gt;compileComponents($query);
+
+        $components[&#039;columns&#039;] .= $this-&gt;compileRowNumber(
+            $query-&gt;groupLimit[&#039;column&#039;],
+            $components[&#039;orders&#039;] ?? <span style="background-color: red">'</span>&#039;
+        );
+
+        unset($components[&#039;orders&#039;]);
+
+        $table = $this-&gt;wrap(&#039;laravel_table&#039;);
+        $row = $this-&gt;wrap(&#039;laravel_row&#039;);
+
+        $sql = $this-&gt;concatenate($components);
+
+        $sql = &#039;select * from (&#039;.$sql.&#039;) as &#039;.$table.&#039; where &#039;.$row.&#039; &lt;= &#039;.$limit;
+
+        <span style="background-color: red">i</span>f (isset($offset)) {
+            $sql .= &#039; and &#039;.$row.&#039; &gt; &#039;.$offset;
+        <span style="background-color: red">}</span>
+
+        return $sql.&#039; order by &#039;.$row;
+    }
+
+    /**
+     * Compile a row number clause.
+     *
+     * @param  string  $partition
+     * @param  string  $orders
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileRowNumber($partition, $orders)
+    {
+        $over = trim(&#039;partition by &#039;.$this-&gt;wrap($partition).&#039; &#039;.$orders);
+
+        return &#039;, row_number() over (&#039;.$over.&#039;) as &#039;.$this-&gt;wrap(&#039;laravel_row&#039;);
+    }
+
+    /**
+     * Compile the &quot;offset&quot; portions of the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  int  $offset
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileOffset(Builder $query, $offset)
+    {
+        return &#039;offset &#039;.(int) $offset;
+    }
+
+    /**
+     * Compile the &quot;union&quot; queries attached to the main query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUnions(Builder $query)
+    {
+        $sql = &#039;&#039;;
+
+        <span style="background-color: red">f</span>oreach ($query-&gt;unions as $union) {
+            $sql .= $this-&gt;compileUnion($union);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! empty($query-&gt;unionOrders)) {
+            $sql .= &#039; &#039;.$this-&gt;compileOrders($query, $query-&gt;unionOrders);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($query-&gt;unionLimit)) {
+            $sql .= &#039; &#039;.$this-&gt;compileLimit($query, $query-&gt;unionLimit);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($query-&gt;unionOffset)) {
+            $sql .= &#039; &#039;.$this-&gt;compileOffset($query, $query-&gt;unionOffset);
+        <span style="background-color: red">}</span>
+
+        return ltrim($sql);
+    }
+
+    /**
+     * Compile a single union statement.
+     *
+     * @param  array  $union
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUnion(array $union)
+    {
+        $conjunction = $union[&#039;all&#039;] ? &#039; union all &#039; : <span style="background-color: red">'</span> union &#039;;
+
+        return $conjunction.$this-&gt;wrapUnion($union[&#039;query&#039;]-&gt;toSql());
+    }
+
+    /**
+     * Wrap a union subquery in parentheses.
+     *
+     * @param  string  $sql
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapUnion($sql)
+    {
+        return &#039;(&#039;.$sql.&#039;)&#039;;
+    }
+
+    /**
+     * Compile a union aggregate query into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUnionAggregate(Builder $query)
+    {
+        $sql = $this-&gt;compileAggregate($query, $query-&gt;aggregate);
+
+        $query-&gt;aggregate = null;
+
+        return $sql.&#039; from (&#039;.$this-&gt;compileSelect($query).&#039;) as &#039;.$this-&gt;wrapTable(&#039;temp_table&#039;);
+    }
+
+    /**
+     * Compile an exists statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileExists(Builder $query)
+    {
+        $select = $this-&gt;compileSelect($query);
+
+        return &quot;select exists({$select}) as {$this-&gt;wrap(&#039;exists&#039;)}&quot;;
+    }
+
+    /**
+     * Compile an insert statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileInsert(Builder $query, array $values)
+    {
+        // Essentially we will force every insert to be treated as a batch insert which
+        // simply makes creating the SQL easier for us since we can utilize the same
+        // basic routine regardless of an amount of records given to us to insert.
+        $table = $this-&gt;wrapTable($query-&gt;from);
+
+        <span style="background-color: red">i</span>f (empty($values)) {
+            return &quot;insert into {$table} default values&quot;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! is_array(reset($values))) {
+            $values = [$values];
+        <span style="background-color: red">}</span>
+
+        $columns = $this-&gt;columnize(array_keys(reset($values)));
+
+        // We need to build a list of parameter place-holders of values that are bound
+        // to the query. Each insert should have the exact same number of parameter
+        // bindings so we will loop through the record and parameterize them all.
+        $parameters = (new Collection($values))-&gt;map(<span style="background-color: red">f</span>unction ($record) {
+            return &#039;(&#039;.$this-&gt;parameterize($record).&#039;)&#039;;
+        })-&gt;implode(&#039;, &#039;);
+
+        return &quot;insert into $table ($columns) values $parameters&quot;;
+    }
+
+    /**
+     * Compile an insert ignore statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function compileInsertOrIgnore(Builder $query, array $values)
+    {
+        throw new RuntimeException(&#039;This database engine does not support inserting while ignoring errors.&#039;);
+    }
+
+    /**
+     * Compile an insert and get ID statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @param  string|null  $sequence
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileInsertGetId(Builder $query, $values, $sequence)
+    {
+        return $this-&gt;compileInsert($query, $values);
+    }
+
+    /**
+     * Compile an insert statement using a subquery into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $columns
+     * @param  string  $sql
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileInsertUsing(Builder $query, array $columns, string $sql)
+    {
+        $table = $this-&gt;wrapTable($query-&gt;from);
+
+        <span style="background-color: red">i</span>f (empty($columns) || <span style="background-color: red">$</span>columns === [&#039;*&#039;]) {
+            return &quot;insert into {$table} $sql&quot;;
+        <span style="background-color: red">}</span>
+
+        return &quot;insert into {$table} ({$this-&gt;columnize($columns)}) $sql&quot;;
+    }
+
+    /**
+     * Compile an insert ignore statement using a subquery into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $columns
+     * @param  string  $sql
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function compileInsertOrIgnoreUsing(Builder $query, array $columns, string $sql)
+    {
+        throw new RuntimeException(&#039;This database engine does not support inserting while ignoring errors.&#039;);
+    }
+
+    /**
+     * Compile an update statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileUpdate(Builder $query, array $values)
+    {
+        $table = $this-&gt;wrapTable($query-&gt;from);
+
+        $columns = $this-&gt;compileUpdateColumns($query, $values);
+
+        $where = $this-&gt;compileWheres($query);
+
+        return trim(
+            isset($query-&gt;joins)
+                ? $this-&gt;compileUpdateWithJoins($query, $table, $columns, $where)
+                : <span style="background-color: red">$</span>this-&gt;compileUpdateWithoutJoins($query, $table, $columns, $where)
+        );
+    }
+
+    /**
+     * Compile the columns for an update statement.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUpdateColumns(Builder $query, array $values)
+    {
+        return (new Collection($values))-&gt;map(<span style="background-color: red">f</span>unction ($value, $key) {
+            return $this-&gt;wrap($key).&#039; = &#039;.$this-&gt;parameter($value);
+        })-&gt;implode(&#039;, &#039;);
+    }
+
+    /**
+     * Compile an update statement without joins into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $table
+     * @param  string  $columns
+     * @param  string  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUpdateWithoutJoins(Builder $query, $table, $columns, $where)
+    {
+        return &quot;update {$table} set {$columns} {$where}&quot;;
+    }
+
+    /**
+     * Compile an update statement with joins into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $table
+     * @param  string  $columns
+     * @param  string  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUpdateWithJoins(Builder $query, $table, $columns, $where)
+    {
+        $joins = $this-&gt;compileJoins($query, $query-&gt;joins);
+
+        return &quot;update {$table} {$joins} set {$columns} {$where}&quot;;
+    }
+
+    /**
+     * Compile an &quot;upsert&quot; statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @param  array  $uniqueBy
+     * @param  array  $update
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function compileUpsert(Builder $query, array $values, array $uniqueBy, array $update)
+    {
+        throw new RuntimeException(&#039;This database engine does not support upserts.&#039;);
+    }
+
+    /**
+     * Prepare the bindings for an update statement.
+     *
+     * @param  array  $bindings
+     * @param  array  $values
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function prepareBindingsForUpdate(array $bindings, array $values)
+    {
+        $cleanBindings = Arr::except($bindings, [&#039;select&#039;, &#039;join&#039;]);
+
+        $values = Arr::flatten(array_map(fn ($value) =&gt; <span style="background-color: red">v</span>alue($value), $values));
+
+        return array_values(
+            array_merge($bindings[&#039;join&#039;], $values, Arr::flatten($cleanBindings))
+        );
+    }
+
+    /**
+     * Compile a delete statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileDelete(Builder $query)
+    {
+        $table = $this-&gt;wrapTable($query-&gt;from);
+
+        $where = $this-&gt;compileWheres($query);
+
+        return trim(
+            isset($query-&gt;joins)
+                ? $this-&gt;compileDeleteWithJoins($query, $table, $where)
+                : <span style="background-color: red">$</span>this-&gt;compileDeleteWithoutJoins($query, $table, $where)
+        );
+    }
+
+    /**
+     * Compile a delete statement without joins into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $table
+     * @param  string  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDeleteWithoutJoins(Builder $query, $table, $where)
+    {
+        return &quot;delete from {$table} {$where}&quot;;
+    }
+
+    /**
+     * Compile a delete statement with joins into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $table
+     * @param  string  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDeleteWithJoins(Builder $query, $table, $where)
+    {
+        $alias = last(explode(&#039; as &#039;, $table));
+
+        $joins = $this-&gt;compileJoins($query, $query-&gt;joins);
+
+        return &quot;delete {$alias} from {$table} {$joins} {$where}&quot;;
+    }
+
+    /**
+     * Prepare the bindings for a delete statement.
+     *
+     * @param  array  $bindings
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function prepareBindingsForDelete(array $bindings)
+    {
+        return Arr::flatten(
+            Arr::except($bindings, &#039;select&#039;)
+        );
+    }
+
+    /**
+     * Compile a truncate table statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function compileTruncate(Builder $query)
+    {
+        return [&#039;truncate table &#039;.$this-&gt;wrapTable($query-&gt;from) =&gt; []];
+    }
+
+    /**
+     * Compile the lock into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  bool|string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileLock(Builder $query, $value)
+    {
+        return is_string($value) ? $value : <span style="background-color: red">'</span>&#039;;
+    }
+
+    /**
+     * Compile a query to get the number of open connections for a database.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function compileThreadCount()
+    {
+        return null;
+    }
+
+    /**
+     * Determine if the grammar supports savepoints.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function supportsSavepoints()
+    {
+        return true;
+    }
+
+    /**
+     * Compile the SQL statement to define a savepoint.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileSavepoint($name)
+    {
+        return &#039;SAVEPOINT &#039;.$name;
+    }
+
+    /**
+     * Compile the SQL statement to execute a savepoint rollback.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileSavepointRollBack($name)
+    {
+        return &#039;ROLLBACK TO SAVEPOINT &#039;.$name;
+    }
+
+    /**
+     * Wrap the given JSON selector for boolean values.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapJsonBooleanSelector($value)
+    {
+        return $this-&gt;wrapJsonSelector($value);
+    }
+
+    /**
+     * Wrap the given JSON boolean value.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapJsonBooleanValue($value)
+    {
+        return $value;
+    }
+
+    /**
+     * Concatenate an array of segments, removing empties.
+     *
+     * @param  array  $segments
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function concatenate($segments)
+    {
+        return implode(&#039; &#039;, array_filter($segments, <span style="background-color: red">f</span>unction ($value) {
+            return (string) $value !== &#039;&#039;;
+        }));
+    }
+
+    /**
+     * Remove the leading boolean from a statement.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function removeLeadingBoolean($value)
+    {
+        return preg_replace(&#039;/and |or /i&#039;, &#039;&#039;, $value, 1);
+    }
+
+    /**
+     * Substitute the given bindings into the given raw SQL query.
+     *
+     * @param  string  $sql
+     * @param  array  $bindings
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function substituteBindingsIntoRawSql($sql, $bindings)
+    {
+        $bindings = array_map(fn ($value) =&gt; <span style="background-color: red">$</span>this-&gt;escape($value, is_resource($value) || <span style="background-color: red">g</span>ettype($value) === &#039;resource (closed)&#039;), $bindings);
+
+        $query = &#039;&#039;;
+
+        $isStringLiteral = false;
+
+        <span style="background-color: red">f</span>or ($i = 0; $i &lt; strlen($sql); $i++) {
+            $char = $sql[$i];
+            $nextChar = $sql[$i + 1] ?? <span style="background-color: red">n</span>ull;
+
+            // Single quotes can be escaped as &#039;&#039; according to the SQL standard while
+            // MySQL uses \&#039;. Postgres has operators like ?| that must get encoded
+            // in PHP like ??|. We should skip over the escaped characters here.
+            <span style="background-color: red">i</span>f (in_array($char.$nextChar, [&quot;\&#039;&quot;, &quot;&#039;&#039;&quot;, &#039;??&#039;])) {
+                $query .= $char.$nextChar;
+                $i += 1;
+            } <span style="background-color: red">e</span>lseif ($char === &quot;&#039;&quot;) { // Starting / leaving string literal...
+                $query .= $char;
+                $isStringLiteral = ! $isStringLiteral;
+            } <span style="background-color: red">e</span>lseif ($char === &#039;?&#039; &amp;&amp; <span style="background-color: red">!</span> $isStringLiteral) { // Substitutable binding...
+                $query .= array_shift($bindings) ?? <span style="background-color: red">'</span>?&#039;;
+            } <span style="background-color: red">e</span>lse { // Normal character...
+                $query .= $char;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $query;
+    }
+
+    /**
+     * Get the grammar specific operators.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getOperators()
+    {
+        return $this-&gt;operators;
+    }
+
+    /**
+     * Get the grammar specific bitwise operators.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getBitwiseOperators()
+    {
+        return $this-&gt;bitwiseOperators;
+    }
+}
+</pre>

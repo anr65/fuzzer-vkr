@@ -1,0 +1,71 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog\Handler;
+
+use Monolog\ResettableInterface;
+use Monolog\Processor\ProcessorInterface;
+use Monolog\LogRecord;
+
+/**
+ * Helper trait for implementing ProcessableInterface
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ */
+trait ProcessableHandlerTrait
+{
+    /**
+     * @var callable[]
+     * @phpstan-var array&lt;(callable(LogRecord): LogRecord)|ProcessorInterface&gt;
+     */
+    protected array $processors = [];
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: red">p</span>ublic function pushProcessor(callable $callback): HandlerInterface
+    {
+        array_unshift($this-&gt;processors, $callback);
+
+        return $this;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: red">p</span>ublic function popProcessor(): callable
+    {
+        <span style="background-color: red">i</span>f (\count($this-&gt;processors) === 0) {
+            throw new \LogicException(&#039;You tried to pop from an empty processor stack.&#039;);
+        <span style="background-color: red">}</span>
+
+        return array_shift($this-&gt;processors);
+    }
+
+    <span style="background-color: red">p</span>rotected function processRecord(LogRecord $record): LogRecord
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;processors as $processor) {
+            $record = $processor($record);
+        <span style="background-color: red">}</span>
+
+        return $record;
+    }
+
+    <span style="background-color: red">p</span>rotected function resetProcessors(): void
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;processors as $processor) {
+            <span style="background-color: red">i</span>f ($processor instanceof ResettableInterface) {
+                $processor-&gt;reset();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

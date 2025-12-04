@@ -1,0 +1,218 @@
+<pre>&lt;?php
+
+use Illuminate\Support\Str;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Session Driver
+    |--------------------------------------------------------------------------
+    |
+    | This option determines the default session driver that is utilized for
+    | incoming requests. Laravel supports a variety of storage options to
+    | persist session data. Database storage is a great default choice.
+    |
+    | Supported: &quot;file&quot;, &quot;cookie&quot;, &quot;database&quot;, &quot;apc&quot;,
+    |            &quot;memcached&quot;, &quot;redis&quot;, &quot;dynamodb&quot;, &quot;array&quot;
+    |
+    */
+
+    &#039;driver&#039; =&gt; env(&#039;SESSION_DRIVER&#039;, &#039;database&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Lifetime
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify the number of minutes that you wish the session
+    | to be allowed to remain idle before it expires. If you want them
+    | to expire immediately when the browser is closed then you may
+    | indicate that via the expire_on_close configuration option.
+    |
+    */
+
+    &#039;lifetime&#039; =&gt; (int) env(&#039;SESSION_LIFETIME&#039;, 120),
+
+    &#039;expire_on_close&#039; =&gt; env(&#039;SESSION_EXPIRE_ON_CLOSE&#039;, false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Encryption
+    |--------------------------------------------------------------------------
+    |
+    | This option allows you to easily specify that all of your session data
+    | should be encrypted before it&#039;s stored. All encryption is performed
+    | automatically by Laravel and you may use the session like normal.
+    |
+    */
+
+    &#039;encrypt&#039; =&gt; env(&#039;SESSION_ENCRYPT&#039;, false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session File Location
+    |--------------------------------------------------------------------------
+    |
+    | When utilizing the &quot;file&quot; session driver, the session files are placed
+    | on disk. The default storage location is defined here; however, you
+    | are free to provide another location where they should be stored.
+    |
+    */
+
+    &#039;files&#039; =&gt; storage_path(&#039;framework/sessions&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Database Connection
+    |--------------------------------------------------------------------------
+    |
+    | When using the &quot;database&quot; or &quot;redis&quot; session drivers, you may specify a
+    | connection that should be used to manage these sessions. This should
+    | correspond to a connection in your database configuration options.
+    |
+    */
+
+    &#039;connection&#039; =&gt; env(&#039;SESSION_CONNECTION&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Database Table
+    |--------------------------------------------------------------------------
+    |
+    | When using the &quot;database&quot; session driver, you may specify the table to
+    | be used to store sessions. Of course, a sensible default is defined
+    | for you; however, you&#039;re welcome to change this to another table.
+    |
+    */
+
+    &#039;table&#039; =&gt; env(&#039;SESSION_TABLE&#039;, &#039;sessions&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Cache Store
+    |--------------------------------------------------------------------------
+    |
+    | When using one of the framework&#039;s cache driven session backends, you may
+    | define the cache store which should be used to store the session data
+    | between requests. This must match one of your defined cache stores.
+    |
+    | Affects: &quot;apc&quot;, &quot;dynamodb&quot;, &quot;memcached&quot;, &quot;redis&quot;
+    |
+    */
+
+    &#039;store&#039; =&gt; env(&#039;SESSION_STORE&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Sweeping Lottery
+    |--------------------------------------------------------------------------
+    |
+    | Some session drivers must manually sweep their storage location to get
+    | rid of old sessions from storage. Here are the chances that it will
+    | happen on a given request. By default, the odds are 2 out of 100.
+    |
+    */
+
+    &#039;lottery&#039; =&gt; [2, 100],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Cookie Name
+    |--------------------------------------------------------------------------
+    |
+    | Here you may change the name of the session cookie that is created by
+    | the framework. Typically, you should not need to change this value
+    | since doing so does not grant a meaningful security improvement.
+    |
+    */
+
+    &#039;cookie&#039; =&gt; env(
+        &#039;SESSION_COOKIE&#039;,
+        Str::slug(env(&#039;APP_NAME&#039;, &#039;laravel&#039;), &#039;_&#039;).&#039;_session&#039;
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Cookie Path
+    |--------------------------------------------------------------------------
+    |
+    | The session cookie path determines the path for which the cookie will
+    | be regarded as available. Typically, this will be the root path of
+    | your application, but you&#039;re free to change this when necessary.
+    |
+    */
+
+    &#039;path&#039; =&gt; env(&#039;SESSION_PATH&#039;, &#039;/&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Session Cookie Domain
+    |--------------------------------------------------------------------------
+    |
+    | This value determines the domain and subdomains the session cookie is
+    | available to. By default, the cookie will be available to the root
+    | domain and all subdomains. Typically, this shouldn&#039;t be changed.
+    |
+    */
+
+    &#039;domain&#039; =&gt; env(&#039;SESSION_DOMAIN&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | HTTPS Only Cookies
+    |--------------------------------------------------------------------------
+    |
+    | By setting this option to true, session cookies will only be sent back
+    | to the server if the browser has a HTTPS connection. This will keep
+    | the cookie from being sent to you when it can&#039;t be done securely.
+    |
+    */
+
+    &#039;secure&#039; =&gt; env(&#039;SESSION_SECURE_COOKIE&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | HTTP Access Only
+    |--------------------------------------------------------------------------
+    |
+    | Setting this value to true will prevent JavaScript from accessing the
+    | value of the cookie and the cookie will only be accessible through
+    | the HTTP protocol. It&#039;s unlikely you should disable this option.
+    |
+    */
+
+    &#039;http_only&#039; =&gt; env(&#039;SESSION_HTTP_ONLY&#039;, true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Same-Site Cookies
+    |--------------------------------------------------------------------------
+    |
+    | This option determines how your cookies behave when cross-site requests
+    | take place, and can be used to mitigate CSRF attacks. By default, we
+    | will set this value to &quot;lax&quot; to permit secure cross-site requests.
+    |
+    | See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value
+    |
+    | Supported: &quot;lax&quot;, &quot;strict&quot;, &quot;none&quot;, null
+    |
+    */
+
+    &#039;same_site&#039; =&gt; env(&#039;SESSION_SAME_SITE&#039;, &#039;lax&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Partitioned Cookies
+    |--------------------------------------------------------------------------
+    |
+    | Setting this value to true will tie the cookie to the top-level site for
+    | a cross-site context. Partitioned cookies are accepted by the browser
+    | when flagged &quot;secure&quot; and the Same-Site attribute is set to &quot;none&quot;.
+    |
+    */
+
+    &#039;partitioned&#039; =&gt; env(&#039;SESSION_PARTITIONED_COOKIE&#039;, false),
+
+];
+</pre>

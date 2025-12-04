@@ -1,0 +1,53 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+class AggregateServiceProvider extends ServiceProvider
+{
+    /**
+     * The provider class names.
+     *
+     * @var array
+     */
+    protected $providers = [];
+
+    /**
+     * An array of the service provider instances.
+     *
+     * @var array
+     */
+    protected $instances = [];
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;instances = [];
+
+        <span style="background-color: green">f</span>oreach ($this-&gt;providers as $provider) {
+            $this-&gt;instances[] = $this-&gt;app-&gt;register($provider);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function provides()
+    {
+        $provides = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;providers as $provider) {
+            $instance = $this-&gt;app-&gt;resolveProvider($provider);
+
+            $provides = array_merge($provides, $instance-&gt;provides());
+        <span style="background-color: red">}</span>
+
+        return $provides;
+    }
+}
+</pre>

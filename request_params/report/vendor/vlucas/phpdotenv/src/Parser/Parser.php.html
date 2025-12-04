@@ -1,0 +1,54 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Parser;
+
+use Dotenv\Exception\InvalidFileException;
+use Dotenv\Util\Regex;
+use GrahamCampbell\ResultType\Result;
+use GrahamCampbell\ResultType\Success;
+
+final class Parser implements ParserInterface
+{
+    /**
+     * Parse content into an entry array.
+     *
+     * @param string $content
+     *
+     * @throws \Dotenv\Exception\InvalidFileException
+     *
+     * @return \Dotenv\Parser\Entry[]
+     */
+    <span style="background-color: red">p</span>ublic function parse(string $content)
+    {
+        return Regex::split(&quot;/(\r\n|\n|\r)/&quot;, $content)-&gt;mapError(<span style="background-color: red">s</span>tatic function () {
+            return &#039;Could not split into separate lines.&#039;;
+        })-&gt;flatMap(<span style="background-color: red">s</span>tatic function (array $lines) {
+            return self::process(Lines::process($lines));
+        })-&gt;mapError(<span style="background-color: red">s</span>tatic function (string $error) {
+            throw new InvalidFileException(\sprintf(&#039;Failed to parse dotenv file. %s&#039;, $error));
+        })-&gt;success()-&gt;get();
+    }
+
+    /**
+     * Convert the raw entries into proper entries.
+     *
+     * @param string[] $entries
+     *
+     * @return \GrahamCampbell\ResultType\Result&lt;\Dotenv\Parser\Entry[],string&gt;
+     */
+    <span style="background-color: red">p</span>rivate static function process(array $entries)
+    {
+        /** @var \GrahamCampbell\ResultType\Result&lt;\Dotenv\Parser\Entry[],string&gt; */
+        return \array_reduce($entries, <span style="background-color: red">s</span>tatic function (Result $result, string $raw) {
+            return $result-&gt;flatMap(<span style="background-color: red">s</span>tatic function (array $entries) use ($raw) {
+                return EntryParser::parse($raw)-&gt;map(<span style="background-color: red">s</span>tatic function (Entry $entry) use ($entries) {
+                    /** @var \Dotenv\Parser\Entry[] */
+                    return \array_merge($entries, [$entry]);
+                });
+            });
+        }, Success::create([]));
+    }
+}
+</pre>

@@ -1,0 +1,45 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesTranslations
+{
+    /**
+     * Compile the lang statements into valid PHP.
+     *
+     * @param  string|null  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileLang($expression)
+    {
+        <span style="background-color: red">i</span>f (is_null($expression)) {
+            return &#039;&lt;?php $__env-&gt;startTranslation(); ?&gt;&#039;;
+        } <span style="background-color: red">e</span>lseif ($expression[1] === &#039;[&#039;) {
+            return &quot;&lt;?php \$__env-&gt;startTranslation{$expression}; ?&gt;&quot;;
+        <span style="background-color: red">}</span>
+
+        return &quot;&lt;?php echo app(&#039;translator&#039;)-&gt;get{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-lang statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndlang()
+    {
+        return &#039;&lt;?php echo $__env-&gt;renderTranslation(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the choice statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileChoice($expression)
+    {
+        return &quot;&lt;?php echo app(&#039;translator&#039;)-&gt;choice{$expression}; ?&gt;&quot;;
+    }
+}
+</pre>

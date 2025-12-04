@@ -1,0 +1,127 @@
+<pre>&lt;?php
+
+namespace Illuminate\Auth;
+
+use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
+use Illuminate\Contracts\Auth\UserProvider;
+
+/**
+ * These methods are typically the same across all guards.
+ */
+trait GuardHelpers
+{
+    /**
+     * The currently authenticated user.
+     *
+     * @var \Illuminate\Contracts\Auth\Authenticatable|null
+     */
+    protected $user;
+
+    /**
+     * The user provider implementation.
+     *
+     * @var \Illuminate\Contracts\Auth\UserProvider
+     */
+    protected $provider;
+
+    /**
+     * Determine if the current user is authenticated. If not, throw an exception.
+     *
+     * @return \Illuminate\Contracts\Auth\Authenticatable
+     *
+     * @throws \Illuminate\Auth\AuthenticationException
+     */
+    <span style="background-color: red">p</span>ublic function authenticate()
+    {
+        return $this-&gt;user() ?? <span style="background-color: red">t</span>hrow new AuthenticationException;
+    }
+
+    /**
+     * Determine if the guard has a user instance.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasUser()
+    {
+        return ! is_null($this-&gt;user);
+    }
+
+    /**
+     * Determine if the current user is authenticated.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function check()
+    {
+        return ! is_null($this-&gt;user());
+    }
+
+    /**
+     * Determine if the current user is a guest.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function guest()
+    {
+        return ! $this-&gt;check();
+    }
+
+    /**
+     * Get the ID for the currently authenticated user.
+     *
+     * @return int|string|null
+     */
+    <span style="background-color: red">p</span>ublic function id()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;user()) {
+            return $this-&gt;user()-&gt;getAuthIdentifier();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Set the current user.
+     *
+     * @param  \Illuminate\Contracts\Auth\Authenticatable  $user
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setUser(AuthenticatableContract $user)
+    {
+        $this-&gt;user = $user;
+
+        return $this;
+    }
+
+    /**
+     * Forget the current user.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function forgetUser()
+    {
+        $this-&gt;user = null;
+
+        return $this;
+    }
+
+    /**
+     * Get the user provider used by the guard.
+     *
+     * @return \Illuminate\Contracts\Auth\UserProvider
+     */
+    <span style="background-color: red">p</span>ublic function getProvider()
+    {
+        return $this-&gt;provider;
+    }
+
+    /**
+     * Set the user provider used by the guard.
+     *
+     * @param  \Illuminate\Contracts\Auth\UserProvider  $provider
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setProvider(UserProvider $provider)
+    {
+        $this-&gt;provider = $provider;
+    }
+}
+</pre>

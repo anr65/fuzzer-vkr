@@ -1,0 +1,48 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Loader;
+
+use Dotenv\Parser\Entry;
+use Dotenv\Parser\Value;
+use Dotenv\Repository\RepositoryInterface;
+
+final class Loader implements LoaderInterface
+{
+    /**
+     * Load the given entries into the repository.
+     *
+     * We&#039;ll substitute any nested variables, and send each variable to the
+     * repository, with the effect of actually mutating the environment.
+     *
+     * @param \Dotenv\Repository\RepositoryInterface $repository
+     * @param \Dotenv\Parser\Entry[]                 $entries
+     *
+     * @return array&lt;string,string|null&gt;
+     */
+    <span style="background-color: red">p</span>ublic function load(RepositoryInterface $repository, array $entries)
+    {
+        return \array_reduce($entries, <span style="background-color: red">s</span>tatic function (array $vars, Entry $entry) use ($repository) {
+            $name = $entry-&gt;getName();
+
+            $value = $entry-&gt;getValue()-&gt;map(<span style="background-color: red">s</span>tatic function (Value $value) use ($repository) {
+                return Resolver::resolve($repository, $value);
+            });
+
+            <span style="background-color: red">i</span>f ($value-&gt;isDefined()) {
+                $inner = $value-&gt;get();
+                <span style="background-color: red">i</span>f ($repository-&gt;set($name, $inner)) {
+                    return \array_merge($vars, [$name =&gt; $inner]);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                <span style="background-color: red">i</span>f ($repository-&gt;clear($name)) {
+                    return \array_merge($vars, [$name =&gt; null]);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return $vars;
+        }, []);
+    }
+}
+</pre>

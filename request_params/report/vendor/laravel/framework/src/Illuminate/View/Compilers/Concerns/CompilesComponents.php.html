@@ -1,0 +1,223 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Support\Str;
+use Illuminate\View\AnonymousComponent;
+use Illuminate\View\ComponentAttributeBag;
+
+trait CompilesComponents
+{
+    /**
+     * The component name hash stack.
+     *
+     * @var array
+     */
+    protected static $componentHashStack = [];
+
+    /**
+     * Compile the component statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileComponent($expression)
+    {
+        [$component, $alias, $data] = str_contains($expression, &#039;,&#039;)
+            ? array_map(trim(...), explode(&#039;,&#039;, trim($expression, &#039;()&#039;), 3)) + [&#039;&#039;, &#039;&#039;, &#039;&#039;]
+            : <span style="background-color: red">[</span>trim($expression, &#039;()&#039;), &#039;&#039;, &#039;&#039;];
+
+        $component = trim($component, &#039;\&#039;&quot;&#039;);
+
+        $hash = static::newComponentHash(
+            $component === AnonymousComponent::class ? $component.&#039;:&#039;.trim($alias, &#039;\&#039;&quot;&#039;) : <span style="background-color: red">$</span>component
+        );
+
+        <span style="background-color: red">i</span>f (Str::contains($component, [&#039;::class&#039;, &#039;\\&#039;])) {
+            return static::compileClassComponentOpening($component, $alias, $data, $hash);
+        <span style="background-color: red">}</span>
+
+        return &quot;&lt;?php \$__env-&gt;startComponent{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Get a new component hash for a component name.
+     *
+     * @param  string  $component
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function newComponentHash(string $component)
+    {
+        static::$componentHashStack[] = $hash = hash(&#039;xxh128&#039;, $component);
+
+        return $hash;
+    }
+
+    /**
+     * Compile a class component opening.
+     *
+     * @param  string  $component
+     * @param  string  $alias
+     * @param  string  $data
+     * @param  string  $hash
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function compileClassComponentOpening(string $component, string $alias, string $data, string $hash)
+    {
+        return implode(&quot;\n&quot;, [
+            &#039;&lt;?php if (isset($component)) { $__componentOriginal&#039;.$hash.&#039; = $component; } ?&gt;&#039;,
+            &#039;&lt;?php if (isset($attributes)) { $__attributesOriginal&#039;.$hash.&#039; = $attributes; } ?&gt;&#039;,
+            &#039;&lt;?php $component = &#039;.$component.&#039;::resolve(&#039;.($data ?: <span style="background-color: red">'</span>[]&#039;).&#039; + (isset($attributes) &amp;&amp; $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes-&gt;all() : [])); ?&gt;&#039;,
+            &#039;&lt;?php $component-&gt;withName(&#039;.$alias.&#039;); ?&gt;&#039;,
+            &#039;&lt;?php if ($component-&gt;shouldRender()): ?&gt;&#039;,
+            &#039;&lt;?php $__env-&gt;startComponent($component-&gt;resolveView(), $component-&gt;data()); ?&gt;&#039;,
+        ]);
+    }
+
+    /**
+     * Compile the end-component statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndComponent()
+    {
+        return &#039;&lt;?php echo $__env-&gt;renderComponent(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-component statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileEndComponentClass()
+    {
+        $hash = array_pop(static::$componentHashStack);
+
+        return $this-&gt;compileEndComponent().&quot;\n&quot;.implode(&quot;\n&quot;, [
+            &#039;&lt;?php endif; ?&gt;&#039;,
+            &#039;&lt;?php if (isset($__attributesOriginal&#039;.$hash.&#039;)): ?&gt;&#039;,
+            &#039;&lt;?php $attributes = $__attributesOriginal&#039;.$hash.&#039;; ?&gt;&#039;,
+            &#039;&lt;?php unset($__attributesOriginal&#039;.$hash.&#039;); ?&gt;&#039;,
+            &#039;&lt;?php endif; ?&gt;&#039;,
+            &#039;&lt;?php if (isset($__componentOriginal&#039;.$hash.&#039;)): ?&gt;&#039;,
+            &#039;&lt;?php $component = $__componentOriginal&#039;.$hash.&#039;; ?&gt;&#039;,
+            &#039;&lt;?php unset($__componentOriginal&#039;.$hash.&#039;); ?&gt;&#039;,
+            &#039;&lt;?php endif; ?&gt;&#039;,
+        ]);
+    }
+
+    /**
+     * Compile the slot statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileSlot($expression)
+    {
+        return &quot;&lt;?php \$__env-&gt;slot{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-slot statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndSlot()
+    {
+        return &#039;&lt;?php $__env-&gt;endSlot(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the component-first statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileComponentFirst($expression)
+    {
+        return &quot;&lt;?php \$__env-&gt;startComponentFirst{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-component-first statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndComponentFirst()
+    {
+        return $this-&gt;compileEndComponent();
+    }
+
+    /**
+     * Compile the prop statement into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileProps($expression)
+    {
+        return &quot;&lt;?php \$attributes ??= new \\Illuminate\\View\\ComponentAttributeBag;
+
+\$__newAttributes = [];
+\$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames({$expression});
+
+foreach (\$attributes-&gt;all() as \$__key =&gt; \$__value) {
+    if (in_array(\$__key, \$__propNames)) {
+        \$\$__key = \$\$__key ?? \$__value;
+    } else {
+        \$__newAttributes[\$__key] = \$__value;
+    }
+}
+
+\$attributes = new \Illuminate\View\ComponentAttributeBag(\$__newAttributes);
+
+unset(\$__propNames);
+unset(\$__newAttributes);
+
+foreach (array_filter({$expression}, &#039;is_string&#039;, ARRAY_FILTER_USE_KEY) as \$__key =&gt; \$__value) {
+    \$\$__key = \$\$__key ?? \$__value;
+}
+
+\$__defined_vars = get_defined_vars();
+
+foreach (\$attributes-&gt;all() as \$__key =&gt; \$__value) {
+    if (array_key_exists(\$__key, \$__defined_vars)) unset(\$\$__key);
+}
+
+unset(\$__defined_vars); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the aware statement into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileAware($expression)
+    {
+        return &quot;&lt;?php foreach ({$expression} as \$__key =&gt; \$__value) {
+    \$__consumeVariable = is_string(\$__key) ? \$__key : \$__value;
+    \$\$__consumeVariable = is_string(\$__key) ? \$__env-&gt;getConsumableComponentData(\$__key, \$__value) : \$__env-&gt;getConsumableComponentData(\$__value);
+} ?&gt;&quot;;
+    }
+
+    /**
+     * Sanitize the given component attribute value.
+     *
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function sanitizeComponentAttribute($value)
+    {
+        <span style="background-color: red">i</span>f ($value instanceof CanBeEscapedWhenCastToString) {
+            return $value-&gt;escapeWhenCastingToString();
+        <span style="background-color: red">}</span>
+
+        return is_string($value) ||
+            (<span style="background-color: red">i</span>s_object($value) &amp;&amp; <span style="background-color: red">!</span> $value instanceof ComponentAttributeBag &amp;&amp; <span style="background-color: red">m</span>ethod_exists($value, &#039;__toString&#039;))
+                ? e($value)
+                : <span style="background-color: red">$</span>value;
+    }
+}
+</pre>

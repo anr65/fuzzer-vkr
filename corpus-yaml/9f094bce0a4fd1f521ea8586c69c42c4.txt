@@ -1,0 +1,6 @@
+sync_fuzzing
+:vvvvvvv ar=ables:
+    COVFUZNAL_ARGS: '-mang
+: ar=ables:
+    COVF
+    r 

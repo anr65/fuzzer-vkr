@@ -1,0 +1,1079 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Exceptions;
+
+use Closure;
+use Exception;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Cache\RateLimiter;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Cache\RateLimiting\Unlimited;
+use Illuminate\Console\View\Components\BulletList;
+use Illuminate\Console\View\Components\Error;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler as ExceptionHandlerContract;
+use Illuminate\Contracts\Debug\ShouldntReport;
+use Illuminate\Contracts\Foundation\ExceptionRenderer;
+use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\MultipleRecordsFoundException;
+use Illuminate\Database\RecordNotFoundException;
+use Illuminate\Database\RecordsNotFoundException;
+use Illuminate\Foundation\Exceptions\Renderer\Renderer;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response;
+use Illuminate\Routing\Exceptions\BackedEnumCaseNotFoundException;
+use Illuminate\Routing\Router;
+use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Lottery;
+use Illuminate\Support\Reflector;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\ReflectsClosures;
+use Illuminate\Support\ViewErrorBag;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
+use Symfony\Component\Console\Application as ConsoleApplication;
+use Symfony\Component\Console\Exception\CommandNotFoundException;
+use Symfony\Component\ErrorHandler\ErrorRenderer\HtmlErrorRenderer;
+use Symfony\Component\HttpFoundation\Exception\RequestExceptionInterface;
+use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Throwable;
+use WeakMap;
+
+class Handler implements ExceptionHandlerContract
+{
+    use ReflectsClosures;
+
+    /**
+     * The container implementation.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+    protected $container;
+
+    /**
+     * A list of the exception types that are not reported.
+     *
+     * @var array&lt;int, class-string&lt;\Throwable&gt;&gt;
+     */
+    protected $dontReport = [];
+
+    /**
+     * The callbacks that should be used during reporting.
+     *
+     * @var \Illuminate\Foundation\Exceptions\ReportableHandler[]
+     */
+    protected $reportCallbacks = [];
+
+    /**
+     * A map of exceptions with their corresponding custom log levels.
+     *
+     * @var array&lt;class-string&lt;\Throwable&gt;, \Psr\Log\LogLevel::*&gt;
+     */
+    protected $levels = [];
+
+    /**
+     * The callbacks that should be used to throttle reportable exceptions.
+     *
+     * @var array
+     */
+    protected $throttleCallbacks = [];
+
+    /**
+     * The callbacks that should be used to build exception context data.
+     *
+     * @var array
+     */
+    protected $contextCallbacks = [];
+
+    /**
+     * The callbacks that should be used during rendering.
+     *
+     * @var \Closure[]
+     */
+    protected $renderCallbacks = [];
+
+    /**
+     * The callback that determines if the exception handler response should be JSON.
+     *
+     * @var callable|null
+     */
+    protected $shouldRenderJsonWhenCallback;
+
+    /**
+     * The callback that prepares responses to be returned to the browser.
+     *
+     * @var callable|null
+     */
+    protected $finalizeResponseCallback;
+
+    /**
+     * The registered exception mappings.
+     *
+     * @var array&lt;string, \Closure&gt;
+     */
+    protected $exceptionMap = [];
+
+    /**
+     * Indicates that throttled keys should be hashed.
+     *
+     * @var bool
+     */
+    protected $hashThrottleKeys = true;
+
+    /**
+     * A list of the internal exception types that should not be reported.
+     *
+     * @var array&lt;int, class-string&lt;\Throwable&gt;&gt;
+     */
+    protected $internalDontReport = [
+        AuthenticationException::class,
+        AuthorizationException::class,
+        BackedEnumCaseNotFoundException::class,
+        HttpException::class,
+        HttpResponseException::class,
+        ModelNotFoundException::class,
+        MultipleRecordsFoundException::class,
+        RecordNotFoundException::class,
+        RecordsNotFoundException::class,
+        RequestExceptionInterface::class,
+        TokenMismatchException::class,
+        ValidationException::class,
+    ];
+
+    /**
+     * A list of the inputs that are never flashed for validation exceptions.
+     *
+     * @var array&lt;int, string&gt;
+     */
+    protected $dontFlash = [
+        &#039;current_password&#039;,
+        &#039;password&#039;,
+        &#039;password_confirmation&#039;,
+    ];
+
+    /**
+     * Indicates that an exception instance should only be reported once.
+     *
+     * @var bool
+     */
+    protected $withoutDuplicates = false;
+
+    /**
+     * The already reported exception map.
+     *
+     * @var \WeakMap
+     */
+    protected $reportedExceptionMap;
+
+    /**
+     * Create a new exception handler instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Container $container)
+    {
+        $this-&gt;container = $container;
+
+        $this-&gt;reportedExceptionMap = new WeakMap;
+
+        $this-&gt;register();
+    }
+
+    /**
+     * Register the exception handling callbacks for the application.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function register()
+    {
+        //
+    }
+
+    /**
+     * Register a reportable callback.
+     *
+     * @param  callable  $reportUsing
+     * @return \Illuminate\Foundation\Exceptions\ReportableHandler
+     */
+    <span style="background-color: red">p</span>ublic function reportable(callable $reportUsing)
+    {
+        <span style="background-color: red">i</span>f (! $reportUsing instanceof Closure) {
+            $reportUsing = Closure::fromCallable($reportUsing);
+        <span style="background-color: red">}</span>
+
+        return tap(new ReportableHandler($reportUsing), <span style="background-color: red">f</span>unction ($callback) {
+            $this-&gt;reportCallbacks[] = $callback;
+        });
+    }
+
+    /**
+     * Register a renderable callback.
+     *
+     * @param  callable  $renderUsing
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function renderable(callable $renderUsing)
+    {
+        <span style="background-color: red">i</span>f (! $renderUsing instanceof Closure) {
+            $renderUsing = Closure::fromCallable($renderUsing);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;renderCallbacks[] = $renderUsing;
+
+        return $this;
+    }
+
+    /**
+     * Register a new exception mapping.
+     *
+     * @param  \Closure|string  $from
+     * @param  \Closure|string|null  $to
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function map($from, $to = null)
+    {
+        <span style="background-color: red">i</span>f (is_string($to)) {
+            $to = fn ($exception) =&gt; <span style="background-color: red">n</span>ew $to(&#039;&#039;, 0, $exception);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_callable($from) &amp;&amp; <span style="background-color: red">i</span>s_null($to)) {
+            $from = $this-&gt;firstClosureParameterType($to = $from);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! is_string($from) || <span style="background-color: red">!</span> $to instanceof Closure) {
+            throw new InvalidArgumentException(&#039;Invalid exception mapping.&#039;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;exceptionMap[$from] = $to;
+
+        return $this;
+    }
+
+    /**
+     * Indicate that the given exception type should not be reported.
+     *
+     * Alias of &quot;ignore&quot;.
+     *
+     * @param  array|string  $exceptions
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dontReport(array|string $exceptions)
+    {
+        return $this-&gt;ignore($exceptions);
+    }
+
+    /**
+     * Indicate that the given exception type should not be reported.
+     *
+     * @param  array|string  $exceptions
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function ignore(array|string $exceptions)
+    {
+        $exceptions = Arr::wrap($exceptions);
+
+        $this-&gt;dontReport = array_values(array_unique(array_merge($this-&gt;dontReport, $exceptions)));
+
+        return $this;
+    }
+
+    /**
+     * Indicate that the given attributes should never be flashed to the session on validation errors.
+     *
+     * @param  array|string  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dontFlash(array|string $attributes)
+    {
+        $this-&gt;dontFlash = array_values(array_unique(
+            array_merge($this-&gt;dontFlash, Arr::wrap($attributes))
+        ));
+
+        return $this;
+    }
+
+    /**
+     * Set the log level for the given exception type.
+     *
+     * @param  class-string&lt;\Throwable&gt;  $type
+     * @param  \Psr\Log\LogLevel::*  $level
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function level($type, $level)
+    {
+        $this-&gt;levels[$type] = $level;
+
+        return $this;
+    }
+
+    /**
+     * Report or log an exception.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: green">p</span>ublic function report(Throwable $e)
+    {
+        $e = $this-&gt;mapException($e);
+
+        <span style="background-color: red">i</span>f ($this-&gt;shouldntReport($e)) {
+            return;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;reportThrowable($e);
+    }
+
+    /**
+     * Reports error based on report method on exception or to logger.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: green">p</span>rotected function reportThrowable(Throwable $e): void
+    {
+        $this-&gt;reportedExceptionMap[$e] = true;
+
+        <span style="background-color: red">i</span>f (Reflector::isCallable($reportCallable = [$e, &#039;report&#039;]) &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;container-&gt;call($reportCallable) !== false) {
+            return;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;reportCallbacks as $reportCallback) {
+            <span style="background-color: red">i</span>f ($reportCallback-&gt;handles($e) &amp;&amp; <span style="background-color: red">$</span>reportCallback($e) === false) {
+                return;
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        try {
+            $logger = $this-&gt;newLogger();
+        } <span style="background-color: red">c</span>atch (Exception) {
+            throw $e;
+        <span style="background-color: green">}</span>
+
+        $level = $this-&gt;mapLogLevel($e);
+
+        $context = $this-&gt;buildExceptionContext($e);
+
+        method_exists($logger, $level)
+            ? $logger-&gt;{$level}($e-&gt;getMessage(), $context)
+            : <span style="background-color: red">$</span>logger-&gt;log($level, $e-&gt;getMessage(), $context);
+    }
+
+    /**
+     * Determine if the exception should be reported.
+     *
+     * @param  \Throwable  $e
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function shouldReport(Throwable $e)
+    {
+        return ! $this-&gt;shouldntReport($e);
+    }
+
+    /**
+     * Determine if the exception is in the &quot;do not report&quot; list.
+     *
+     * @param  \Throwable  $e
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function shouldntReport(Throwable $e)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;withoutDuplicates &amp;&amp; (<span style="background-color: red">$</span>this-&gt;reportedExceptionMap[$e] ?? <span style="background-color: red">f</span>alse)) {
+            return true;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($e instanceof ShouldntReport) {
+            return true;
+        <span style="background-color: green">}</span>
+
+        $dontReport = array_merge($this-&gt;dontReport, $this-&gt;internalDontReport);
+
+        <span style="background-color: red">i</span>f (! is_null(Arr::first($dontReport, fn ($type) =&gt; <span style="background-color: green">$</span>e instanceof $type))) {
+            return true;
+        <span style="background-color: green">}</span>
+
+        return rescue(fn () =&gt; <span style="background-color: green">w</span>ith($this-&gt;throttle($e), <span style="background-color: green">f</span>unction ($throttle) use ($e) {
+            <span style="background-color: green">i</span>f ($throttle instanceof Unlimited || <span style="background-color: red">$</span>throttle === null) {
+                return false;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($throttle instanceof Lottery) {
+                return ! $throttle($e);
+            <span style="background-color: red">}</span>
+
+            return ! $this-&gt;container-&gt;make(RateLimiter::class)-&gt;attempt(
+                with($throttle-&gt;key ?: <span style="background-color: red">'</span>illuminate:foundation:exceptions:&#039;.$e::class, fn ($key) =&gt; <span style="background-color: red">$</span>this-&gt;hashThrottleKeys ? hash(&#039;xxh128&#039;, $key) : <span style="background-color: red">$</span>key),
+                $throttle-&gt;maxAttempts,
+                fn () =&gt; <span style="background-color: red">t</span>rue,
+                $throttle-&gt;decaySeconds
+            );
+        }), rescue: false, report: false);
+    }
+
+    /**
+     * Throttle the given exception.
+     *
+     * @param  \Throwable  $e
+     * @return \Illuminate\Support\Lottery|\Illuminate\Cache\RateLimiting\Limit|null
+     */
+    <span style="background-color: green">p</span>rotected function throttle(Throwable $e)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;throttleCallbacks as $throttleCallback) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;firstClosureParameterTypes($throttleCallback) as $type) {
+                <span style="background-color: red">i</span>f (is_a($e, $type)) {
+                    $response = $throttleCallback($e);
+
+                    <span style="background-color: red">i</span>f (! is_null($response)) {
+                        return $response;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return Limit::none();
+    }
+
+    /**
+     * Specify the callback that should be used to throttle reportable exceptions.
+     *
+     * @param  callable  $throttleUsing
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function throttleUsing(callable $throttleUsing)
+    {
+        <span style="background-color: red">i</span>f (! $throttleUsing instanceof Closure) {
+            $throttleUsing = Closure::fromCallable($throttleUsing);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;throttleCallbacks[] = $throttleUsing;
+
+        return $this;
+    }
+
+    /**
+     * Remove the given exception class from the list of exceptions that should be ignored.
+     *
+     * @param  array|string  $exceptions
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function stopIgnoring(array|string $exceptions)
+    {
+        $exceptions = Arr::wrap($exceptions);
+
+        $this-&gt;dontReport = (new Collection($this-&gt;dontReport))
+            -&gt;reject(fn ($ignored) =&gt; <span style="background-color: red">i</span>n_array($ignored, $exceptions))
+            -&gt;values()
+            -&gt;all();
+
+        $this-&gt;internalDontReport = (new Collection($this-&gt;internalDontReport))
+            -&gt;reject(fn ($ignored) =&gt; <span style="background-color: red">i</span>n_array($ignored, $exceptions))
+            -&gt;values()
+            -&gt;all();
+
+        return $this;
+    }
+
+    /**
+     * Create the context array for logging the given exception.
+     *
+     * @param  \Throwable  $e
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function buildExceptionContext(Throwable $e)
+    {
+        return array_merge(
+            $this-&gt;exceptionContext($e),
+            $this-&gt;context(),
+            [&#039;exception&#039; =&gt; $e]
+        );
+    }
+
+    /**
+     * Get the default exception context variables for logging.
+     *
+     * @param  \Throwable  $e
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function exceptionContext(Throwable $e)
+    {
+        $context = [];
+
+        <span style="background-color: red">i</span>f (method_exists($e, &#039;context&#039;)) {
+            $context = $e-&gt;context();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;contextCallbacks as $callback) {
+            $context = array_merge($context, $callback($e, $context));
+        <span style="background-color: green">}</span>
+
+        return $context;
+    }
+
+    /**
+     * Get the default context variables for logging.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function context()
+    {
+        try {
+            return array_filter([
+                &#039;userId&#039; =&gt; Auth::id(),
+            ]);
+        } <span style="background-color: red">c</span>atch (Throwable) {
+            return [];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Register a closure that should be used to build exception context data.
+     *
+     * @param  \Closure  $contextCallback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function buildContextUsing(Closure $contextCallback)
+    {
+        $this-&gt;contextCallbacks[] = $contextCallback;
+
+        return $this;
+    }
+
+    /**
+     * Render an exception into an HTTP response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return \Symfony\Component\HttpFoundation\Response
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: green">p</span>ublic function render($request, Throwable $e)
+    {
+        $e = $this-&gt;mapException($e);
+
+        <span style="background-color: red">i</span>f (method_exists($e, &#039;render&#039;) &amp;&amp; <span style="background-color: red">$</span>response = $e-&gt;render($request)) {
+            return $this-&gt;finalizeRenderedResponse(
+                $request,
+                Router::toResponse($request, $response),
+                $e
+            );
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($e instanceof Responsable) {
+            return $this-&gt;finalizeRenderedResponse($request, $e-&gt;toResponse($request), $e);
+        <span style="background-color: green">}</span>
+
+        $e = $this-&gt;prepareException($e);
+
+        <span style="background-color: red">i</span>f ($response = $this-&gt;renderViaCallbacks($request, $e)) {
+            return $this-&gt;finalizeRenderedResponse($request, $response, $e);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;finalizeRenderedResponse($request, match (true) {
+            $e instanceof HttpResponseException =&gt; <span style="background-color: red">$</span>e-&gt;getResponse(),
+            $e instanceof AuthenticationException =&gt; <span style="background-color: red">$</span>this-&gt;unauthenticated($request, $e),
+            $e instanceof ValidationException =&gt; <span style="background-color: red">$</span>this-&gt;convertValidationExceptionToResponse($e, $request),
+            default =&gt; <span style="background-color: green">$</span>this-&gt;renderExceptionResponse($request, $e),
+        }, $e);
+    }
+
+    /**
+     * Prepare the final, rendered response to be returned to the browser.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Symfony\Component\HttpFoundation\Response  $response
+     * @param  \Throwable  $e
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: green">p</span>rotected function finalizeRenderedResponse($request, $response, Throwable $e)
+    {
+        return $this-&gt;finalizeResponseCallback
+            ? call_user_func($this-&gt;finalizeResponseCallback, $response, $e, $request)
+            : <span style="background-color: green">$</span>response;
+    }
+
+    /**
+     * Prepare the final, rendered response for an exception using the given callback.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function respondUsing($callback)
+    {
+        $this-&gt;finalizeResponseCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Prepare exception for rendering.
+     *
+     * @param  \Throwable  $e
+     * @return \Throwable
+     */
+    <span style="background-color: green">p</span>rotected function prepareException(Throwable $e)
+    {
+        return match (true) {
+            $e instanceof BackedEnumCaseNotFoundException =&gt; <span style="background-color: red">n</span>ew NotFoundHttpException($e-&gt;getMessage(), $e),
+            $e instanceof ModelNotFoundException =&gt; <span style="background-color: red">n</span>ew NotFoundHttpException($e-&gt;getMessage(), $e),
+            $e instanceof AuthorizationException &amp;&amp; <span style="background-color: red">$</span>e-&gt;hasStatus() =&gt; <span style="background-color: red">n</span>ew HttpException(
+                $e-&gt;status(), $e-&gt;response()?-&gt;message() ?: (<span style="background-color: red">R</span>esponse::$statusTexts[$e-&gt;status()] ?? <span style="background-color: red">'</span>Whoops, looks like something went wrong.&#039;), $e
+            ),
+            $e instanceof AuthorizationException &amp;&amp; <span style="background-color: red">!</span> $e-&gt;hasStatus() =&gt; <span style="background-color: red">n</span>ew AccessDeniedHttpException($e-&gt;getMessage(), $e),
+            $e instanceof TokenMismatchException =&gt; <span style="background-color: red">n</span>ew HttpException(419, $e-&gt;getMessage(), $e),
+            $e instanceof RequestExceptionInterface =&gt; <span style="background-color: red">n</span>ew BadRequestHttpException(&#039;Bad request.&#039;, $e),
+            $e instanceof RecordNotFoundException =&gt; <span style="background-color: red">n</span>ew NotFoundHttpException(&#039;Not found.&#039;, $e),
+            $e instanceof RecordsNotFoundException =&gt; <span style="background-color: red">n</span>ew NotFoundHttpException(&#039;Not found.&#039;, $e),
+            default =&gt; <span style="background-color: green">$</span>e,
+        };
+    }
+
+    /**
+     * Map the exception using a registered mapper if possible.
+     *
+     * @param  \Throwable  $e
+     * @return \Throwable
+     */
+    <span style="background-color: green">p</span>rotected function mapException(Throwable $e)
+    {
+        <span style="background-color: red">i</span>f (method_exists($e, &#039;getInnerException&#039;) &amp;&amp;
+            <span style="background-color: red">(</span>$inner = $e-&gt;getInnerException()) instanceof Throwable) {
+            return $inner;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;exceptionMap as $class =&gt; $mapper) {
+            <span style="background-color: red">i</span>f (is_a($e, $class)) {
+                return $mapper($e);
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return $e;
+    }
+
+    /**
+     * Try to render a response from request and exception via render callbacks.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return mixed
+     *
+     * @throws \ReflectionException
+     */
+    <span style="background-color: green">p</span>rotected function renderViaCallbacks($request, Throwable $e)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;renderCallbacks as $renderCallback) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;firstClosureParameterTypes($renderCallback) as $type) {
+                <span style="background-color: red">i</span>f (is_a($e, $type)) {
+                    $response = $renderCallback($e, $request);
+
+                    <span style="background-color: red">i</span>f (! is_null($response)) {
+                        return $response;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Render a default exception response if any.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: green">p</span>rotected function renderExceptionResponse($request, Throwable $e)
+    {
+        return $this-&gt;shouldReturnJson($request, $e)
+            ? $this-&gt;prepareJsonResponse($request, $e)
+            : <span style="background-color: green">$</span>this-&gt;prepareResponse($request, $e);
+    }
+
+    /**
+     * Convert an authentication exception into a response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Illuminate\Auth\AuthenticationException  $exception
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>rotected function unauthenticated($request, AuthenticationException $exception)
+    {
+        return $this-&gt;shouldReturnJson($request, $exception)
+            ? response()-&gt;json([&#039;message&#039; =&gt; $exception-&gt;getMessage()], 401)
+            : <span style="background-color: red">r</span>edirect()-&gt;guest($exception-&gt;redirectTo($request) ?? <span style="background-color: red">r</span>oute(&#039;login&#039;));
+    }
+
+    /**
+     * Create a response object from the given validation exception.
+     *
+     * @param  \Illuminate\Validation\ValidationException  $e
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>rotected function convertValidationExceptionToResponse(ValidationException $e, $request)
+    {
+        <span style="background-color: red">i</span>f ($e-&gt;response) {
+            return $e-&gt;response;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;shouldReturnJson($request, $e)
+            ? $this-&gt;invalidJson($request, $e)
+            : <span style="background-color: red">$</span>this-&gt;invalid($request, $e);
+    }
+
+    /**
+     * Convert a validation exception into a response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Illuminate\Validation\ValidationException  $exception
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>rotected function invalid($request, ValidationException $exception)
+    {
+        return redirect($exception-&gt;redirectTo ?? <span style="background-color: red">u</span>rl()-&gt;previous())
+            -&gt;withInput(Arr::except($request-&gt;input(), $this-&gt;dontFlash))
+            -&gt;withErrors($exception-&gt;errors(), $request-&gt;input(&#039;_error_bag&#039;, $exception-&gt;errorBag));
+    }
+
+    /**
+     * Convert a validation exception into a JSON response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Illuminate\Validation\ValidationException  $exception
+     * @return \Illuminate\Http\JsonResponse
+     */
+    <span style="background-color: red">p</span>rotected function invalidJson($request, ValidationException $exception)
+    {
+        return response()-&gt;json([
+            &#039;message&#039; =&gt; $exception-&gt;getMessage(),
+            &#039;errors&#039; =&gt; $exception-&gt;errors(),
+        ], $exception-&gt;status);
+    }
+
+    /**
+     * Determine if the exception handler response should be JSON.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function shouldReturnJson($request, Throwable $e)
+    {
+        return $this-&gt;shouldRenderJsonWhenCallback
+            ? call_user_func($this-&gt;shouldRenderJsonWhenCallback, $request, $e)
+            : <span style="background-color: green">$</span>request-&gt;expectsJson();
+    }
+
+    /**
+     * Register the callable that determines if the exception handler response should be JSON.
+     *
+     * @param  callable(\Illuminate\Http\Request $request, \Throwable): bool  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function shouldRenderJsonWhen($callback)
+    {
+        $this-&gt;shouldRenderJsonWhenCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Prepare a response for the given exception.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: green">p</span>rotected function prepareResponse($request, Throwable $e)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isHttpException($e) &amp;&amp; <span style="background-color: green">c</span>onfig(&#039;app.debug&#039;)) {
+            return $this-&gt;toIlluminateResponse($this-&gt;convertExceptionToResponse($e), $e)-&gt;prepare($request);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (! $this-&gt;isHttpException($e)) {
+            $e = new HttpException(500, $e-&gt;getMessage(), $e);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;toIlluminateResponse(
+            $this-&gt;renderHttpException($e), $e
+        )-&gt;prepare($request);
+    }
+
+    /**
+     * Create a Symfony response for the given exception.
+     *
+     * @param  \Throwable  $e
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>rotected function convertExceptionToResponse(Throwable $e)
+    {
+        return new SymfonyResponse(
+            $this-&gt;renderExceptionContent($e),
+            $this-&gt;isHttpException($e) ? $e-&gt;getStatusCode() : <span style="background-color: red">5</span>00,
+            $this-&gt;isHttpException($e) ? $e-&gt;getHeaders() : <span style="background-color: red">[</span>]
+        );
+    }
+
+    /**
+     * Get the response content for the given exception.
+     *
+     * @param  \Throwable  $e
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function renderExceptionContent(Throwable $e)
+    {
+        try {
+            <span style="background-color: red">i</span>f (config(&#039;app.debug&#039;)) {
+                <span style="background-color: red">i</span>f (app()-&gt;has(ExceptionRenderer::class)) {
+                    return $this-&gt;renderExceptionWithCustomRenderer($e);
+                } <span style="background-color: red">e</span>lseif ($this-&gt;container-&gt;bound(Renderer::class)) {
+                    return $this-&gt;container-&gt;make(Renderer::class)-&gt;render(request(), $e);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return $this-&gt;renderExceptionWithSymfony($e, config(&#039;app.debug&#039;));
+        } <span style="background-color: red">c</span>atch (Throwable $e) {
+            return $this-&gt;renderExceptionWithSymfony($e, config(&#039;app.debug&#039;));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Render an exception to a string using the registered `ExceptionRenderer`.
+     *
+     * @param  \Throwable  $e
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function renderExceptionWithCustomRenderer(Throwable $e)
+    {
+        return app(ExceptionRenderer::class)-&gt;render($e);
+    }
+
+    /**
+     * Render an exception to a string using Symfony.
+     *
+     * @param  \Throwable  $e
+     * @param  bool  $debug
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function renderExceptionWithSymfony(Throwable $e, $debug)
+    {
+        $renderer = new HtmlErrorRenderer($debug);
+
+        return $renderer-&gt;render($e)-&gt;getAsString();
+    }
+
+    /**
+     * Render the given HttpException.
+     *
+     * @param  \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface  $e
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: green">p</span>rotected function renderHttpException(HttpExceptionInterface $e)
+    {
+        $this-&gt;registerErrorViewPaths();
+
+        <span style="background-color: green">i</span>f ($view = $this-&gt;getHttpExceptionView($e)) {
+            try {
+                return response()-&gt;view($view, [
+                    &#039;errors&#039; =&gt; new ViewErrorBag,
+                    &#039;exception&#039; =&gt; $e,
+                ], $e-&gt;getStatusCode(), $e-&gt;getHeaders());
+            } <span style="background-color: red">c</span>atch (Throwable $t) {
+                config(&#039;app.debug&#039;) &amp;&amp; <span style="background-color: red">t</span>hrow $t;
+
+                $this-&gt;report($t);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;convertExceptionToResponse($e);
+    }
+
+    /**
+     * Register the error template hint paths.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerErrorViewPaths()
+    {
+        (new RegisterErrorViewPaths)();
+    }
+
+    /**
+     * Get the view used to render HTTP exceptions.
+     *
+     * @param  \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface  $e
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>rotected function getHttpExceptionView(HttpExceptionInterface $e)
+    {
+        $view = &#039;errors::&#039;.$e-&gt;getStatusCode();
+
+        <span style="background-color: green">i</span>f (view()-&gt;exists($view)) {
+            return $view;
+        <span style="background-color: red">}</span>
+
+        $view = substr($view, 0, -2).&#039;xx&#039;;
+
+        <span style="background-color: red">i</span>f (view()-&gt;exists($view)) {
+            return $view;
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Map the given exception into an Illuminate response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Response  $response
+     * @param  \Throwable  $e
+     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: green">p</span>rotected function toIlluminateResponse($response, Throwable $e)
+    {
+        <span style="background-color: red">i</span>f ($response instanceof SymfonyRedirectResponse) {
+            $response = new RedirectResponse(
+                $response-&gt;getTargetUrl(), $response-&gt;getStatusCode(), $response-&gt;headers-&gt;all()
+            );
+        } <span style="background-color: green">e</span>lse {
+            $response = new Response(
+                $response-&gt;getContent(), $response-&gt;getStatusCode(), $response-&gt;headers-&gt;all()
+            );
+        <span style="background-color: green">}</span>
+
+        return $response-&gt;withException($e);
+    }
+
+    /**
+     * Prepare a JSON response for the given exception.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $e
+     * @return \Illuminate\Http\JsonResponse
+     */
+    <span style="background-color: red">p</span>rotected function prepareJsonResponse($request, Throwable $e)
+    {
+        return new JsonResponse(
+            $this-&gt;convertExceptionToArray($e),
+            $this-&gt;isHttpException($e) ? $e-&gt;getStatusCode() : <span style="background-color: red">5</span>00,
+            $this-&gt;isHttpException($e) ? $e-&gt;getHeaders() : <span style="background-color: red">[</span>],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+        );
+    }
+
+    /**
+     * Convert the given exception to an array.
+     *
+     * @param  \Throwable  $e
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function convertExceptionToArray(Throwable $e)
+    {
+        return config(&#039;app.debug&#039;) ? [
+            &#039;message&#039; =&gt; $e-&gt;getMessage(),
+            &#039;exception&#039; =&gt; get_class($e),
+            &#039;file&#039; =&gt; $e-&gt;getFile(),
+            &#039;line&#039; =&gt; $e-&gt;getLine(),
+            &#039;trace&#039; =&gt; (new Collection($e-&gt;getTrace()))-&gt;map(fn ($trace) =&gt; <span style="background-color: red">A</span>rr::except($trace, [&#039;args&#039;]))-&gt;all(),
+        ] : <span style="background-color: red">[</span>
+            &#039;message&#039; =&gt; $this-&gt;isHttpException($e) ? $e-&gt;getMessage() : <span style="background-color: red">'</span>Server Error&#039;,
+        ];
+    }
+
+    /**
+     * Render an exception to the console.
+     *
+     * @param  \Symfony\Component\Console\Output\OutputInterface  $output
+     * @param  \Throwable  $e
+     * @return void
+     *
+     * @internal This method is not meant to be used or overwritten outside the framework.
+     */
+    <span style="background-color: red">p</span>ublic function renderForConsole($output, Throwable $e)
+    {
+        <span style="background-color: red">i</span>f ($e instanceof CommandNotFoundException) {
+            $message = Str::of($e-&gt;getMessage())-&gt;explode(&#039;.&#039;)-&gt;first();
+
+            <span style="background-color: red">i</span>f (! empty($alternatives = $e-&gt;getAlternatives())) {
+                $message .= &#039;. Did you mean one of these?&#039;;
+
+                with(new Error($output))-&gt;render($message);
+                with(new BulletList($output))-&gt;render($alternatives);
+
+                $output-&gt;writeln(&#039;&#039;);
+            } <span style="background-color: red">e</span>lse {
+                with(new Error($output))-&gt;render($message);
+            <span style="background-color: red">}</span>
+
+            return;
+        <span style="background-color: red">}</span>
+
+        (new ConsoleApplication)-&gt;renderThrowable($e, $output);
+    }
+
+    /**
+     * Do not report duplicate exceptions.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dontReportDuplicates()
+    {
+        $this-&gt;withoutDuplicates = true;
+
+        return $this;
+    }
+
+    /**
+     * Determine if the given exception is an HTTP exception.
+     *
+     * @param  \Throwable  $e
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function isHttpException(Throwable $e)
+    {
+        return $e instanceof HttpExceptionInterface;
+    }
+
+    /**
+     * Map the exception to a log level.
+     *
+     * @param  \Throwable  $e
+     * @return \Psr\Log\LogLevel::*
+     */
+    <span style="background-color: green">p</span>rotected function mapLogLevel(Throwable $e)
+    {
+        return Arr::first(
+            $this-&gt;levels, fn ($level, $type) =&gt; <span style="background-color: red">$</span>e instanceof $type, LogLevel::ERROR
+        );
+    }
+
+    /**
+     * Create a new logger instance.
+     *
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>rotected function newLogger()
+    {
+        return $this-&gt;container-&gt;make(LoggerInterface::class);
+    }
+}
+</pre>

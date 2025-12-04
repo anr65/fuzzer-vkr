@@ -1,0 +1,170 @@
+<pre>&lt;?php
+
+/*
+ * Copyright 2012 Johannes M. Schmitt &lt;schmittjoh@gmail.com&gt;
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+namespace PhpOption;
+
+use ArrayIterator;
+
+/**
+ * @template T
+ *
+ * @extends Option&lt;T&gt;
+ */
+final class Some extends Option
+{
+    /** @var T */
+    private $value;
+
+    /**
+     * @param T $value
+     */
+    <span style="background-color: green">p</span>ublic function __construct($value)
+    {
+        $this-&gt;value = $value;
+    }
+
+    /**
+     * @template U
+     *
+     * @param U $value
+     *
+     * @return Some&lt;U&gt;
+     */
+    <span style="background-color: green">p</span>ublic static function create($value): self
+    {
+        return new self($value);
+    }
+
+    <span style="background-color: green">p</span>ublic function isDefined(): bool
+    {
+        return true;
+    }
+
+    <span style="background-color: red">p</span>ublic function isEmpty(): bool
+    {
+        return false;
+    }
+
+    <span style="background-color: green">p</span>ublic function get()
+    {
+        return $this-&gt;value;
+    }
+
+    <span style="background-color: red">p</span>ublic function getOrElse($default)
+    {
+        return $this-&gt;value;
+    }
+
+    <span style="background-color: red">p</span>ublic function getOrCall($callable)
+    {
+        return $this-&gt;value;
+    }
+
+    <span style="background-color: red">p</span>ublic function getOrThrow(\Exception $ex)
+    {
+        return $this-&gt;value;
+    }
+
+    <span style="background-color: red">p</span>ublic function orElse(Option $else)
+    {
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function ifDefined($callable)
+    {
+        $this-&gt;forAll($callable);
+    }
+
+    <span style="background-color: red">p</span>ublic function forAll($callable)
+    {
+        $callable($this-&gt;value);
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function map($callable)
+    {
+        return new self($callable($this-&gt;value));
+    }
+
+    <span style="background-color: green">p</span>ublic function flatMap($callable)
+    {
+        /** @var mixed */
+        $rs = $callable($this-&gt;value);
+        <span style="background-color: red">i</span>f (!$rs instanceof Option) {
+            throw new \RuntimeException(&#039;Callables passed to flatMap() must return an Option. Maybe you should use map() instead?&#039;);
+        <span style="background-color: green">}</span>
+
+        return $rs;
+    }
+
+    <span style="background-color: red">p</span>ublic function filter($callable)
+    {
+        <span style="background-color: red">i</span>f (true === $callable($this-&gt;value)) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        return None::create();
+    }
+
+    <span style="background-color: red">p</span>ublic function filterNot($callable)
+    {
+        <span style="background-color: red">i</span>f (false === $callable($this-&gt;value)) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        return None::create();
+    }
+
+    <span style="background-color: red">p</span>ublic function select($value)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;value === $value) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        return None::create();
+    }
+
+    <span style="background-color: red">p</span>ublic function reject($value)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;value === $value) {
+            return None::create();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * @return ArrayIterator&lt;int, T&gt;
+     */
+    <span style="background-color: green">p</span>ublic function getIterator(): ArrayIterator
+    {
+        return new ArrayIterator([$this-&gt;value]);
+    }
+
+    <span style="background-color: red">p</span>ublic function foldLeft($initialValue, $callable)
+    {
+        return $callable($initialValue, $this-&gt;value);
+    }
+
+    <span style="background-color: red">p</span>ublic function foldRight($initialValue, $callable)
+    {
+        return $callable($this-&gt;value, $initialValue);
+    }
+}
+</pre>

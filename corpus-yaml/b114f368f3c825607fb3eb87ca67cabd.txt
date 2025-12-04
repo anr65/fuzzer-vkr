@@ -1,0 +1,7 @@
+ gg:
+s:
+ _v # 
+   e2v # le s:
+ _v # 
+   v # les
+    

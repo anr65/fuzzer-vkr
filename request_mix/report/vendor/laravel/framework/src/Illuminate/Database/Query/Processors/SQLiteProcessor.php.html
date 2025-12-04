@@ -1,0 +1,116 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Query\Processors;
+
+class SQLiteProcessor extends Processor
+{
+    /**
+     * Process the results of a columns query.
+     *
+     * @param  array  $results
+     * @param  string  $sql
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processColumns($results, $sql = &#039;&#039;)
+    {
+        $hasPrimaryKey = array_sum(array_column($results, &#039;primary&#039;)) === 1;
+
+        return array_map(<span style="background-color: red">f</span>unction ($result) use ($hasPrimaryKey, $sql) {
+            $result = (object) $result;
+
+            $type = strtolower($result-&gt;type);
+
+            $safeName = preg_quote($result-&gt;name, &#039;/&#039;);
+
+            $collation = preg_match(
+                &#039;/\b&#039;.$safeName.&#039;\b[^,(]+(?:\([^()]+\)[^,]*)?(?:(?:default|check|as)\s*(?:\(.*?\))?[^,]*)*collate\s+[&quot;\&#039;`]?(\w+)/i&#039;,
+                $sql,
+                $matches
+            ) === 1 ? strtolower($matches[1]) : <span style="background-color: red">n</span>ull;
+
+            $isGenerated = in_array($result-&gt;extra, [2, 3]);
+
+            $expression = $isGenerated &amp;&amp; <span style="background-color: red">p</span>reg_match(
+                &#039;/\b&#039;.$safeName.&#039;\b[^,]+\s+as\s+\(((?:[^()]+|\((?:[^()]+|\([^()]*\))*\))*)\)/i&#039;,
+                $sql,
+                $matches
+            ) === 1 ? $matches[1] : <span style="background-color: red">n</span>ull;
+
+            return [
+                &#039;name&#039; =&gt; $result-&gt;name,
+                &#039;type_name&#039; =&gt; strtok($type, &#039;(&#039;) ?: <span style="background-color: red">'</span>&#039;,
+                &#039;type&#039; =&gt; $type,
+                &#039;collation&#039; =&gt; $collation,
+                &#039;nullable&#039; =&gt; (bool) $result-&gt;nullable,
+                &#039;default&#039; =&gt; $result-&gt;default,
+                &#039;auto_increment&#039; =&gt; $hasPrimaryKey &amp;&amp; <span style="background-color: red">$</span>result-&gt;primary &amp;&amp; <span style="background-color: red">$</span>type === &#039;integer&#039;,
+                &#039;comment&#039; =&gt; null,
+                &#039;generation&#039; =&gt; $isGenerated ? [
+                    &#039;type&#039; =&gt; match ((int) $result-&gt;extra) {
+                        3 =&gt; <span style="background-color: red">'</span>stored&#039;,
+                        2 =&gt; <span style="background-color: red">'</span>virtual&#039;,
+                        default =&gt; <span style="background-color: red">n</span>ull,
+                    },
+                    &#039;expression&#039; =&gt; $expression,
+                ] : <span style="background-color: red">n</span>ull,
+            ];
+        }, $results);
+    }
+
+    /**
+     * Process the results of an indexes query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processIndexes($results)
+    {
+        $primaryCount = 0;
+
+        $indexes = array_map(<span style="background-color: red">f</span>unction ($result) use (&amp;$primaryCount) {
+            $result = (object) $result;
+
+            <span style="background-color: red">i</span>f ($isPrimary = (bool) $result-&gt;primary) {
+                $primaryCount += 1;
+            <span style="background-color: red">}</span>
+
+            return [
+                &#039;name&#039; =&gt; strtolower($result-&gt;name),
+                &#039;columns&#039; =&gt; $result-&gt;columns ? explode(&#039;,&#039;, $result-&gt;columns) : <span style="background-color: red">[</span>],
+                &#039;type&#039; =&gt; null,
+                &#039;unique&#039; =&gt; (bool) $result-&gt;unique,
+                &#039;primary&#039; =&gt; $isPrimary,
+            ];
+        }, $results);
+
+        <span style="background-color: red">i</span>f ($primaryCount &gt; 1) {
+            $indexes = array_filter($indexes, fn ($index) =&gt; <span style="background-color: red">$</span>index[&#039;name&#039;] !== &#039;primary&#039;);
+        <span style="background-color: red">}</span>
+
+        return $indexes;
+    }
+
+    /**
+     * Process the results of a foreign keys query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processForeignKeys($results)
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($result) {
+            $result = (object) $result;
+
+            return [
+                &#039;name&#039; =&gt; null,
+                &#039;columns&#039; =&gt; explode(&#039;,&#039;, $result-&gt;columns),
+                &#039;foreign_schema&#039; =&gt; $result-&gt;foreign_schema,
+                &#039;foreign_table&#039; =&gt; $result-&gt;foreign_table,
+                &#039;foreign_columns&#039; =&gt; explode(&#039;,&#039;, $result-&gt;foreign_columns),
+                &#039;on_update&#039; =&gt; strtolower($result-&gt;on_update),
+                &#039;on_delete&#039; =&gt; strtolower($result-&gt;on_delete),
+            ];
+        }, $results);
+    }
+}
+</pre>

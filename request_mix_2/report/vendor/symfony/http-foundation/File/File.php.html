@@ -1,0 +1,141 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation\File;
+
+use Symfony\Component\HttpFoundation\File\Exception\FileException;
+use Symfony\Component\HttpFoundation\File\Exception\FileNotFoundException;
+use Symfony\Component\Mime\MimeTypes;
+
+/**
+ * A file in the file system.
+ *
+ * @author Bernhard Schussek &lt;bschussek@gmail.com&gt;
+ */
+class File extends \SplFileInfo
+{
+    /**
+     * Constructs a new file from the given path.
+     *
+     * @param string $path      The path to the file
+     * @param bool   $checkPath Whether to check the path or not
+     *
+     * @throws FileNotFoundException If the given path is not a file
+     */
+    <span style="background-color: green">p</span>ublic function __construct(string $path, bool $checkPath = true)
+    {
+        <span style="background-color: red">i</span>f ($checkPath &amp;&amp; <span style="background-color: green">!</span>is_file($path)) {
+            throw new FileNotFoundException($path);
+        <span style="background-color: green">}</span>
+
+        parent::__construct($path);
+    }
+
+    /**
+     * Returns the extension based on the mime type.
+     *
+     * If the mime type is unknown, returns null.
+     *
+     * This method uses the mime type as guessed by getMimeType()
+     * to guess the file extension.
+     *
+     * @see MimeTypes
+     * @see getMimeType()
+     */
+    <span style="background-color: red">p</span>ublic function guessExtension(): ?string
+    {
+        <span style="background-color: red">i</span>f (!class_exists(MimeTypes::class)) {
+            throw new \LogicException(&#039;You cannot guess the extension as the Mime component is not installed. Try running &quot;composer require symfony/mime&quot;.&#039;);
+        <span style="background-color: red">}</span>
+
+        return MimeTypes::getDefault()-&gt;getExtensions($this-&gt;getMimeType())[0] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Returns the mime type of the file.
+     *
+     * The mime type is guessed using a MimeTypeGuesserInterface instance,
+     * which uses finfo_file() then the &quot;file&quot; system binary,
+     * depending on which of those are available.
+     *
+     * @see MimeTypes
+     */
+    <span style="background-color: red">p</span>ublic function getMimeType(): ?string
+    {
+        <span style="background-color: red">i</span>f (!class_exists(MimeTypes::class)) {
+            throw new \LogicException(&#039;You cannot guess the mime type as the Mime component is not installed. Try running &quot;composer require symfony/mime&quot;.&#039;);
+        <span style="background-color: red">}</span>
+
+        return MimeTypes::getDefault()-&gt;guessMimeType($this-&gt;getPathname());
+    }
+
+    /**
+     * Moves the file to a new location.
+     *
+     * @throws FileException if the target file could not be created
+     */
+    <span style="background-color: red">p</span>ublic function move(string $directory, ?string $name = null): self
+    {
+        $target = $this-&gt;getTargetFile($directory, $name);
+
+        set_error_handler(<span style="background-color: red">f</span>unction ($type, $msg) use (&amp;$error) { $error = $msg; });
+        try {
+            $renamed = rename($this-&gt;getPathname(), $target);
+        } <span style="background-color: red">f</span>inally {
+            restore_error_handler();
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (!$renamed) {
+            throw new FileException(\sprintf(&#039;Could not move the file &quot;%s&quot; to &quot;%s&quot; (%s).&#039;, $this-&gt;getPathname(), $target, strip_tags($error)));
+        <span style="background-color: red">}</span>
+
+        @chmod($target, 0666 &amp; ~umask());
+
+        return $target;
+    }
+
+    <span style="background-color: red">p</span>ublic function getContent(): string
+    {
+        $content = file_get_contents($this-&gt;getPathname());
+
+        <span style="background-color: red">i</span>f (false === $content) {
+            throw new FileException(\sprintf(&#039;Could not get the content of the file &quot;%s&quot;.&#039;, $this-&gt;getPathname()));
+        <span style="background-color: red">}</span>
+
+        return $content;
+    }
+
+    <span style="background-color: red">p</span>rotected function getTargetFile(string $directory, ?string $name = null): self
+    {
+        <span style="background-color: red">i</span>f (!is_dir($directory)) {
+            <span style="background-color: red">i</span>f (false === @mkdir($directory, 0777, true) &amp;&amp; <span style="background-color: red">!</span>is_dir($directory)) {
+                throw new FileException(\sprintf(&#039;Unable to create the &quot;%s&quot; directory.&#039;, $directory));
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif (!is_writable($directory)) {
+            throw new FileException(\sprintf(&#039;Unable to write in the &quot;%s&quot; directory.&#039;, $directory));
+        <span style="background-color: red">}</span>
+
+        $target = rtrim($directory, &#039;/\\&#039;).\DIRECTORY_SEPARATOR.(null === $name ? $this-&gt;getBasename() : <span style="background-color: red">$</span>this-&gt;getName($name));
+
+        return new self($target, false);
+    }
+
+    /**
+     * Returns locale independent base name of the given path.
+     */
+    <span style="background-color: green">p</span>rotected function getName(string $name): string
+    {
+        $originalName = str_replace(&#039;\\&#039;, &#039;/&#039;, $name);
+        $pos = strrpos($originalName, &#039;/&#039;);
+
+        return false === $pos ? $originalName : <span style="background-color: red">s</span>ubstr($originalName, $pos + 1);
+    }
+}
+</pre>

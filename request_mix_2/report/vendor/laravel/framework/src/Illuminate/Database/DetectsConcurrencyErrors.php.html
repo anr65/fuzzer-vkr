@@ -1,0 +1,38 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database;
+
+use Illuminate\Support\Str;
+use PDOException;
+use Throwable;
+
+trait DetectsConcurrencyErrors
+{
+    /**
+     * Determine if the given exception was caused by a concurrency error such as a deadlock or serialization failure.
+     *
+     * @param  \Throwable  $e
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function causedByConcurrencyError(Throwable $e)
+    {
+        <span style="background-color: red">i</span>f ($e instanceof PDOException &amp;&amp; (<span style="background-color: red">$</span>e-&gt;getCode() === 40001 || <span style="background-color: red">$</span>e-&gt;getCode() === &#039;40001&#039;)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        $message = $e-&gt;getMessage();
+
+        return Str::contains($message, [
+            &#039;Deadlock found when trying to get lock&#039;,
+            &#039;deadlock detected&#039;,
+            &#039;The database file is locked&#039;,
+            &#039;database is locked&#039;,
+            &#039;database table is locked&#039;,
+            &#039;A table in the database is locked&#039;,
+            &#039;has been chosen as the deadlock victim&#039;,
+            &#039;Lock wait timeout exceeded; try restarting transaction&#039;,
+            &#039;WSREP detected deadlock/conflict and aborted the transaction. Try restarting the transaction&#039;,
+        ]);
+    }
+}
+</pre>

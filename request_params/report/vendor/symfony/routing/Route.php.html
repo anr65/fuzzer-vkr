@@ -1,0 +1,470 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Routing;
+
+/**
+ * A Route describes a route and its parameters.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ * @author Tobias Schultze &lt;http://tobion.de&gt;
+ */
+class Route implements \Serializable
+{
+    private string $path = &#039;/&#039;;
+    private string $host = &#039;&#039;;
+    private array $schemes = [];
+    private array $methods = [];
+    private array $defaults = [];
+    private array $requirements = [];
+    private array $options = [];
+    private string $condition = &#039;&#039;;
+    private ?CompiledRoute $compiled = null;
+
+    /**
+     * Constructor.
+     *
+     * Available options:
+     *
+     *  * compiler_class: A class name able to compile this route instance (RouteCompiler by default)
+     *  * utf8:           Whether UTF-8 matching is enforced ot not
+     *
+     * @param string                    $path         The path pattern to match
+     * @param array                     $defaults     An array of default parameter values
+     * @param array&lt;string|\Stringable&gt; $requirements An array of requirements for parameters (regexes)
+     * @param array                     $options      An array of options
+     * @param string|null               $host         The host pattern to match
+     * @param string|string[]           $schemes      A required URI scheme or an array of restricted schemes
+     * @param string|string[]           $methods      A required HTTP method or an array of restricted methods
+     * @param string|null               $condition    A condition that should evaluate to true for the route to match
+     */
+    <span style="background-color: green">p</span>ublic function __construct(string $path, array $defaults = [], array $requirements = [], array $options = [], ?string $host = &#039;&#039;, string|array $schemes = [], string|array $methods = [], ?string $condition = &#039;&#039;)
+    {
+        $this-&gt;setPath($path);
+        $this-&gt;addDefaults($defaults);
+        $this-&gt;addRequirements($requirements);
+        $this-&gt;setOptions($options);
+        $this-&gt;setHost($host);
+        $this-&gt;setSchemes($schemes);
+        $this-&gt;setMethods($methods);
+        $this-&gt;setCondition($condition);
+    }
+
+    <span style="background-color: red">p</span>ublic function __serialize(): array
+    {
+        return [
+            &#039;path&#039; =&gt; $this-&gt;path,
+            &#039;host&#039; =&gt; $this-&gt;host,
+            &#039;defaults&#039; =&gt; $this-&gt;defaults,
+            &#039;requirements&#039; =&gt; $this-&gt;requirements,
+            &#039;options&#039; =&gt; $this-&gt;options,
+            &#039;schemes&#039; =&gt; $this-&gt;schemes,
+            &#039;methods&#039; =&gt; $this-&gt;methods,
+            &#039;condition&#039; =&gt; $this-&gt;condition,
+            &#039;compiled&#039; =&gt; $this-&gt;compiled,
+        ];
+    }
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">f</span>inal public function serialize(): string
+    {
+        throw new \BadMethodCallException(&#039;Cannot serialize &#039;.__CLASS__);
+    }
+
+    <span style="background-color: red">p</span>ublic function __unserialize(array $data): void
+    {
+        $this-&gt;path = $data[&#039;path&#039;];
+        $this-&gt;host = $data[&#039;host&#039;];
+        $this-&gt;defaults = $data[&#039;defaults&#039;];
+        $this-&gt;requirements = $data[&#039;requirements&#039;];
+        $this-&gt;options = $data[&#039;options&#039;];
+        $this-&gt;schemes = $data[&#039;schemes&#039;];
+        $this-&gt;methods = $data[&#039;methods&#039;];
+
+        <span style="background-color: red">i</span>f (isset($data[&#039;condition&#039;])) {
+            $this-&gt;condition = $data[&#039;condition&#039;];
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($data[&#039;compiled&#039;])) {
+            $this-&gt;compiled = $data[&#039;compiled&#039;];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">f</span>inal public function unserialize(string $serialized): void
+    {
+        $this-&gt;__unserialize(unserialize($serialized));
+    }
+
+    <span style="background-color: green">p</span>ublic function getPath(): string
+    {
+        return $this-&gt;path;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setPath(string $pattern): static
+    {
+        $pattern = $this-&gt;extractInlineDefaultsAndRequirements($pattern);
+
+        // A pattern must start with a slash and must not have multiple slashes at the beginning because the
+        // generated path for this route would be confused with a network path, e.g. &#039;//domain.com/path&#039;.
+        $this-&gt;path = &#039;/&#039;.ltrim(trim($pattern), &#039;/&#039;);
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function getHost(): string
+    {
+        return $this-&gt;host;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setHost(?string $pattern): static
+    {
+        $this-&gt;host = $this-&gt;extractInlineDefaultsAndRequirements((string) $pattern);
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    /**
+     * Returns the lowercased schemes this route is restricted to.
+     * So an empty array means that any scheme is allowed.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function getSchemes(): array
+    {
+        return $this-&gt;schemes;
+    }
+
+    /**
+     * Sets the schemes (e.g. &#039;https&#039;) this route is restricted to.
+     * So an empty array means that any scheme is allowed.
+     *
+     * @param string|string[] $schemes The scheme or an array of schemes
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setSchemes(string|array $schemes): static
+    {
+        $this-&gt;schemes = array_map(&#039;strtolower&#039;, (array) $schemes);
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    /**
+     * Checks if a scheme requirement has been set.
+     */
+    <span style="background-color: red">p</span>ublic function hasScheme(string $scheme): bool
+    {
+        return \in_array(strtolower($scheme), $this-&gt;schemes, true);
+    }
+
+    /**
+     * Returns the uppercased HTTP methods this route is restricted to.
+     * So an empty array means that any method is allowed.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function getMethods(): array
+    {
+        return $this-&gt;methods;
+    }
+
+    /**
+     * Sets the HTTP methods (e.g. &#039;POST&#039;) this route is restricted to.
+     * So an empty array means that any method is allowed.
+     *
+     * @param string|string[] $methods The method or an array of methods
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setMethods(string|array $methods): static
+    {
+        $this-&gt;methods = array_map(&#039;strtoupper&#039;, (array) $methods);
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getOptions(): array
+    {
+        return $this-&gt;options;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setOptions(array $options): static
+    {
+        $this-&gt;options = [
+            &#039;compiler_class&#039; =&gt; RouteCompiler::class,
+        ];
+
+        return $this-&gt;addOptions($options);
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function addOptions(array $options): static
+    {
+        <span style="background-color: green">f</span>oreach ($options as $name =&gt; $option) {
+            $this-&gt;options[$name] = $option;
+        <span style="background-color: green">}</span>
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    /**
+     * Sets an option value.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setOption(string $name, mixed $value): static
+    {
+        $this-&gt;options[$name] = $value;
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    /**
+     * Returns the option value or null when not found.
+     */
+    <span style="background-color: green">p</span>ublic function getOption(string $name): mixed
+    {
+        return $this-&gt;options[$name] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasOption(string $name): bool
+    {
+        return \array_key_exists($name, $this-&gt;options);
+    }
+
+    <span style="background-color: red">p</span>ublic function getDefaults(): array
+    {
+        return $this-&gt;defaults;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setDefaults(array $defaults): static
+    {
+        $this-&gt;defaults = [];
+
+        return $this-&gt;addDefaults($defaults);
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function addDefaults(array $defaults): static
+    {
+        <span style="background-color: red">i</span>f (isset($defaults[&#039;_locale&#039;]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;isLocalized()) {
+            unset($defaults[&#039;_locale&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($defaults as $name =&gt; $default) {
+            $this-&gt;defaults[$name] = $default;
+        <span style="background-color: green">}</span>
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function getDefault(string $name): mixed
+    {
+        return $this-&gt;defaults[$name] ?? <span style="background-color: green">n</span>ull;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasDefault(string $name): bool
+    {
+        return \array_key_exists($name, $this-&gt;defaults);
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setDefault(string $name, mixed $default): static
+    {
+        <span style="background-color: red">i</span>f (&#039;_locale&#039; === $name &amp;&amp; <span style="background-color: red">$</span>this-&gt;isLocalized()) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;defaults[$name] = $default;
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getRequirements(): array
+    {
+        return $this-&gt;requirements;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setRequirements(array $requirements): static
+    {
+        $this-&gt;requirements = [];
+
+        return $this-&gt;addRequirements($requirements);
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function addRequirements(array $requirements): static
+    {
+        <span style="background-color: red">i</span>f (isset($requirements[&#039;_locale&#039;]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;isLocalized()) {
+            unset($requirements[&#039;_locale&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($requirements as $key =&gt; $regex) {
+            $this-&gt;requirements[$key] = $this-&gt;sanitizeRequirement($key, $regex);
+        <span style="background-color: green">}</span>
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getRequirement(string $key): ?string
+    {
+        return $this-&gt;requirements[$key] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasRequirement(string $key): bool
+    {
+        return \array_key_exists($key, $this-&gt;requirements);
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setRequirement(string $key, string $regex): static
+    {
+        <span style="background-color: red">i</span>f (&#039;_locale&#039; === $key &amp;&amp; <span style="background-color: red">$</span>this-&gt;isLocalized()) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;requirements[$key] = $this-&gt;sanitizeRequirement($key, $regex);
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getCondition(): string
+    {
+        return $this-&gt;condition;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setCondition(?string $condition): static
+    {
+        $this-&gt;condition = (string) $condition;
+        $this-&gt;compiled = null;
+
+        return $this;
+    }
+
+    /**
+     * Compiles the route.
+     *
+     * @throws \LogicException If the Route cannot be compiled because the
+     *                         path or host pattern is invalid
+     *
+     * @see RouteCompiler which is responsible for the compilation process
+     */
+    <span style="background-color: green">p</span>ublic function compile(): CompiledRoute
+    {
+        <span style="background-color: red">i</span>f (null !== $this-&gt;compiled) {
+            return $this-&gt;compiled;
+        <span style="background-color: green">}</span>
+
+        $class = $this-&gt;getOption(&#039;compiler_class&#039;);
+
+        return $this-&gt;compiled = $class::compile($this);
+    }
+
+    <span style="background-color: green">p</span>rivate function extractInlineDefaultsAndRequirements(string $pattern): string
+    {
+        <span style="background-color: green">i</span>f (false === strpbrk($pattern, &#039;?&lt;:&#039;)) {
+            return $pattern;
+        <span style="background-color: red">}</span>
+
+        $mapping = $this-&gt;getDefault(&#039;_route_mapping&#039;) ?? <span style="background-color: red">[</span>];
+
+        $pattern = preg_replace_callback(&#039;#\{(!?)([\w\x80-\xFF]++)(:[\w\x80-\xFF]++)?(&lt;.*?&gt;)?(\?[^\}]*+)?\}#&#039;, <span style="background-color: red">f</span>unction ($m) use (&amp;$mapping) {
+            <span style="background-color: red">i</span>f (isset($m[5][0])) {
+                $this-&gt;setDefault($m[2], &#039;?&#039; !== $m[5] ? substr($m[5], 1) : <span style="background-color: red">n</span>ull);
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f (isset($m[4][0])) {
+                $this-&gt;setRequirement($m[2], substr($m[4], 1, -1));
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f (isset($m[3][0])) {
+                $mapping[$m[2]] = substr($m[3], 1);
+            <span style="background-color: red">}</span>
+
+            return &#039;{&#039;.$m[1].$m[2].&#039;}&#039;;
+        }, $pattern);
+
+        <span style="background-color: red">i</span>f ($mapping) {
+            $this-&gt;setDefault(&#039;_route_mapping&#039;, $mapping);
+        <span style="background-color: red">}</span>
+
+        return $pattern;
+    }
+
+    <span style="background-color: red">p</span>rivate function sanitizeRequirement(string $key, string $regex): string
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $regex) {
+            <span style="background-color: red">i</span>f (&#039;^&#039; === $regex[0]) {
+                $regex = substr($regex, 1);
+            } <span style="background-color: red">e</span>lseif (str_starts_with($regex, &#039;\\A&#039;)) {
+                $regex = substr($regex, 2);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (str_ends_with($regex, &#039;$&#039;)) {
+            $regex = substr($regex, 0, -1);
+        } <span style="background-color: red">e</span>lseif (\strlen($regex) - 2 === strpos($regex, &#039;\\z&#039;)) {
+            $regex = substr($regex, 0, -2);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;&#039; === $regex) {
+            throw new \InvalidArgumentException(\sprintf(&#039;Routing requirement for &quot;%s&quot; cannot be empty.&#039;, $key));
+        <span style="background-color: red">}</span>
+
+        return $regex;
+    }
+
+    <span style="background-color: red">p</span>rivate function isLocalized(): bool
+    {
+        return isset($this-&gt;defaults[&#039;_locale&#039;]) &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;defaults[&#039;_canonical_route&#039;]) &amp;&amp; <span style="background-color: red">(</span>$this-&gt;requirements[&#039;_locale&#039;] ?? <span style="background-color: red">n</span>ull) === preg_quote($this-&gt;defaults[&#039;_locale&#039;]);
+    }
+}
+</pre>

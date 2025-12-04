@@ -1,0 +1,111 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository\Adapter;
+
+final class ImmutableWriter implements WriterInterface
+{
+    /**
+     * The inner writer to use.
+     *
+     * @var \Dotenv\Repository\Adapter\WriterInterface
+     */
+    private $writer;
+
+    /**
+     * The inner reader to use.
+     *
+     * @var \Dotenv\Repository\Adapter\ReaderInterface
+     */
+    private $reader;
+
+    /**
+     * The record of loaded variables.
+     *
+     * @var array&lt;string,string&gt;
+     */
+    private $loaded;
+
+    /**
+     * Create a new immutable writer instance.
+     *
+     * @param \Dotenv\Repository\Adapter\WriterInterface $writer
+     * @param \Dotenv\Repository\Adapter\ReaderInterface $reader
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function __construct(WriterInterface $writer, ReaderInterface $reader)
+    {
+        $this-&gt;writer = $writer;
+        $this-&gt;reader = $reader;
+        $this-&gt;loaded = [];
+    }
+
+    /**
+     * Write to an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     * @param string           $value
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function write(string $name, string $value)
+    {
+        // Don&#039;t overwrite existing environment variables
+        // Ruby&#039;s dotenv does this with `ENV[key] ||= value`
+        <span style="background-color: red">i</span>f ($this-&gt;isExternallyDefined($name)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Set the value on the inner writer
+        <span style="background-color: red">i</span>f (!$this-&gt;writer-&gt;write($name, $value)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Record that we have loaded the variable
+        $this-&gt;loaded[$name] = &#039;&#039;;
+
+        return true;
+    }
+
+    /**
+     * Delete an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function delete(string $name)
+    {
+        // Don&#039;t clear existing environment variables
+        <span style="background-color: red">i</span>f ($this-&gt;isExternallyDefined($name)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Clear the value on the inner writer
+        <span style="background-color: red">i</span>f (!$this-&gt;writer-&gt;delete($name)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Leave the variable as fair game
+        unset($this-&gt;loaded[$name]);
+
+        return true;
+    }
+
+    /**
+     * Determine if the given variable is externally defined.
+     *
+     * That is, is it an &quot;existing&quot; variable.
+     *
+     * @param non-empty-string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rivate function isExternallyDefined(string $name)
+    {
+        return $this-&gt;reader-&gt;read($name)-&gt;isDefined() &amp;&amp; <span style="background-color: red">!</span>isset($this-&gt;loaded[$name]);
+    }
+}
+</pre>

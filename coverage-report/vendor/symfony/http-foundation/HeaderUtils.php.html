@@ -1,0 +1,299 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+/**
+ * HTTP header utility functions.
+ *
+ * @author Christian Schmidt &lt;github@chsc.dk&gt;
+ */
+class HeaderUtils
+{
+    public const DISPOSITION_ATTACHMENT = &#039;attachment&#039;;
+    public const DISPOSITION_INLINE = &#039;inline&#039;;
+
+    /**
+     * This class should not be instantiated.
+     */
+    <span style="background-color: red">p</span>rivate function __construct()
+    {
+    }
+
+    /**
+     * Splits an HTTP header by one or more separators.
+     *
+     * Example:
+     *
+     *     HeaderUtils::split(&#039;da, en-gb;q=0.8&#039;, &#039;,;&#039;)
+     *     # returns [[&#039;da&#039;], [&#039;en-gb&#039;, &#039;q=0.8&#039;]]
+     *
+     * @param string $separators List of characters to split on, ordered by
+     *                           precedence, e.g. &#039;,&#039;, &#039;;=&#039;, or &#039;,;=&#039;
+     *
+     * @return array Nested array with as many levels as there are characters in
+     *               $separators
+     */
+    <span style="background-color: green">p</span>ublic static function split(string $header, string $separators): array
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; === $separators) {
+            throw new \InvalidArgumentException(&#039;At least one separator must be specified.&#039;);
+        <span style="background-color: green">}</span>
+
+        $quotedSeparators = preg_quote($separators, &#039;/&#039;);
+
+        preg_match_all(&#039;
+            /
+                (?!\s)
+                    (?:
+                        # quoted-string
+                        &quot;(?:[^&quot;\\\\]|\\\\.)*(?:&quot;|\\\\|$)
+                    |
+                        # token
+                        [^&quot;&#039;.$quotedSeparators.&#039;]+
+                    )+
+                (?&lt;!\s)
+            |
+                # separator
+                \s*
+                (?&lt;separator&gt;[&#039;.$quotedSeparators.&#039;])
+                \s*
+            /x&#039;, trim($header), $matches, \PREG_SET_ORDER);
+
+        return self::groupParts($matches, $separators);
+    }
+
+    /**
+     * Combines an array of arrays into one associative array.
+     *
+     * Each of the nested arrays should have one or two elements. The first
+     * value will be used as the keys in the associative array, and the second
+     * will be used as the values, or true if the nested array only contains one
+     * element. Array keys are lowercased.
+     *
+     * Example:
+     *
+     *     HeaderUtils::combine([[&#039;foo&#039;, &#039;abc&#039;], [&#039;bar&#039;]])
+     *     // =&gt; [&#039;foo&#039; =&gt; &#039;abc&#039;, &#039;bar&#039; =&gt; true]
+     */
+    <span style="background-color: green">p</span>ublic static function combine(array $parts): array
+    {
+        $assoc = [];
+        <span style="background-color: green">f</span>oreach ($parts as $part) {
+            $name = strtolower($part[0]);
+            $value = $part[1] ?? <span style="background-color: green">t</span>rue;
+            $assoc[$name] = $value;
+        <span style="background-color: green">}</span>
+
+        return $assoc;
+    }
+
+    /**
+     * Joins an associative array into a string for use in an HTTP header.
+     *
+     * The key and value of each entry are joined with &#039;=&#039;, and all entries
+     * are joined with the specified separator and an additional space (for
+     * readability). Values are quoted if necessary.
+     *
+     * Example:
+     *
+     *     HeaderUtils::toString([&#039;foo&#039; =&gt; &#039;abc&#039;, &#039;bar&#039; =&gt; true, &#039;baz&#039; =&gt; &#039;a b c&#039;], &#039;,&#039;)
+     *     // =&gt; &#039;foo=abc, bar, baz=&quot;a b c&quot;&#039;
+     */
+    <span style="background-color: green">p</span>ublic static function toString(array $assoc, string $separator): string
+    {
+        $parts = [];
+        <span style="background-color: green">f</span>oreach ($assoc as $name =&gt; $value) {
+            <span style="background-color: green">i</span>f (true === $value) {
+                $parts[] = $name;
+            } <span style="background-color: red">e</span>lse {
+                $parts[] = $name.&#039;=&#039;.self::quote($value);
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return implode($separator.&#039; &#039;, $parts);
+    }
+
+    /**
+     * Encodes a string as a quoted string, if necessary.
+     *
+     * If a string contains characters not allowed by the &quot;token&quot; construct in
+     * the HTTP specification, it is backslash-escaped and enclosed in quotes
+     * to match the &quot;quoted-string&quot; construct.
+     */
+    <span style="background-color: red">p</span>ublic static function quote(string $s): string
+    {
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^[a-z0-9!#$%&amp;\&#039;*.^_`|~-]+$/i&#039;, $s)) {
+            return $s;
+        <span style="background-color: red">}</span>
+
+        return &#039;&quot;&#039;.addcslashes($s, &#039;&quot;\\&quot;&#039;).&#039;&quot;&#039;;
+    }
+
+    /**
+     * Decodes a quoted string.
+     *
+     * If passed an unquoted string that matches the &quot;token&quot; construct (as
+     * defined in the HTTP specification), it is passed through verbatim.
+     */
+    <span style="background-color: green">p</span>ublic static function unquote(string $s): string
+    {
+        return preg_replace(&#039;/\\\\(.)|&quot;/&#039;, &#039;$1&#039;, $s);
+    }
+
+    /**
+     * Generates an HTTP Content-Disposition field-value.
+     *
+     * @param string $disposition      One of &quot;inline&quot; or &quot;attachment&quot;
+     * @param string $filename         A unicode string
+     * @param string $filenameFallback A string containing only ASCII characters that
+     *                                 is semantically equivalent to $filename. If the filename is already ASCII,
+     *                                 it can be omitted, or just copied from $filename
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @see RFC 6266
+     */
+    <span style="background-color: red">p</span>ublic static function makeDisposition(string $disposition, string $filename, string $filenameFallback = &#039;&#039;): string
+    {
+        <span style="background-color: red">i</span>f (!\in_array($disposition, [self::DISPOSITION_ATTACHMENT, self::DISPOSITION_INLINE])) {
+            throw new \InvalidArgumentException(\sprintf(&#039;The disposition must be either &quot;%s&quot; or &quot;%s&quot;.&#039;, self::DISPOSITION_ATTACHMENT, self::DISPOSITION_INLINE));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;&#039; === $filenameFallback) {
+            $filenameFallback = $filename;
+        <span style="background-color: red">}</span>
+
+        // filenameFallback is not ASCII.
+        <span style="background-color: red">i</span>f (!preg_match(&#039;/^[\x20-\x7e]*$/&#039;, $filenameFallback)) {
+            throw new \InvalidArgumentException(&#039;The filename fallback must only contain ASCII characters.&#039;);
+        <span style="background-color: red">}</span>
+
+        // percent characters aren&#039;t safe in fallback.
+        <span style="background-color: red">i</span>f (str_contains($filenameFallback, &#039;%&#039;)) {
+            throw new \InvalidArgumentException(&#039;The filename fallback cannot contain the &quot;%&quot; character.&#039;);
+        <span style="background-color: red">}</span>
+
+        // path separators aren&#039;t allowed in either.
+        <span style="background-color: red">i</span>f (str_contains($filename, &#039;/&#039;) || <span style="background-color: red">s</span>tr_contains($filename, &#039;\\&#039;) || <span style="background-color: red">s</span>tr_contains($filenameFallback, &#039;/&#039;) || <span style="background-color: red">s</span>tr_contains($filenameFallback, &#039;\\&#039;)) {
+            throw new \InvalidArgumentException(&#039;The filename and the fallback cannot contain the &quot;/&quot; and &quot;\\&quot; characters.&#039;);
+        <span style="background-color: red">}</span>
+
+        $params = [&#039;filename&#039; =&gt; $filenameFallback];
+        <span style="background-color: red">i</span>f ($filename !== $filenameFallback) {
+            $params[&#039;filename*&#039;] = &quot;utf-8&#039;&#039;&quot;.rawurlencode($filename);
+        <span style="background-color: red">}</span>
+
+        return $disposition.&#039;; &#039;.self::toString($params, &#039;;&#039;);
+    }
+
+    /**
+     * Like parse_str(), but preserves dots in variable names.
+     */
+    <span style="background-color: red">p</span>ublic static function parseQuery(string $query, bool $ignoreBrackets = false, string $separator = &#039;&amp;&#039;): array
+    {
+        $q = [];
+
+        <span style="background-color: red">f</span>oreach (explode($separator, $query) as $v) {
+            <span style="background-color: red">i</span>f (false !== $i = strpos($v, &quot;\0&quot;)) {
+                $v = substr($v, 0, $i);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (false === $i = strpos($v, &#039;=&#039;)) {
+                $k = urldecode($v);
+                $v = &#039;&#039;;
+            } <span style="background-color: red">e</span>lse {
+                $k = urldecode(substr($v, 0, $i));
+                $v = substr($v, $i);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (false !== $i = strpos($k, &quot;\0&quot;)) {
+                $k = substr($k, 0, $i);
+            <span style="background-color: red">}</span>
+
+            $k = ltrim($k, &#039; &#039;);
+
+            <span style="background-color: red">i</span>f ($ignoreBrackets) {
+                $q[$k][] = urldecode(substr($v, 1));
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (false === $i = strpos($k, &#039;[&#039;)) {
+                $q[] = bin2hex($k).$v;
+            } <span style="background-color: red">e</span>lse {
+                $q[] = bin2hex(substr($k, 0, $i)).rawurlencode(substr($k, $i)).$v;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($ignoreBrackets) {
+            return $q;
+        <span style="background-color: red">}</span>
+
+        parse_str(implode(&#039;&amp;&#039;, $q), $q);
+
+        $query = [];
+
+        <span style="background-color: red">f</span>oreach ($q as $k =&gt; $v) {
+            <span style="background-color: red">i</span>f (false !== $i = strpos($k, &#039;_&#039;)) {
+                $query[substr_replace($k, hex2bin(substr($k, 0, $i)).&#039;[&#039;, 0, 1 + $i)] = $v;
+            } <span style="background-color: red">e</span>lse {
+                $query[hex2bin($k)] = $v;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $query;
+    }
+
+    <span style="background-color: green">p</span>rivate static function groupParts(array $matches, string $separators, bool $first = true): array
+    {
+        $separator = $separators[0];
+        $separators = substr($separators, 1) ?: <span style="background-color: green">'</span>&#039;;
+        $i = 0;
+
+        <span style="background-color: green">i</span>f (&#039;&#039; === $separators &amp;&amp; <span style="background-color: green">!</span>$first) {
+            $parts = [&#039;&#039;];
+
+            <span style="background-color: green">f</span>oreach ($matches as $match) {
+                <span style="background-color: green">i</span>f (!$i &amp;&amp; <span style="background-color: green">i</span>sset($match[&#039;separator&#039;])) {
+                    $i = 1;
+                    $parts[1] = &#039;&#039;;
+                } <span style="background-color: green">e</span>lse {
+                    $parts[$i] .= self::unquote($match[0]);
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            return $parts;
+        <span style="background-color: green">}</span>
+
+        $parts = [];
+        $partMatches = [];
+
+        <span style="background-color: green">f</span>oreach ($matches as $match) {
+            <span style="background-color: green">i</span>f (($match[&#039;separator&#039;] ?? <span style="background-color: green">n</span>ull) === $separator) {
+                ++$i;
+            } <span style="background-color: green">e</span>lse {
+                $partMatches[$i][] = $match;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($partMatches as $matches) {
+            <span style="background-color: red">i</span>f (&#039;&#039; === $separators &amp;&amp; <span style="background-color: red">'</span>&#039; !== $unquoted = self::unquote($matches[0][0])) {
+                $parts[] = $unquoted;
+            } <span style="background-color: green">e</span>lseif ($groupedParts = self::groupParts($matches, $separators, false)) {
+                $parts[] = $groupedParts;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $parts;
+    }
+}
+</pre>

@@ -1,0 +1,2 @@
+php bin/php-fuzzer fuzz yaml_parse/target.php corpus-yaml/ --max-runs=100000
+php bin/php-fuzzer report-coverage yaml_parse/target.php corpus/ yaml_parse/report

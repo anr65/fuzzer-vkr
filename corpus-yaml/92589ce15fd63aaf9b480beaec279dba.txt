@@ -1,0 +1,7 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ria=les:
+    COVFUZZ_ADDITIONAL'
+  trigger:
+    RGS: '-max_total_time $CI_COMMIT_BRANCH == 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_request_
+   t'

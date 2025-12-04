@@ -1,0 +1,129 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Traits;
+
+use BadMethodCallException;
+use Closure;
+use ReflectionClass;
+use ReflectionMethod;
+
+trait Macroable
+{
+    /**
+     * The registered string macros.
+     *
+     * @var array
+     */
+    protected static $macros = [];
+
+    /**
+     * Register a custom macro.
+     *
+     * @param  string  $name
+     * @param  object|callable  $macro
+     *
+     * @param-closure-this static  $macro
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function macro($name, $macro)
+    {
+        static::$macros[$name] = $macro;
+    }
+
+    /**
+     * Mix another object into the class.
+     *
+     * @param  object  $mixin
+     * @param  bool  $replace
+     * @return void
+     *
+     * @throws \ReflectionException
+     */
+    <span style="background-color: red">p</span>ublic static function mixin($mixin, $replace = true)
+    {
+        $methods = (new ReflectionClass($mixin))-&gt;getMethods(
+            ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED
+        );
+
+        <span style="background-color: red">f</span>oreach ($methods as $method) {
+            <span style="background-color: red">i</span>f ($replace || <span style="background-color: red">!</span> static::hasMacro($method-&gt;name)) {
+                static::macro($method-&gt;name, $method-&gt;invoke($mixin));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Checks if macro is registered.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function hasMacro($name)
+    {
+        return isset(static::$macros[$name]);
+    }
+
+    /**
+     * Flush the existing macros.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushMacros()
+    {
+        static::$macros = [];
+    }
+
+    /**
+     * Dynamically handle calls to the class.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>ublic static function __callStatic($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (! static::hasMacro($method)) {
+            throw new BadMethodCallException(sprintf(
+                &#039;Method %s::%s does not exist.&#039;, static::class, $method
+            ));
+        <span style="background-color: red">}</span>
+
+        $macro = static::$macros[$method];
+
+        <span style="background-color: red">i</span>f ($macro instanceof Closure) {
+            $macro = $macro-&gt;bindTo(null, static::class);
+        <span style="background-color: red">}</span>
+
+        return $macro(...$parameters);
+    }
+
+    /**
+     * Dynamically handle calls to the class.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (! static::hasMacro($method)) {
+            throw new BadMethodCallException(sprintf(
+                &#039;Method %s::%s does not exist.&#039;, static::class, $method
+            ));
+        <span style="background-color: red">}</span>
+
+        $macro = static::$macros[$method];
+
+        <span style="background-color: red">i</span>f ($macro instanceof Closure) {
+            $macro = $macro-&gt;bindTo($this, static::class);
+        <span style="background-color: red">}</span>
+
+        return $macro(...$parameters);
+    }
+}
+</pre>

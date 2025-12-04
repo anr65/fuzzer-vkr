@@ -1,0 +1,124 @@
+<pre>&lt;?php
+
+use Symfony\Component\Yaml\Parser;
+use Symfony\Component\Yaml\Yaml;
+use Symfony\Component\Yaml\Exception\ParseException;
+
+// Подключаем автозагрузчик
+require __DIR__ . &#039;/../vendor/autoload.php&#039;;
+
+/** @var \PhpFuzzer\Config $config*/
+
+
+// Настройка цели фаззинга
+$config-&gt;setTarget(<span style="background-color: green">f</span>unction (string $input) {
+    try {
+        $parser = new Parser();
+
+        //
+        // 1) parseFile() на не-существующий и не-читаемый файл
+        //
+        try {
+            $parser-&gt;parseFile(__DIR__ . &#039;/does-not-exist.yml&#039;);
+        } <span style="background-color: red">c</span>atch (ParseException $e) {
+            // should hit &quot;File ... does not exist.&quot;
+        <span style="background-color: green">}</span>
+
+        $tmp = tempnam(sys_get_temp_dir(), &#039;yf&#039;);
+        file_put_contents($tmp, $input);
+        chmod($tmp, 0000);
+        try {
+            $parser-&gt;parseFile($tmp);
+        } <span style="background-color: red">c</span>atch (ParseException $e) {
+            // should hit &quot;cannot be read&quot;
+        <span style="background-color: green">}</span>
+        @unlink($tmp);
+
+        //
+        // 2) быстрая проверка пустых входов и комментариев
+        //
+        <span style="background-color: green">f</span>oreach ([&quot;&quot;, &quot;\n&quot;, &quot;# just a comment\n# another\n&quot;] as $doc) {
+            try {
+                $parser-&gt;parse($doc, 0);
+            } <span style="background-color: red">c</span>atch (ParseException $e) {
+                // skip
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        //
+        // 3) тест табов в начале строки
+        //
+        try {
+            $parser-&gt;parse(&quot;\tbad: indent&quot;);
+        } <span style="background-color: red">c</span>atch (ParseException $e) {
+            // &quot;A YAML file cannot contain tabs as indentation.&quot;
+        <span style="background-color: green">}</span>
+
+        //
+        // 4) основной набор флагов
+        //
+        $flagsList = [
+            0,
+            Yaml::PARSE_CUSTOM_TAGS,
+            Yaml::PARSE_OBJECT_FOR_MAP,
+            Yaml::PARSE_CUSTOM_TAGS | Yaml::PARSE_OBJECT_FOR_MAP,
+        ];
+
+        //
+        // 5) расширенный корпус «специальных» документов
+        //
+        $docs = [
+            &quot;key: {$input}&quot;,
+            // тег без отступа и с отступом
+            &quot;!mytag\n  value: {$input}&quot;,
+            // встроенный тег binary
+            &quot;!!binary |+\n  &quot; . rtrim(base64_encode($input)) . &quot;\n&quot;,
+            // неправильный блок
+            &quot;- ? bad&quot;,
+            // merge-узел с массивом
+            &quot;&amp;r {$input}\nr: *r&quot;,
+            &quot;&lt;&lt;: [ {a:1}, {b:2} ]&quot;,
+            // merge-узел с одиночным mapping
+            &quot;&lt;&lt;: &amp;m {x:1}\nmap: *m&quot;,
+            // блок-скаляр folded/chomp
+            &quot;&gt;-\n  line1: {$input}\n  line2\n&quot;,
+            // literal/chomp
+            &quot;|\n  hello\n world\n&quot;,
+            &quot;|-\n  one\n  two\n&quot;,
+            // colon in unquoted mapping value
+            &quot;foo: unquoted:colon&quot;,
+            // bare sequence then mapping (ошибка)
+            &quot;- item1\nkey: item2&quot;,
+            // float numeric ключ
+            &quot;3.14: pi&quot;,
+            // inline-mapping и inline-sequence
+            &quot;{foo: {$input}, bar: [1,2,3]}&quot;,
+            &quot;[alpha, {$input}, gamma]&quot;,
+            // YAML header и document markers
+            &quot;%YAML 1.2\n---\nfoo: bar\n...\n&quot;,
+        ];
+
+        <span style="background-color: green">f</span>oreach ($docs as $doc) {
+            <span style="background-color: green">f</span>oreach ($flagsList as $flags) {
+                try {
+                    $parser-&gt;parse($doc, $flags);
+                } <span style="background-color: red">c</span>atch (ParseException $e) {
+                    // ignore
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        //
+        // 6) ещё раз run parse() произвольного input, чтобы ловить UTF-8 ошибки
+        //
+        try {
+            $parser-&gt;parse($input, 0);
+        } <span style="background-color: red">c</span>atch (ParseException $e) {
+            // если в input невалидный UTF-8
+        <span style="background-color: green">}</span>
+    } <span style="background-color: red">c</span>atch (ParseException $e) {
+        // Синтаксические/семантические ошибки YAML игнорируем
+        return;
+    <span style="background-color: green">}</span>
+});
+</pre>

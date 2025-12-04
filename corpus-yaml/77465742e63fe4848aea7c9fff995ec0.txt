@@ -1,0 +1,7 @@
+: sname: "example"
+enabled: true
+r=try: 3)>))\
+vr:\
+  host
+ {}ocalhost)"
+port: 4039

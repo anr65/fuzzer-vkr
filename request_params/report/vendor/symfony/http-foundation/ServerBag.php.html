@@ -1,0 +1,98 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+/**
+ * ServerBag is a container for HTTP headers from the $_SERVER variable.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ * @author Bulat Shakirzyanov &lt;mallluhuct@gmail.com&gt;
+ * @author Robert Kiss &lt;kepten@gmail.com&gt;
+ */
+class ServerBag extends ParameterBag
+{
+    /**
+     * Gets the HTTP headers.
+     */
+    <span style="background-color: green">p</span>ublic function getHeaders(): array
+    {
+        $headers = [];
+        <span style="background-color: green">f</span>oreach ($this-&gt;parameters as $key =&gt; $value) {
+            <span style="background-color: green">i</span>f (str_starts_with($key, &#039;HTTP_&#039;)) {
+                $headers[substr($key, 5)] = $value;
+            } <span style="background-color: red">e</span>lseif (\in_array($key, [&#039;CONTENT_TYPE&#039;, &#039;CONTENT_LENGTH&#039;, &#039;CONTENT_MD5&#039;], true) &amp;&amp; <span style="background-color: red">'</span>&#039; !== $value) {
+                $headers[$key] = $value;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;parameters[&#039;PHP_AUTH_USER&#039;])) {
+            $headers[&#039;PHP_AUTH_USER&#039;] = $this-&gt;parameters[&#039;PHP_AUTH_USER&#039;];
+            $headers[&#039;PHP_AUTH_PW&#039;] = $this-&gt;parameters[&#039;PHP_AUTH_PW&#039;] ?? <span style="background-color: red">'</span>&#039;;
+        } <span style="background-color: green">e</span>lse {
+            /*
+             * php-cgi under Apache does not pass HTTP Basic user/pass to PHP by default
+             * For this workaround to work, add these lines to your .htaccess file:
+             * RewriteCond %{HTTP:Authorization} .+
+             * RewriteRule ^ - [E=HTTP_AUTHORIZATION:%0]
+             *
+             * A sample .htaccess file:
+             * RewriteEngine On
+             * RewriteCond %{HTTP:Authorization} .+
+             * RewriteRule ^ - [E=HTTP_AUTHORIZATION:%0]
+             * RewriteCond %{REQUEST_FILENAME} !-f
+             * RewriteRule ^(.*)$ index.php [QSA,L]
+             */
+
+            $authorizationHeader = null;
+            <span style="background-color: red">i</span>f (isset($this-&gt;parameters[&#039;HTTP_AUTHORIZATION&#039;])) {
+                $authorizationHeader = $this-&gt;parameters[&#039;HTTP_AUTHORIZATION&#039;];
+            } <span style="background-color: red">e</span>lseif (isset($this-&gt;parameters[&#039;REDIRECT_HTTP_AUTHORIZATION&#039;])) {
+                $authorizationHeader = $this-&gt;parameters[&#039;REDIRECT_HTTP_AUTHORIZATION&#039;];
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (null !== $authorizationHeader) {
+                <span style="background-color: red">i</span>f (0 === stripos($authorizationHeader, &#039;basic &#039;)) {
+                    // Decode AUTHORIZATION header into PHP_AUTH_USER and PHP_AUTH_PW when authorization header is basic
+                    $exploded = explode(&#039;:&#039;, base64_decode(substr($authorizationHeader, 6)), 2);
+                    <span style="background-color: red">i</span>f (2 == \count($exploded)) {
+                        [$headers[&#039;PHP_AUTH_USER&#039;], $headers[&#039;PHP_AUTH_PW&#039;]] = $exploded;
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: red">e</span>lseif (empty($this-&gt;parameters[&#039;PHP_AUTH_DIGEST&#039;]) &amp;&amp; (<span style="background-color: red">0</span> === stripos($authorizationHeader, &#039;digest &#039;))) {
+                    // In some circumstances PHP_AUTH_DIGEST needs to be set
+                    $headers[&#039;PHP_AUTH_DIGEST&#039;] = $authorizationHeader;
+                    $this-&gt;parameters[&#039;PHP_AUTH_DIGEST&#039;] = $authorizationHeader;
+                } <span style="background-color: red">e</span>lseif (0 === stripos($authorizationHeader, &#039;bearer &#039;)) {
+                    /*
+                     * XXX: Since there is no PHP_AUTH_BEARER in PHP predefined variables,
+                     *      I&#039;ll just set $headers[&#039;AUTHORIZATION&#039;] here.
+                     *      https://php.net/reserved.variables.server
+                     */
+                    $headers[&#039;AUTHORIZATION&#039;] = $authorizationHeader;
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($headers[&#039;AUTHORIZATION&#039;])) {
+            return $headers;
+        <span style="background-color: green">}</span>
+
+        // PHP_AUTH_USER/PHP_AUTH_PW
+        <span style="background-color: red">i</span>f (isset($headers[&#039;PHP_AUTH_USER&#039;])) {
+            $headers[&#039;AUTHORIZATION&#039;] = &#039;Basic &#039;.base64_encode($headers[&#039;PHP_AUTH_USER&#039;].&#039;:&#039;.($headers[&#039;PHP_AUTH_PW&#039;] ?? <span style="background-color: red">'</span>&#039;));
+        } <span style="background-color: red">e</span>lseif (isset($headers[&#039;PHP_AUTH_DIGEST&#039;])) {
+            $headers[&#039;AUTHORIZATION&#039;] = $headers[&#039;PHP_AUTH_DIGEST&#039;];
+        <span style="background-color: green">}</span>
+
+        return $headers;
+    }
+}
+</pre>

@@ -1,0 +1,272 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+/**
+ * ResponseHeaderBag is a container for Response HTTP headers.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class ResponseHeaderBag extends HeaderBag
+{
+    public const COOKIES_FLAT = &#039;flat&#039;;
+    public const COOKIES_ARRAY = &#039;array&#039;;
+
+    public const DISPOSITION_ATTACHMENT = &#039;attachment&#039;;
+    public const DISPOSITION_INLINE = &#039;inline&#039;;
+
+    protected array $computedCacheControl = [];
+    protected array $cookies = [];
+    protected array $headerNames = [];
+
+    <span style="background-color: green">p</span>ublic function __construct(array $headers = [])
+    {
+        parent::__construct($headers);
+
+        <span style="background-color: green">i</span>f (!isset($this-&gt;headers[&#039;cache-control&#039;])) {
+            $this-&gt;set(&#039;Cache-Control&#039;, &#039;&#039;);
+        <span style="background-color: green">}</span>
+
+        /* RFC2616 - 14.18 says all Responses need to have a Date */
+        <span style="background-color: green">i</span>f (!isset($this-&gt;headers[&#039;date&#039;])) {
+            $this-&gt;initDate();
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Returns the headers, with original capitalizations.
+     */
+    <span style="background-color: red">p</span>ublic function allPreserveCase(): array
+    {
+        $headers = [];
+        <span style="background-color: red">f</span>oreach ($this-&gt;all() as $name =&gt; $value) {
+            $headers[$this-&gt;headerNames[$name] ?? <span style="background-color: red">$</span>name] = $value;
+        <span style="background-color: red">}</span>
+
+        return $headers;
+    }
+
+    <span style="background-color: red">p</span>ublic function allPreserveCaseWithoutCookies(): array
+    {
+        $headers = $this-&gt;allPreserveCase();
+        <span style="background-color: red">i</span>f (isset($this-&gt;headerNames[&#039;set-cookie&#039;])) {
+            unset($headers[$this-&gt;headerNames[&#039;set-cookie&#039;]]);
+        <span style="background-color: red">}</span>
+
+        return $headers;
+    }
+
+    <span style="background-color: red">p</span>ublic function replace(array $headers = []): void
+    {
+        $this-&gt;headerNames = [];
+
+        parent::replace($headers);
+
+        <span style="background-color: red">i</span>f (!isset($this-&gt;headers[&#039;cache-control&#039;])) {
+            $this-&gt;set(&#039;Cache-Control&#039;, &#039;&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!isset($this-&gt;headers[&#039;date&#039;])) {
+            $this-&gt;initDate();
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: green">p</span>ublic function all(?string $key = null): array
+    {
+        $headers = parent::all();
+
+        <span style="background-color: red">i</span>f (null !== $key) {
+            $key = strtr($key, self::UPPER, self::LOWER);
+
+            return &#039;set-cookie&#039; !== $key ? $headers[$key] ?? <span style="background-color: red">[</span>] : <span style="background-color: red">a</span>rray_map(&#039;strval&#039;, $this-&gt;getCookies());
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;getCookies() as $cookie) {
+            $headers[&#039;set-cookie&#039;][] = (string) $cookie;
+        <span style="background-color: green">}</span>
+
+        return $headers;
+    }
+
+    <span style="background-color: green">p</span>ublic function set(string $key, string|array|null $values, bool $replace = true): void
+    {
+        $uniqueKey = strtr($key, self::UPPER, self::LOWER);
+
+        <span style="background-color: red">i</span>f (&#039;set-cookie&#039; === $uniqueKey) {
+            <span style="background-color: red">i</span>f ($replace) {
+                $this-&gt;cookies = [];
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">f</span>oreach ((array) $values as $cookie) {
+                $this-&gt;setCookie(Cookie::fromString($cookie));
+            <span style="background-color: red">}</span>
+            $this-&gt;headerNames[$uniqueKey] = $key;
+
+            return;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;headerNames[$uniqueKey] = $key;
+
+        parent::set($key, $values, $replace);
+
+        // ensure the cache-control header has sensible defaults
+        <span style="background-color: green">i</span>f (\in_array($uniqueKey, [&#039;cache-control&#039;, &#039;etag&#039;, &#039;last-modified&#039;, &#039;expires&#039;], true) &amp;&amp; <span style="background-color: green">'</span>&#039; !== $computed = $this-&gt;computeCacheControlValue()) {
+            $this-&gt;headers[&#039;cache-control&#039;] = [$computed];
+            $this-&gt;headerNames[&#039;cache-control&#039;] = &#039;Cache-Control&#039;;
+            $this-&gt;computedCacheControl = $this-&gt;parseCacheControl($computed);
+        <span style="background-color: green">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function remove(string $key): void
+    {
+        $uniqueKey = strtr($key, self::UPPER, self::LOWER);
+        unset($this-&gt;headerNames[$uniqueKey]);
+
+        <span style="background-color: red">i</span>f (&#039;set-cookie&#039; === $uniqueKey) {
+            $this-&gt;cookies = [];
+
+            return;
+        <span style="background-color: red">}</span>
+
+        parent::remove($key);
+
+        <span style="background-color: red">i</span>f (&#039;cache-control&#039; === $uniqueKey) {
+            $this-&gt;computedCacheControl = [];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;date&#039; === $uniqueKey) {
+            $this-&gt;initDate();
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function hasCacheControlDirective(string $key): bool
+    {
+        return \array_key_exists($key, $this-&gt;computedCacheControl);
+    }
+
+    <span style="background-color: red">p</span>ublic function getCacheControlDirective(string $key): bool|string|null
+    {
+        return $this-&gt;computedCacheControl[$key] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    <span style="background-color: red">p</span>ublic function setCookie(Cookie $cookie): void
+    {
+        $this-&gt;cookies[$cookie-&gt;getDomain()][$cookie-&gt;getPath()][$cookie-&gt;getName()] = $cookie;
+        $this-&gt;headerNames[&#039;set-cookie&#039;] = &#039;Set-Cookie&#039;;
+    }
+
+    /**
+     * Removes a cookie from the array, but does not unset it in the browser.
+     */
+    <span style="background-color: red">p</span>ublic function removeCookie(string $name, ?string $path = &#039;/&#039;, ?string $domain = null): void
+    {
+        $path ??= <span style="background-color: red">'</span>/&#039;;
+
+        unset($this-&gt;cookies[$domain][$path][$name]);
+
+        <span style="background-color: red">i</span>f (empty($this-&gt;cookies[$domain][$path])) {
+            unset($this-&gt;cookies[$domain][$path]);
+
+            <span style="background-color: red">i</span>f (empty($this-&gt;cookies[$domain])) {
+                unset($this-&gt;cookies[$domain]);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$this-&gt;cookies) {
+            unset($this-&gt;headerNames[&#039;set-cookie&#039;]);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns an array with all cookies.
+     *
+     * @return Cookie[]
+     *
+     * @throws \InvalidArgumentException When the $format is invalid
+     */
+    <span style="background-color: green">p</span>ublic function getCookies(string $format = self::COOKIES_FLAT): array
+    {
+        <span style="background-color: red">i</span>f (!\in_array($format, [self::COOKIES_FLAT, self::COOKIES_ARRAY])) {
+            throw new \InvalidArgumentException(\sprintf(&#039;Format &quot;%s&quot; invalid (%s).&#039;, $format, implode(&#039;, &#039;, [self::COOKIES_FLAT, self::COOKIES_ARRAY])));
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (self::COOKIES_ARRAY === $format) {
+            return $this-&gt;cookies;
+        <span style="background-color: green">}</span>
+
+        $flattenedCookies = [];
+        <span style="background-color: red">f</span>oreach ($this-&gt;cookies as $path) {
+            <span style="background-color: red">f</span>oreach ($path as $cookies) {
+                <span style="background-color: red">f</span>oreach ($cookies as $cookie) {
+                    $flattenedCookies[] = $cookie;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return $flattenedCookies;
+    }
+
+    /**
+     * Clears a cookie in the browser.
+     *
+     * @param bool $partitioned
+     */
+    <span style="background-color: red">p</span>ublic function clearCookie(string $name, ?string $path = &#039;/&#039;, ?string $domain = null, bool $secure = false, bool $httpOnly = true, ?string $sameSite = null /* , bool $partitioned = false */): void
+    {
+        $partitioned = 6 &lt; \func_num_args() ? \func_get_arg(6) : <span style="background-color: red">f</span>alse;
+
+        $this-&gt;setCookie(new Cookie($name, null, 1, $path, $domain, $secure, $httpOnly, false, $sameSite, $partitioned));
+    }
+
+    /**
+     * @see HeaderUtils::makeDisposition()
+     */
+    <span style="background-color: red">p</span>ublic function makeDisposition(string $disposition, string $filename, string $filenameFallback = &#039;&#039;): string
+    {
+        return HeaderUtils::makeDisposition($disposition, $filename, $filenameFallback);
+    }
+
+    /**
+     * Returns the calculated value of the cache-control header.
+     *
+     * This considers several other headers and calculates or modifies the
+     * cache-control header to a sensible, conservative value.
+     */
+    <span style="background-color: green">p</span>rotected function computeCacheControlValue(): string
+    {
+        <span style="background-color: green">i</span>f (!$this-&gt;cacheControl) {
+            <span style="background-color: red">i</span>f ($this-&gt;has(&#039;Last-Modified&#039;) || <span style="background-color: green">$</span>this-&gt;has(&#039;Expires&#039;)) {
+                return &#039;private, must-revalidate&#039;; // allows for heuristic expiration (RFC 7234 Section 4.2.2) in the case of &quot;Last-Modified&quot;
+            <span style="background-color: green">}</span>
+
+            // conservative by default
+            return &#039;no-cache, private&#039;;
+        <span style="background-color: red">}</span>
+
+        $header = $this-&gt;getCacheControlHeader();
+        <span style="background-color: red">i</span>f (isset($this-&gt;cacheControl[&#039;public&#039;]) || <span style="background-color: red">i</span>sset($this-&gt;cacheControl[&#039;private&#039;])) {
+            return $header;
+        <span style="background-color: red">}</span>
+
+        // public if s-maxage is defined, private otherwise
+        <span style="background-color: red">i</span>f (!isset($this-&gt;cacheControl[&#039;s-maxage&#039;])) {
+            return $header.&#039;, private&#039;;
+        <span style="background-color: red">}</span>
+
+        return $header;
+    }
+
+    <span style="background-color: green">p</span>rivate function initDate(): void
+    {
+        $this-&gt;set(&#039;Date&#039;, gmdate(&#039;D, d M Y H:i:s&#039;).&#039; GMT&#039;);
+    }
+}
+</pre>

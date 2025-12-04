@@ -1,0 +1,1192 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Traits;
+
+use BackedEnum;
+use CachingIterator;
+use Closure;
+use Exception;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Enumerable;
+use Illuminate\Support\HigherOrderCollectionProxy;
+use InvalidArgumentException;
+use JsonSerializable;
+use Traversable;
+use UnexpectedValueException;
+use UnitEnum;
+use WeakMap;
+
+use function Illuminate\Support\enum_value;
+
+/**
+ * @template TKey of array-key
+ *
+ * @template-covariant TValue
+ *
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $average
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $avg
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $contains
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $doesntContain
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $each
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $every
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $filter
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $first
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $flatMap
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $groupBy
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $keyBy
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $last
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $map
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $max
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $min
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $partition
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $percentage
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $reject
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $skipUntil
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $skipWhile
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $some
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $sortBy
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $sortByDesc
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $sum
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $takeUntil
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $takeWhile
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $unique
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $unless
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $until
+ * @property-read HigherOrderCollectionProxy&lt;TKey, TValue&gt; $when
+ */
+trait EnumeratesValues
+{
+    use Conditionable;
+
+    /**
+     * Indicates that the object&#039;s string representation should be escaped when __toString is invoked.
+     *
+     * @var bool
+     */
+    protected $escapeWhenCastingToString = false;
+
+    /**
+     * The methods that can be proxied.
+     *
+     * @var array&lt;int, string&gt;
+     */
+    protected static $proxies = [
+        &#039;average&#039;,
+        &#039;avg&#039;,
+        &#039;contains&#039;,
+        &#039;doesntContain&#039;,
+        &#039;each&#039;,
+        &#039;every&#039;,
+        &#039;filter&#039;,
+        &#039;first&#039;,
+        &#039;flatMap&#039;,
+        &#039;groupBy&#039;,
+        &#039;keyBy&#039;,
+        &#039;last&#039;,
+        &#039;map&#039;,
+        &#039;max&#039;,
+        &#039;min&#039;,
+        &#039;partition&#039;,
+        &#039;percentage&#039;,
+        &#039;reject&#039;,
+        &#039;skipUntil&#039;,
+        &#039;skipWhile&#039;,
+        &#039;some&#039;,
+        &#039;sortBy&#039;,
+        &#039;sortByDesc&#039;,
+        &#039;sum&#039;,
+        &#039;takeUntil&#039;,
+        &#039;takeWhile&#039;,
+        &#039;unique&#039;,
+        &#039;unless&#039;,
+        &#039;until&#039;,
+        &#039;when&#039;,
+    ];
+
+    /**
+     * Create a new collection instance if the value isn&#039;t one already.
+     *
+     * @template TMakeKey of array-key
+     * @template TMakeValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable&lt;TMakeKey, TMakeValue&gt;|iterable&lt;TMakeKey, TMakeValue&gt;|null  $items
+     * @return static&lt;TMakeKey, TMakeValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function make($items = [])
+    {
+        return new static($items);
+    }
+
+    /**
+     * Wrap the given value in a collection if applicable.
+     *
+     * @template TWrapValue
+     *
+     * @param  iterable&lt;array-key, TWrapValue&gt;|TWrapValue  $value
+     * @return static&lt;array-key, TWrapValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function wrap($value)
+    {
+        return $value instanceof Enumerable
+            ? new static($value)
+            : <span style="background-color: red">n</span>ew static(Arr::wrap($value));
+    }
+
+    /**
+     * Get the underlying items from the given collection if applicable.
+     *
+     * @template TUnwrapKey of array-key
+     * @template TUnwrapValue
+     *
+     * @param  array&lt;TUnwrapKey, TUnwrapValue&gt;|static&lt;TUnwrapKey, TUnwrapValue&gt;  $value
+     * @return array&lt;TUnwrapKey, TUnwrapValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function unwrap($value)
+    {
+        return $value instanceof Enumerable ? $value-&gt;all() : <span style="background-color: red">$</span>value;
+    }
+
+    /**
+     * Create a new instance with no items.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function empty()
+    {
+        return new static([]);
+    }
+
+    /**
+     * Create a new collection by invoking the callback a given amount of times.
+     *
+     * @template TTimesValue
+     *
+     * @param  int  $number
+     * @param  (callable(int): TTimesValue)|null  $callback
+     * @return static&lt;int, TTimesValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function times($number, ?callable $callback = null)
+    {
+        <span style="background-color: red">i</span>f ($number &lt; 1) {
+            return new static;
+        <span style="background-color: red">}</span>
+
+        return static::range(1, $number)
+            -&gt;unless($callback == null)
+            -&gt;map($callback);
+    }
+
+    /**
+     * Create a new collection by decoding a JSON string.
+     *
+     * @param  string  $json
+     * @param  int  $depth
+     * @param  int  $flags
+     * @return static&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function fromJson($json, $depth = 512, $flags = 0)
+    {
+        return new static(json_decode($json, true, $depth, $flags));
+    }
+
+    /**
+     * Get the average value of a given key.
+     *
+     * @param  (callable(TValue): float|int)|string|null  $callback
+     * @return float|int|null
+     */
+    <span style="background-color: red">p</span>ublic function avg($callback = null)
+    {
+        $callback = $this-&gt;valueRetriever($callback);
+
+        $reduced = $this-&gt;reduce(<span style="background-color: red">s</span>tatic function (&amp;$reduce, $value) use ($callback) {
+            <span style="background-color: red">i</span>f (! is_null($resolved = $callback($value))) {
+                $reduce[0] += $resolved;
+                $reduce[1]++;
+            <span style="background-color: red">}</span>
+
+            return $reduce;
+        }, [0, 0]);
+
+        return $reduced[1] ? $reduced[0] / $reduced[1] : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Alias for the &quot;avg&quot; method.
+     *
+     * @param  (callable(TValue): float|int)|string|null  $callback
+     * @return float|int|null
+     */
+    <span style="background-color: red">p</span>ublic function average($callback = null)
+    {
+        return $this-&gt;avg($callback);
+    }
+
+    /**
+     * Alias for the &quot;contains&quot; method.
+     *
+     * @param  (callable(TValue, TKey): bool)|TValue|string  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function some($key, $operator = null, $value = null)
+    {
+        return $this-&gt;contains(...func_get_args());
+    }
+
+    /**
+     * Dump the given arguments and terminate execution.
+     *
+     * @param  mixed  ...$args
+     * @return never
+     */
+    <span style="background-color: red">p</span>ublic function dd(...$args)
+    {
+        dd($this-&gt;all(), ...$args);
+    }
+
+    /**
+     * Dump the items.
+     *
+     * @param  mixed  ...$args
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dump(...$args)
+    {
+        dump($this-&gt;all(), ...$args);
+
+        return $this;
+    }
+
+    /**
+     * Execute a callback over each item.
+     *
+     * @param  callable(TValue, TKey): mixed  $callback
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function each(callable $callback)
+    {
+        <span style="background-color: green">f</span>oreach ($this as $key =&gt; $item) {
+            <span style="background-color: red">i</span>f ($callback($item, $key) === false) {
+                break;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Execute a callback over each nested chunk of items.
+     *
+     * @param  callable(...mixed): mixed  $callback
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function eachSpread(callable $callback)
+    {
+        return $this-&gt;each(<span style="background-color: red">f</span>unction ($chunk, $key) use ($callback) {
+            $chunk[] = $key;
+
+            return $callback(...$chunk);
+        });
+    }
+
+    /**
+     * Determine if all items pass the given truth test.
+     *
+     * @param  (callable(TValue, TKey): bool)|TValue|string  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function every($key, $operator = null, $value = null)
+    {
+        <span style="background-color: red">i</span>f (func_num_args() === 1) {
+            $callback = $this-&gt;valueRetriever($key);
+
+            <span style="background-color: red">f</span>oreach ($this as $k =&gt; $v) {
+                <span style="background-color: red">i</span>f (! $callback($v, $k)) {
+                    return false;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return true;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;every($this-&gt;operatorForWhere(...func_get_args()));
+    }
+
+    /**
+     * Get the first item by the given key value pair.
+     *
+     * @param  callable|string  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return TValue|null
+     */
+    <span style="background-color: red">p</span>ublic function firstWhere($key, $operator = null, $value = null)
+    {
+        return $this-&gt;first($this-&gt;operatorForWhere(...func_get_args()));
+    }
+
+    /**
+     * Get a single key&#039;s value from the first matching item in the collection.
+     *
+     * @template TValueDefault
+     *
+     * @param  string  $key
+     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
+     * @return TValue|TValueDefault
+     */
+    <span style="background-color: red">p</span>ublic function value($key, $default = null)
+    {
+        <span style="background-color: red">i</span>f ($value = $this-&gt;firstWhere($key)) {
+            return data_get($value, $key, $default);
+        <span style="background-color: red">}</span>
+
+        return value($default);
+    }
+
+    /**
+     * Ensure that every item in the collection is of the expected type.
+     *
+     * @template TEnsureOfType
+     *
+     * @param  class-string&lt;TEnsureOfType&gt;|array&lt;array-key, class-string&lt;TEnsureOfType&gt;&gt;|&#039;string&#039;|&#039;int&#039;|&#039;float&#039;|&#039;bool&#039;|&#039;array&#039;|&#039;null&#039;  $type
+     * @return static&lt;TKey, TEnsureOfType&gt;
+     *
+     * @throws \UnexpectedValueException
+     */
+    <span style="background-color: red">p</span>ublic function ensure($type)
+    {
+        $allowedTypes = is_array($type) ? $type : <span style="background-color: red">[</span>$type];
+
+        return $this-&gt;each(<span style="background-color: red">f</span>unction ($item, $index) use ($allowedTypes) {
+            $itemType = get_debug_type($item);
+
+            <span style="background-color: red">f</span>oreach ($allowedTypes as $allowedType) {
+                <span style="background-color: red">i</span>f ($itemType === $allowedType || <span style="background-color: red">$</span>item instanceof $allowedType) {
+                    return true;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            throw new UnexpectedValueException(
+                sprintf(&quot;Collection should only include [%s] items, but &#039;%s&#039; found at position %d.&quot;, implode(&#039;, &#039;, $allowedTypes), $itemType, $index)
+            );
+        });
+    }
+
+    /**
+     * Determine if the collection is not empty.
+     *
+     * @phpstan-assert-if-true TValue $this-&gt;first()
+     * @phpstan-assert-if-true TValue $this-&gt;last()
+     *
+     * @phpstan-assert-if-false null $this-&gt;first()
+     * @phpstan-assert-if-false null $this-&gt;last()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isNotEmpty()
+    {
+        return ! $this-&gt;isEmpty();
+    }
+
+    /**
+     * Run a map over each nested chunk of items.
+     *
+     * @template TMapSpreadValue
+     *
+     * @param  callable(mixed...): TMapSpreadValue  $callback
+     * @return static&lt;TKey, TMapSpreadValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function mapSpread(callable $callback)
+    {
+        return $this-&gt;map(<span style="background-color: red">f</span>unction ($chunk, $key) use ($callback) {
+            $chunk[] = $key;
+
+            return $callback(...$chunk);
+        });
+    }
+
+    /**
+     * Run a grouping map over the items.
+     *
+     * The callback should return an associative array with a single key/value pair.
+     *
+     * @template TMapToGroupsKey of array-key
+     * @template TMapToGroupsValue
+     *
+     * @param  callable(TValue, TKey): array&lt;TMapToGroupsKey, TMapToGroupsValue&gt;  $callback
+     * @return static&lt;TMapToGroupsKey, static&lt;int, TMapToGroupsValue&gt;&gt;
+     */
+    <span style="background-color: red">p</span>ublic function mapToGroups(callable $callback)
+    {
+        $groups = $this-&gt;mapToDictionary($callback);
+
+        return $groups-&gt;map($this-&gt;make(...));
+    }
+
+    /**
+     * Map a collection and flatten the result by a single level.
+     *
+     * @template TFlatMapKey of array-key
+     * @template TFlatMapValue
+     *
+     * @param  callable(TValue, TKey): (\Illuminate\Support\Collection&lt;TFlatMapKey, TFlatMapValue&gt;|array&lt;TFlatMapKey, TFlatMapValue&gt;)  $callback
+     * @return static&lt;TFlatMapKey, TFlatMapValue&gt;
+     */
+    <span style="background-color: green">p</span>ublic function flatMap(callable $callback)
+    {
+        return $this-&gt;map($callback)-&gt;collapse();
+    }
+
+    /**
+     * Map the values into a new class.
+     *
+     * @template TMapIntoValue
+     *
+     * @param  class-string&lt;TMapIntoValue&gt;  $class
+     * @return static&lt;TKey, TMapIntoValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function mapInto($class)
+    {
+        <span style="background-color: red">i</span>f (is_subclass_of($class, BackedEnum::class)) {
+            return $this-&gt;map(fn ($value, $key) =&gt; <span style="background-color: red">$</span>class::from($value));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;map(fn ($value, $key) =&gt; <span style="background-color: red">n</span>ew $class($value, $key));
+    }
+
+    /**
+     * Get the min value of a given key.
+     *
+     * @param  (callable(TValue):mixed)|string|null  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function min($callback = null)
+    {
+        $callback = $this-&gt;valueRetriever($callback);
+
+        return $this-&gt;map(fn ($value) =&gt; <span style="background-color: red">$</span>callback($value))
+            -&gt;reject(fn ($value) =&gt; <span style="background-color: red">i</span>s_null($value))
+            -&gt;reduce(fn ($result, $value) =&gt; <span style="background-color: red">i</span>s_null($result) || <span style="background-color: red">$</span>value &lt; $result ? $value : <span style="background-color: red">$</span>result);
+    }
+
+    /**
+     * Get the max value of a given key.
+     *
+     * @param  (callable(TValue):mixed)|string|null  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function max($callback = null)
+    {
+        $callback = $this-&gt;valueRetriever($callback);
+
+        return $this-&gt;reject(fn ($value) =&gt; <span style="background-color: red">i</span>s_null($value))-&gt;reduce(<span style="background-color: red">f</span>unction ($result, $item) use ($callback) {
+            $value = $callback($item);
+
+            return is_null($result) || <span style="background-color: red">$</span>value &gt; $result ? $value : <span style="background-color: red">$</span>result;
+        });
+    }
+
+    /**
+     * &quot;Paginate&quot; the collection by slicing it into a smaller collection.
+     *
+     * @param  int  $page
+     * @param  int  $perPage
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function forPage($page, $perPage)
+    {
+        $offset = max(0, ($page - 1) * $perPage);
+
+        return $this-&gt;slice($offset, $perPage);
+    }
+
+    /**
+     * Partition the collection into two arrays using the given callback or key.
+     *
+     * @param  (callable(TValue, TKey): bool)|TValue|string  $key
+     * @param  TValue|string|null  $operator
+     * @param  TValue|null  $value
+     * @return static&lt;int&lt;0, 1&gt;, static&lt;TKey, TValue&gt;&gt;
+     */
+    <span style="background-color: green">p</span>ublic function partition($key, $operator = null, $value = null)
+    {
+        $callback = func_num_args() === 1
+            ? $this-&gt;valueRetriever($key)
+            : <span style="background-color: red">$</span>this-&gt;operatorForWhere(...func_get_args());
+
+        [$passed, $failed] = Arr::partition($this-&gt;getIterator(), $callback);
+
+        return new static([new static($passed), new static($failed)]);
+    }
+
+    /**
+     * Calculate the percentage of items that pass a given truth test.
+     *
+     * @param  (callable(TValue, TKey): bool)  $callback
+     * @param  int  $precision
+     * @return float|null
+     */
+    <span style="background-color: red">p</span>ublic function percentage(callable $callback, int $precision = 2)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isEmpty()) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return round(
+            $this-&gt;filter($callback)-&gt;count() / $this-&gt;count() * 100,
+            $precision
+        );
+    }
+
+    /**
+     * Get the sum of the given values.
+     *
+     * @template TReturnType
+     *
+     * @param  (callable(TValue): TReturnType)|string|null  $callback
+     * @return ($callback is callable ? TReturnType : mixed)
+     */
+    <span style="background-color: red">p</span>ublic function sum($callback = null)
+    {
+        $callback = is_null($callback)
+            ? $this-&gt;identity()
+            : <span style="background-color: red">$</span>this-&gt;valueRetriever($callback);
+
+        return $this-&gt;reduce(fn ($result, $item) =&gt; <span style="background-color: red">$</span>result + $callback($item), 0);
+    }
+
+    /**
+     * Apply the callback if the collection is empty.
+     *
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable($this): TWhenEmptyReturnType)  $callback
+     * @param  (callable($this): TWhenEmptyReturnType)|null  $default
+     * @return $this|TWhenEmptyReturnType
+     */
+    <span style="background-color: red">p</span>ublic function whenEmpty(callable $callback, ?callable $default = null)
+    {
+        return $this-&gt;when($this-&gt;isEmpty(), $callback, $default);
+    }
+
+    /**
+     * Apply the callback if the collection is not empty.
+     *
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  callable($this): TWhenNotEmptyReturnType  $callback
+     * @param  (callable($this): TWhenNotEmptyReturnType)|null  $default
+     * @return $this|TWhenNotEmptyReturnType
+     */
+    <span style="background-color: red">p</span>ublic function whenNotEmpty(callable $callback, ?callable $default = null)
+    {
+        return $this-&gt;when($this-&gt;isNotEmpty(), $callback, $default);
+    }
+
+    /**
+     * Apply the callback unless the collection is empty.
+     *
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  callable($this): TUnlessEmptyReturnType  $callback
+     * @param  (callable($this): TUnlessEmptyReturnType)|null  $default
+     * @return $this|TUnlessEmptyReturnType
+     */
+    <span style="background-color: red">p</span>ublic function unlessEmpty(callable $callback, ?callable $default = null)
+    {
+        return $this-&gt;whenNotEmpty($callback, $default);
+    }
+
+    /**
+     * Apply the callback unless the collection is not empty.
+     *
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  callable($this): TUnlessNotEmptyReturnType  $callback
+     * @param  (callable($this): TUnlessNotEmptyReturnType)|null  $default
+     * @return $this|TUnlessNotEmptyReturnType
+     */
+    <span style="background-color: red">p</span>ublic function unlessNotEmpty(callable $callback, ?callable $default = null)
+    {
+        return $this-&gt;whenEmpty($callback, $default);
+    }
+
+    /**
+     * Filter items by the given key value pair.
+     *
+     * @param  callable|string  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function where($key, $operator = null, $value = null)
+    {
+        return $this-&gt;filter($this-&gt;operatorForWhere(...func_get_args()));
+    }
+
+    /**
+     * Filter items where the value for the given key is null.
+     *
+     * @param  string|null  $key
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereNull($key = null)
+    {
+        return $this-&gt;whereStrict($key, null);
+    }
+
+    /**
+     * Filter items where the value for the given key is not null.
+     *
+     * @param  string|null  $key
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereNotNull($key = null)
+    {
+        return $this-&gt;where($key, &#039;!==&#039;, null);
+    }
+
+    /**
+     * Filter items by the given key value pair using strict comparison.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereStrict($key, $value)
+    {
+        return $this-&gt;where($key, &#039;===&#039;, $value);
+    }
+
+    /**
+     * Filter items by the given key value pair.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\Arrayable|iterable  $values
+     * @param  bool  $strict
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereIn($key, $values, $strict = false)
+    {
+        $values = $this-&gt;getArrayableItems($values);
+
+        return $this-&gt;filter(fn ($item) =&gt; <span style="background-color: red">i</span>n_array(data_get($item, $key), $values, $strict));
+    }
+
+    /**
+     * Filter items by the given key value pair using strict comparison.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\Arrayable|iterable  $values
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereInStrict($key, $values)
+    {
+        return $this-&gt;whereIn($key, $values, true);
+    }
+
+    /**
+     * Filter items such that the value of the given key is between the given values.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\Arrayable|iterable  $values
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereBetween($key, $values)
+    {
+        return $this-&gt;where($key, &#039;&gt;=&#039;, reset($values))-&gt;where($key, &#039;&lt;=&#039;, end($values));
+    }
+
+    /**
+     * Filter items such that the value of the given key is not between the given values.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\Arrayable|iterable  $values
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereNotBetween($key, $values)
+    {
+        return $this-&gt;filter(
+            fn ($item) =&gt; <span style="background-color: red">d</span>ata_get($item, $key) &lt; reset($values) || <span style="background-color: red">d</span>ata_get($item, $key) &gt; end($values)
+        );
+    }
+
+    /**
+     * Filter items by the given key value pair.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\Arrayable|iterable  $values
+     * @param  bool  $strict
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereNotIn($key, $values, $strict = false)
+    {
+        $values = $this-&gt;getArrayableItems($values);
+
+        return $this-&gt;reject(fn ($item) =&gt; <span style="background-color: red">i</span>n_array(data_get($item, $key), $values, $strict));
+    }
+
+    /**
+     * Filter items by the given key value pair using strict comparison.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\Arrayable|iterable  $values
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function whereNotInStrict($key, $values)
+    {
+        return $this-&gt;whereNotIn($key, $values, true);
+    }
+
+    /**
+     * Filter the items, removing any items that don&#039;t match the given type(s).
+     *
+     * @template TWhereInstanceOf
+     *
+     * @param  class-string&lt;TWhereInstanceOf&gt;|array&lt;array-key, class-string&lt;TWhereInstanceOf&gt;&gt;  $type
+     * @return static&lt;TKey, TWhereInstanceOf&gt;
+     */
+    <span style="background-color: red">p</span>ublic function whereInstanceOf($type)
+    {
+        return $this-&gt;filter(<span style="background-color: red">f</span>unction ($value) use ($type) {
+            <span style="background-color: red">i</span>f (is_array($type)) {
+                <span style="background-color: red">f</span>oreach ($type as $classType) {
+                    <span style="background-color: red">i</span>f ($value instanceof $classType) {
+                        return true;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+
+                return false;
+            <span style="background-color: red">}</span>
+
+            return $value instanceof $type;
+        });
+    }
+
+    /**
+     * Pass the collection to the given callback and return the result.
+     *
+     * @template TPipeReturnType
+     *
+     * @param  callable($this): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    <span style="background-color: red">p</span>ublic function pipe(callable $callback)
+    {
+        return $callback($this);
+    }
+
+    /**
+     * Pass the collection into a new class.
+     *
+     * @template TPipeIntoValue
+     *
+     * @param  class-string&lt;TPipeIntoValue&gt;  $class
+     * @return TPipeIntoValue
+     */
+    <span style="background-color: red">p</span>ublic function pipeInto($class)
+    {
+        return new $class($this);
+    }
+
+    /**
+     * Pass the collection through a series of callable pipes and return the result.
+     *
+     * @param  array&lt;callable&gt;  $callbacks
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function pipeThrough($callbacks)
+    {
+        return (new Collection($callbacks))-&gt;reduce(
+            fn ($carry, $callback) =&gt; <span style="background-color: red">$</span>callback($carry),
+            $this,
+        );
+    }
+
+    /**
+     * Reduce the collection to a single value.
+     *
+     * @template TReduceInitial
+     * @template TReduceReturnType
+     *
+     * @param  callable(TReduceInitial|TReduceReturnType, TValue, TKey): TReduceReturnType  $callback
+     * @param  TReduceInitial  $initial
+     * @return TReduceReturnType
+     */
+    <span style="background-color: green">p</span>ublic function reduce(callable $callback, $initial = null)
+    {
+        $result = $initial;
+
+        <span style="background-color: green">f</span>oreach ($this as $key =&gt; $value) {
+            $result = $callback($result, $value, $key);
+        <span style="background-color: green">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Reduce the collection to multiple aggregate values.
+     *
+     * @param  callable  $callback
+     * @param  mixed  ...$initial
+     * @return array
+     *
+     * @throws \UnexpectedValueException
+     */
+    <span style="background-color: red">p</span>ublic function reduceSpread(callable $callback, ...$initial)
+    {
+        $result = $initial;
+
+        <span style="background-color: red">f</span>oreach ($this as $key =&gt; $value) {
+            $result = call_user_func_array($callback, array_merge($result, [$value, $key]));
+
+            <span style="background-color: red">i</span>f (! is_array($result)) {
+                throw new UnexpectedValueException(sprintf(
+                    &quot;%s::reduceSpread expects reducer to return an array, but got a &#039;%s&#039; instead.&quot;,
+                    class_basename(static::class), gettype($result)
+                ));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Reduce an associative collection to a single value.
+     *
+     * @template TReduceWithKeysInitial
+     * @template TReduceWithKeysReturnType
+     *
+     * @param  callable(TReduceWithKeysInitial|TReduceWithKeysReturnType, TValue, TKey): TReduceWithKeysReturnType  $callback
+     * @param  TReduceWithKeysInitial  $initial
+     * @return TReduceWithKeysReturnType
+     */
+    <span style="background-color: red">p</span>ublic function reduceWithKeys(callable $callback, $initial = null)
+    {
+        return $this-&gt;reduce($callback, $initial);
+    }
+
+    /**
+     * Create a collection of all elements that do not pass a given truth test.
+     *
+     * @param  (callable(TValue, TKey): bool)|bool|TValue  $callback
+     * @return static
+     */
+    <span style="background-color: green">p</span>ublic function reject($callback = true)
+    {
+        $useAsCallable = $this-&gt;useAsCallable($callback);
+
+        return $this-&gt;filter(<span style="background-color: red">f</span>unction ($value, $key) use ($callback, $useAsCallable) {
+            return $useAsCallable
+                ? ! $callback($value, $key)
+                : <span style="background-color: red">$</span>value != $callback;
+        });
+    }
+
+    /**
+     * Pass the collection to the given callback and then return it.
+     *
+     * @param  callable($this): mixed  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function tap(callable $callback)
+    {
+        $callback($this);
+
+        return $this;
+    }
+
+    /**
+     * Return only unique items from the collection array.
+     *
+     * @param  (callable(TValue, TKey): mixed)|string|null  $key
+     * @param  bool  $strict
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function unique($key = null, $strict = false)
+    {
+        $callback = $this-&gt;valueRetriever($key);
+
+        $exists = [];
+
+        return $this-&gt;reject(<span style="background-color: red">f</span>unction ($item, $key) use ($callback, $strict, &amp;$exists) {
+            <span style="background-color: red">i</span>f (in_array($id = $callback($item, $key), $exists, $strict)) {
+                return true;
+            <span style="background-color: red">}</span>
+
+            $exists[] = $id;
+        });
+    }
+
+    /**
+     * Return only unique items from the collection array using strict comparison.
+     *
+     * @param  (callable(TValue, TKey): mixed)|string|null  $key
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function uniqueStrict($key = null)
+    {
+        return $this-&gt;unique($key, true);
+    }
+
+    /**
+     * Collect the values into a collection.
+     *
+     * @return \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function collect()
+    {
+        return new Collection($this-&gt;all());
+    }
+
+    /**
+     * Get the collection of items as a plain array.
+     *
+     * @return array&lt;TKey, mixed&gt;
+     */
+    <span style="background-color: green">p</span>ublic function toArray()
+    {
+        return $this-&gt;map(fn ($value) =&gt; <span style="background-color: green">$</span>value instanceof Arrayable ? $value-&gt;toArray() : <span style="background-color: green">$</span>value)-&gt;all();
+    }
+
+    /**
+     * Convert the object into something JSON serializable.
+     *
+     * @return array&lt;TKey, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function jsonSerialize(): array
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($value) {
+            <span style="background-color: red">i</span>f ($value instanceof JsonSerializable) {
+                return $value-&gt;jsonSerialize();
+            } <span style="background-color: red">e</span>lseif ($value instanceof Jsonable) {
+                return json_decode($value-&gt;toJson(), true);
+            } <span style="background-color: red">e</span>lseif ($value instanceof Arrayable) {
+                return $value-&gt;toArray();
+            <span style="background-color: red">}</span>
+
+            return $value;
+        }, $this-&gt;all());
+    }
+
+    /**
+     * Get the collection of items as JSON.
+     *
+     * @param  int  $options
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function toJson($options = 0)
+    {
+        return json_encode($this-&gt;jsonSerialize(), $options);
+    }
+
+    /**
+     * Get a CachingIterator instance.
+     *
+     * @param  int  $flags
+     * @return \CachingIterator
+     */
+    <span style="background-color: red">p</span>ublic function getCachingIterator($flags = CachingIterator::CALL_TOSTRING)
+    {
+        return new CachingIterator($this-&gt;getIterator(), $flags);
+    }
+
+    /**
+     * Convert the collection to its string representation.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function __toString()
+    {
+        return $this-&gt;escapeWhenCastingToString
+            ? e($this-&gt;toJson())
+            : <span style="background-color: red">$</span>this-&gt;toJson();
+    }
+
+    /**
+     * Indicate that the model&#039;s string representation should be escaped when __toString is invoked.
+     *
+     * @param  bool  $escape
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function escapeWhenCastingToString($escape = true)
+    {
+        $this-&gt;escapeWhenCastingToString = $escape;
+
+        return $this;
+    }
+
+    /**
+     * Add a method to the list of proxied methods.
+     *
+     * @param  string  $method
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function proxy($method)
+    {
+        static::$proxies[] = $method;
+    }
+
+    /**
+     * Dynamically access collection proxies.
+     *
+     * @param  string  $key
+     * @return mixed
+     *
+     * @throws \Exception
+     */
+    <span style="background-color: red">p</span>ublic function __get($key)
+    {
+        <span style="background-color: red">i</span>f (! in_array($key, static::$proxies)) {
+            throw new Exception(&quot;Property [{$key}] does not exist on this collection instance.&quot;);
+        <span style="background-color: red">}</span>
+
+        return new HigherOrderCollectionProxy($this, $key);
+    }
+
+    /**
+     * Results array of items from Collection or Arrayable.
+     *
+     * @param  mixed  $items
+     * @return array&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: green">p</span>rotected function getArrayableItems($items)
+    {
+        return match (true) {
+            is_array($items) =&gt; <span style="background-color: green">$</span>items,
+            $items instanceof WeakMap =&gt; <span style="background-color: red">t</span>hrow new InvalidArgumentException(&#039;Collections can not be created using instances of WeakMap.&#039;),
+            $items instanceof Enumerable =&gt; <span style="background-color: green">$</span>items-&gt;all(),
+            $items instanceof Arrayable =&gt; <span style="background-color: red">$</span>items-&gt;toArray(),
+            $items instanceof Traversable =&gt; <span style="background-color: red">i</span>terator_to_array($items),
+            $items instanceof Jsonable =&gt; <span style="background-color: red">j</span>son_decode($items-&gt;toJson(), true),
+            $items instanceof JsonSerializable =&gt; <span style="background-color: red">(</span>array) $items-&gt;jsonSerialize(),
+            $items instanceof UnitEnum =&gt; <span style="background-color: red">[</span>$items],
+            default =&gt; <span style="background-color: red">(</span>array) $items,
+        };
+    }
+
+    /**
+     * Get an operator checker callback.
+     *
+     * @param  callable|string  $key
+     * @param  string|null  $operator
+     * @param  mixed  $value
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function operatorForWhere($key, $operator = null, $value = null)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;useAsCallable($key)) {
+            return $key;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (func_num_args() === 1) {
+            $value = true;
+
+            $operator = &#039;=&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (func_num_args() === 2) {
+            $value = $operator;
+
+            $operator = &#039;=&#039;;
+        <span style="background-color: red">}</span>
+
+        return <span style="background-color: red">f</span>unction ($item) use ($key, $operator, $value) {
+            $retrieved = enum_value(data_get($item, $key));
+            $value = enum_value($value);
+
+            $strings = array_filter([$retrieved, $value], <span style="background-color: red">f</span>unction ($value) {
+                return match (true) {
+                    is_string($value) =&gt; <span style="background-color: red">t</span>rue,
+                    $value instanceof \Stringable =&gt; <span style="background-color: red">t</span>rue,
+                    default =&gt; <span style="background-color: red">f</span>alse,
+                };
+            });
+
+            <span style="background-color: red">i</span>f (count($strings) &lt; 2 &amp;&amp; <span style="background-color: red">c</span>ount(array_filter([$retrieved, $value], &#039;is_object&#039;)) == 1) {
+                return in_array($operator, [&#039;!=&#039;, &#039;&lt;&gt;&#039;, &#039;!==&#039;]);
+            <span style="background-color: red">}</span>
+
+            switch ($operator) {
+                <span style="background-color: red">d</span>efault:
+                <span style="background-color: red">c</span>ase &#039;=&#039;:
+                <span style="background-color: red">c</span>ase &#039;==&#039;:  return $retrieved == $value;
+                <span style="background-color: red">c</span>ase &#039;!=&#039;:
+                <span style="background-color: red">c</span>ase &#039;&lt;&gt;&#039;:  return $retrieved != $value;
+                <span style="background-color: red">c</span>ase &#039;&lt;&#039;:   return $retrieved &lt; $value;
+                <span style="background-color: red">c</span>ase &#039;&gt;&#039;:   return $retrieved &gt; $value;
+                <span style="background-color: red">c</span>ase &#039;&lt;=&#039;:  return $retrieved &lt;= $value;
+                <span style="background-color: red">c</span>ase &#039;&gt;=&#039;:  return $retrieved &gt;= $value;
+                <span style="background-color: red">c</span>ase &#039;===&#039;: return $retrieved === $value;
+                <span style="background-color: red">c</span>ase &#039;!==&#039;: return $retrieved !== $value;
+                <span style="background-color: red">c</span>ase &#039;&lt;=&gt;&#039;: return $retrieved &lt;=&gt; $value;
+            <span style="background-color: red">}</span>
+        };
+    }
+
+    /**
+     * Determine if the given value is callable, but not a string.
+     *
+     * @param  mixed  $value
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function useAsCallable($value)
+    {
+        return ! is_string($value) &amp;&amp; <span style="background-color: green">i</span>s_callable($value);
+    }
+
+    /**
+     * Get a value retrieving callback.
+     *
+     * @param  callable|string|null  $value
+     * @return callable
+     */
+    <span style="background-color: green">p</span>rotected function valueRetriever($value)
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;useAsCallable($value)) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        return fn ($item) =&gt; <span style="background-color: red">d</span>ata_get($item, $value);
+    }
+
+    /**
+     * Make a function to check an item&#039;s equality.
+     *
+     * @param  mixed  $value
+     * @return \Closure(mixed): bool
+     */
+    <span style="background-color: red">p</span>rotected function equality($value)
+    {
+        return fn ($item) =&gt; <span style="background-color: red">$</span>item === $value;
+    }
+
+    /**
+     * Make a function using another function, by negating its result.
+     *
+     * @param  \Closure  $callback
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function negate(Closure $callback)
+    {
+        return fn (...$params) =&gt; <span style="background-color: red">!</span> $callback(...$params);
+    }
+
+    /**
+     * Make a function that returns what&#039;s passed to it.
+     *
+     * @return \Closure(TValue): TValue
+     */
+    <span style="background-color: red">p</span>rotected function identity()
+    {
+        return fn ($value) =&gt; <span style="background-color: red">$</span>value;
+    }
+}
+</pre>

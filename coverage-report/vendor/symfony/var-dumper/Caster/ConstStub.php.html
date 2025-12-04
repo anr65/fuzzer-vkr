@@ -1,0 +1,34 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Caster;
+
+use Symfony\Component\VarDumper\Cloner\Stub;
+
+/**
+ * Represents a PHP constant and its value.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class ConstStub extends Stub
+{
+    <span style="background-color: green">p</span>ublic function __construct(string $name, string|int|float|null $value = null)
+    {
+        $this-&gt;class = $name;
+        $this-&gt;value = 1 &lt; \func_num_args() ? $value : <span style="background-color: red">$</span>name;
+    }
+
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        return (string) $this-&gt;value;
+    }
+}
+</pre>

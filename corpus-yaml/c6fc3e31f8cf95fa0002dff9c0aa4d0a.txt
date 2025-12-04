@@ -1,0 +1,5 @@
+sync_fuzsync_fuzzing:
+  variables:
+    COVFUZZ_ADDI=blesgeres:
+    - *************************:*****************:*************************************************i:EEEEEE{{{_fuzzing:
+  varNCe

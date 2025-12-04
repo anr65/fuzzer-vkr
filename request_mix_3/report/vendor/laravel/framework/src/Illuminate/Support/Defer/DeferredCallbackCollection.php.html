@@ -1,0 +1,158 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Defer;
+
+use ArrayAccess;
+use Closure;
+use Countable;
+use Illuminate\Support\Collection;
+
+class DeferredCallbackCollection implements ArrayAccess, Countable
+{
+    /**
+     * All of the deferred callbacks.
+     *
+     * @var array
+     */
+    protected array $callbacks = [];
+
+    /**
+     * Get the first callback in the collection.
+     *
+     * @return callable
+     */
+    <span style="background-color: red">p</span>ublic function first()
+    {
+        return array_values($this-&gt;callbacks)[0];
+    }
+
+    /**
+     * Invoke the deferred callbacks.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function invoke(): void
+    {
+        $this-&gt;invokeWhen(fn () =&gt; <span style="background-color: red">t</span>rue);
+    }
+
+    /**
+     * Invoke the deferred callbacks if the given truth test evaluates to true.
+     *
+     * @param  \Closure|null  $when
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function invokeWhen(?Closure $when = null): void
+    {
+        $when ??= <span style="background-color: red">f</span>n () =&gt; <span style="background-color: red">t</span>rue;
+
+        $this-&gt;forgetDuplicates();
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;callbacks as $index =&gt; $callback) {
+            <span style="background-color: red">i</span>f ($when($callback)) {
+                rescue($callback);
+            <span style="background-color: red">}</span>
+
+            unset($this-&gt;callbacks[$index]);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Remove any deferred callbacks with the given name.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forget(string $name): void
+    {
+        $this-&gt;callbacks = (new Collection($this-&gt;callbacks))
+            -&gt;reject(fn ($callback) =&gt; <span style="background-color: red">$</span>callback-&gt;name === $name)
+            -&gt;values()
+            -&gt;all();
+    }
+
+    /**
+     * Remove any duplicate callbacks.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>rotected function forgetDuplicates(): self
+    {
+        $this-&gt;callbacks = (new Collection($this-&gt;callbacks))
+            -&gt;reverse()
+            -&gt;unique(fn ($c) =&gt; <span style="background-color: red">$</span>c-&gt;name)
+            -&gt;reverse()
+            -&gt;values()
+            -&gt;all();
+
+        return $this;
+    }
+
+    /**
+     * Determine if the collection has a callback with the given key.
+     *
+     * @param  mixed  $offset
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function offsetExists(mixed $offset): bool
+    {
+        $this-&gt;forgetDuplicates();
+
+        return isset($this-&gt;callbacks[$offset]);
+    }
+
+    /**
+     * Get the callback with the given key.
+     *
+     * @param  mixed  $offset
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function offsetGet(mixed $offset): mixed
+    {
+        $this-&gt;forgetDuplicates();
+
+        return $this-&gt;callbacks[$offset];
+    }
+
+    /**
+     * Set the callback with the given key.
+     *
+     * @param  mixed  $offset
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet(mixed $offset, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (is_null($offset)) {
+            $this-&gt;callbacks[] = $value;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;callbacks[$offset] = $value;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Remove the callback with the given key from the collection.
+     *
+     * @param  mixed  $offset
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset(mixed $offset): void
+    {
+        $this-&gt;forgetDuplicates();
+
+        unset($this-&gt;callbacks[$offset]);
+    }
+
+    /**
+     * Determine how many callbacks are in the collection.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        $this-&gt;forgetDuplicates();
+
+        return count($this-&gt;callbacks);
+    }
+}
+</pre>

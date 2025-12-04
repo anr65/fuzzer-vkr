@@ -1,0 +1,256 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Concerns;
+
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+
+trait ManagesLayouts
+{
+    /**
+     * All of the finished, captured sections.
+     *
+     * @var array
+     */
+    protected $sections = [];
+
+    /**
+     * The stack of in-progress sections.
+     *
+     * @var array
+     */
+    protected $sectionStack = [];
+
+    /**
+     * The parent placeholder for the request.
+     *
+     * @var mixed
+     */
+    protected static $parentPlaceholder = [];
+
+    /**
+     * The parent placeholder salt for the request.
+     *
+     * @var string
+     */
+    protected static $parentPlaceholderSalt;
+
+    /**
+     * Start injecting content into a section.
+     *
+     * @param  string  $section
+     * @param  string|null  $content
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function startSection($section, $content = null)
+    {
+        <span style="background-color: red">i</span>f ($content === null) {
+            <span style="background-color: red">i</span>f (ob_start()) {
+                $this-&gt;sectionStack[] = $section;
+            <span style="background-color: red">}</span>
+        } <span style="background-color: green">e</span>lse {
+            $this-&gt;extendSection($section, $content instanceof View ? $content : <span style="background-color: green">e</span>($content));
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Inject inline content into a section.
+     *
+     * @param  string  $section
+     * @param  string  $content
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function inject($section, $content)
+    {
+        $this-&gt;startSection($section, $content);
+    }
+
+    /**
+     * Stop injecting content into a section and return its contents.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function yieldSection()
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;sectionStack)) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;yieldContent($this-&gt;stopSection());
+    }
+
+    /**
+     * Stop injecting content into a section.
+     *
+     * @param  bool  $overwrite
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function stopSection($overwrite = false)
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;sectionStack)) {
+            throw new InvalidArgumentException(&#039;Cannot end a section without first starting one.&#039;);
+        <span style="background-color: red">}</span>
+
+        $last = array_pop($this-&gt;sectionStack);
+
+        <span style="background-color: red">i</span>f ($overwrite) {
+            $this-&gt;sections[$last] = ob_get_clean();
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;extendSection($last, ob_get_clean());
+        <span style="background-color: red">}</span>
+
+        return $last;
+    }
+
+    /**
+     * Stop injecting content into a section and append it.
+     *
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function appendSection()
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;sectionStack)) {
+            throw new InvalidArgumentException(&#039;Cannot end a section without first starting one.&#039;);
+        <span style="background-color: red">}</span>
+
+        $last = array_pop($this-&gt;sectionStack);
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;sections[$last])) {
+            $this-&gt;sections[$last] .= ob_get_clean();
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;sections[$last] = ob_get_clean();
+        <span style="background-color: red">}</span>
+
+        return $last;
+    }
+
+    /**
+     * Append content to a given section.
+     *
+     * @param  string  $section
+     * @param  string  $content
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function extendSection($section, $content)
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;sections[$section])) {
+            $content = str_replace(static::parentPlaceholder($section), $content, $this-&gt;sections[$section]);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;sections[$section] = $content;
+    }
+
+    /**
+     * Get the string contents of a section.
+     *
+     * @param  string  $section
+     * @param  string  $default
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function yieldContent($section, $default = &#039;&#039;)
+    {
+        $sectionContent = $default instanceof View ? $default : <span style="background-color: green">e</span>($default);
+
+        <span style="background-color: green">i</span>f (isset($this-&gt;sections[$section])) {
+            $sectionContent = $this-&gt;sections[$section];
+        <span style="background-color: green">}</span>
+
+        $sectionContent = str_replace(&#039;@@parent&#039;, &#039;--parent--holder--&#039;, $sectionContent);
+
+        return str_replace(
+            &#039;--parent--holder--&#039;, &#039;@parent&#039;, str_replace(static::parentPlaceholder($section), &#039;&#039;, $sectionContent)
+        );
+    }
+
+    /**
+     * Get the parent placeholder for the current request.
+     *
+     * @param  string  $section
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function parentPlaceholder($section = &#039;&#039;)
+    {
+        <span style="background-color: green">i</span>f (! isset(static::$parentPlaceholder[$section])) {
+            $salt = static::parentPlaceholderSalt();
+
+            static::$parentPlaceholder[$section] = &#039;##parent-placeholder-&#039;.hash(&#039;xxh128&#039;, $salt.$section).&#039;##&#039;;
+        <span style="background-color: green">}</span>
+
+        return static::$parentPlaceholder[$section];
+    }
+
+    /**
+     * Get the parent placeholder salt.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected static function parentPlaceholderSalt()
+    {
+        <span style="background-color: green">i</span>f (! static::$parentPlaceholderSalt) {
+            return static::$parentPlaceholderSalt = Str::random(40);
+        <span style="background-color: green">}</span>
+
+        return static::$parentPlaceholderSalt;
+    }
+
+    /**
+     * Check if section exists.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasSection($name)
+    {
+        return array_key_exists($name, $this-&gt;sections);
+    }
+
+    /**
+     * Check if section does not exist.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function sectionMissing($name)
+    {
+        return ! $this-&gt;hasSection($name);
+    }
+
+    /**
+     * Get the contents of a section.
+     *
+     * @param  string  $name
+     * @param  string|null  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getSection($name, $default = null)
+    {
+        return $this-&gt;getSections()[$name] ?? <span style="background-color: red">$</span>default;
+    }
+
+    /**
+     * Get the entire array of sections.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getSections()
+    {
+        return $this-&gt;sections;
+    }
+
+    /**
+     * Flush all of the sections.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function flushSections()
+    {
+        $this-&gt;sections = [];
+        $this-&gt;sectionStack = [];
+    }
+}
+</pre>

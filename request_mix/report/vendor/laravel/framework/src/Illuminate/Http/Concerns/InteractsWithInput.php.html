@@ -1,0 +1,298 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Concerns;
+
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Fluent;
+use Illuminate\Support\Traits\Dumpable;
+use Illuminate\Support\Traits\InteractsWithData;
+use SplFileInfo;
+use Symfony\Component\HttpFoundation\InputBag;
+
+trait InteractsWithInput
+{
+    use Dumpable, InteractsWithData;
+
+    /**
+     * Retrieve a server variable from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>ublic function server($key = null, $default = null)
+    {
+        return $this-&gt;retrieveItem(&#039;server&#039;, $key, $default);
+    }
+
+    /**
+     * Determine if a header is set on the request.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasHeader($key)
+    {
+        return ! is_null($this-&gt;header($key));
+    }
+
+    /**
+     * Retrieve a header from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>ublic function header($key = null, $default = null)
+    {
+        return $this-&gt;retrieveItem(&#039;headers&#039;, $key, $default);
+    }
+
+    /**
+     * Get the bearer token from the request headers.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function bearerToken()
+    {
+        $header = $this-&gt;header(&#039;Authorization&#039;, &#039;&#039;);
+
+        $position = strripos($header, &#039;Bearer &#039;);
+
+        <span style="background-color: red">i</span>f ($position !== false) {
+            $header = substr($header, $position + 7);
+
+            return str_contains($header, &#039;,&#039;) ? strstr($header, &#039;,&#039;, true) : <span style="background-color: red">$</span>header;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the keys for all of the input and files.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function keys()
+    {
+        return array_merge(array_keys($this-&gt;input()), $this-&gt;files-&gt;keys());
+    }
+
+    /**
+     * Get all of the input and files for the request.
+     *
+     * @param  array|mixed|null  $keys
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function all($keys = null)
+    {
+        $input = array_replace_recursive($this-&gt;input(), $this-&gt;allFiles());
+
+        <span style="background-color: green">i</span>f (! $keys) {
+            return $input;
+        <span style="background-color: red">}</span>
+
+        $results = [];
+
+        <span style="background-color: red">f</span>oreach (is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args() as $key) {
+            Arr::set($results, $key, Arr::get($input, $key));
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Retrieve an input item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function input($key = null, $default = null)
+    {
+        return data_get(
+            $this-&gt;getInputSource()-&gt;all() + $this-&gt;query-&gt;all(), $key, $default
+        );
+    }
+
+    /**
+     * Retrieve input from the request as a Fluent object instance.
+     *
+     * @param  array|string|null  $key
+     * @return \Illuminate\Support\Fluent
+     */
+    <span style="background-color: red">p</span>ublic function fluent($key = null)
+    {
+        return new Fluent(is_array($key) ? $this-&gt;only($key) : <span style="background-color: red">$</span>this-&gt;input($key));
+    }
+
+    /**
+     * Retrieve a query string item from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>ublic function query($key = null, $default = null)
+    {
+        return $this-&gt;retrieveItem(&#039;query&#039;, $key, $default);
+    }
+
+    /**
+     * Retrieve a request payload item from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>ublic function post($key = null, $default = null)
+    {
+        return $this-&gt;retrieveItem(&#039;request&#039;, $key, $default);
+    }
+
+    /**
+     * Determine if a cookie is set on the request.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasCookie($key)
+    {
+        return ! is_null($this-&gt;cookie($key));
+    }
+
+    /**
+     * Retrieve a cookie from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>ublic function cookie($key = null, $default = null)
+    {
+        return $this-&gt;retrieveItem(&#039;cookies&#039;, $key, $default);
+    }
+
+    /**
+     * Get an array of all of the files on the request.
+     *
+     * @return array&lt;string, \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]&gt;
+     */
+    <span style="background-color: green">p</span>ublic function allFiles()
+    {
+        $files = $this-&gt;files-&gt;all();
+
+        return $this-&gt;convertedFiles = $this-&gt;convertedFiles ?? <span style="background-color: green">$</span>this-&gt;convertUploadedFiles($files);
+    }
+
+    /**
+     * Convert the given array of Symfony UploadedFiles to custom Laravel UploadedFiles.
+     *
+     * @param  array&lt;string, \Symfony\Component\HttpFoundation\File\UploadedFile|\Symfony\Component\HttpFoundation\File\UploadedFile[]&gt;  $files
+     * @return array&lt;string, \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]&gt;
+     */
+    <span style="background-color: green">p</span>rotected function convertUploadedFiles(array $files)
+    {
+        return array_map(<span style="background-color: green">f</span>unction ($file) {
+            <span style="background-color: red">i</span>f (is_null($file) || (<span style="background-color: green">i</span>s_array($file) &amp;&amp; <span style="background-color: red">e</span>mpty(array_filter($file)))) {
+                return $file;
+            <span style="background-color: green">}</span>
+
+            return is_array($file)
+                ? $this-&gt;convertUploadedFiles($file)
+                : <span style="background-color: green">U</span>ploadedFile::createFromBase($file);
+        }, $files);
+    }
+
+    /**
+     * Determine if the uploaded data contains a file.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasFile($key)
+    {
+        <span style="background-color: red">i</span>f (! is_array($files = $this-&gt;file($key))) {
+            $files = [$files];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($files as $file) {
+            <span style="background-color: red">i</span>f ($this-&gt;isValidFile($file)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Check that the given file is a valid file instance.
+     *
+     * @param  mixed  $file
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isValidFile($file)
+    {
+        return $file instanceof SplFileInfo &amp;&amp; <span style="background-color: red">$</span>file-&gt;getPath() !== &#039;&#039;;
+    }
+
+    /**
+     * Retrieve a file from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array&lt;string, \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]&gt; : \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null)
+     */
+    <span style="background-color: red">p</span>ublic function file($key = null, $default = null)
+    {
+        return data_get($this-&gt;allFiles(), $key, $default);
+    }
+
+    /**
+     * Retrieve data from the instance.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function data($key = null, $default = null)
+    {
+        return $this-&gt;input($key, $default);
+    }
+
+    /**
+     * Retrieve a parameter item from a given source.
+     *
+     * @param  string  $source
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>rotected function retrieveItem($source, $key, $default)
+    {
+        <span style="background-color: green">i</span>f (is_null($key)) {
+            return $this-&gt;$source-&gt;all();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;$source instanceof InputBag) {
+            return $this-&gt;$source-&gt;all()[$key] ?? <span style="background-color: red">$</span>default;
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;$source-&gt;get($key, $default);
+    }
+
+    /**
+     * Dump the items.
+     *
+     * @param  mixed  $keys
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dump($keys = [])
+    {
+        $keys = is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args();
+
+        dump(count($keys) &gt; 0 ? $this-&gt;only($keys) : <span style="background-color: red">$</span>this-&gt;all());
+
+        return $this;
+    }
+}
+</pre>

@@ -1,0 +1,127 @@
+<pre>&lt;?php
+
+namespace Laravel\SerializableClosure;
+
+use Closure;
+use Laravel\SerializableClosure\Exceptions\InvalidSignatureException;
+use Laravel\SerializableClosure\Serializers\Signed;
+use Laravel\SerializableClosure\Signers\Hmac;
+
+class SerializableClosure
+{
+    /**
+     * The closure&#039;s serializable.
+     *
+     * @var \Laravel\SerializableClosure\Contracts\Serializable
+     */
+    protected $serializable;
+
+    /**
+     * Creates a new serializable closure instance.
+     *
+     * @param  \Closure  $closure
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __construct(Closure $closure)
+    {
+        $this-&gt;serializable = Serializers\Signed::$signer
+            ? new Serializers\Signed($closure)
+            : <span style="background-color: red">n</span>ew Serializers\Native($closure);
+    }
+
+    /**
+     * Resolve the closure with the given arguments.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __invoke()
+    {
+        return call_user_func_array($this-&gt;serializable, func_get_args());
+    }
+
+    /**
+     * Gets the closure.
+     *
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>ublic function getClosure()
+    {
+        return $this-&gt;serializable-&gt;getClosure();
+    }
+
+    /**
+     * Create a new unsigned serializable closure instance.
+     *
+     * @param  Closure  $closure
+     * @return \Laravel\SerializableClosure\UnsignedSerializableClosure
+     */
+    <span style="background-color: red">p</span>ublic static function unsigned(Closure $closure)
+    {
+        return new UnsignedSerializableClosure($closure);
+    }
+
+    /**
+     * Sets the serializable closure secret key.
+     *
+     * @param  string|null  $secret
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setSecretKey($secret)
+    {
+        Serializers\Signed::$signer = $secret
+            ? new Hmac($secret)
+            : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Sets the serializable closure secret key.
+     *
+     * @param  \Closure|null  $transformer
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function transformUseVariablesUsing($transformer)
+    {
+        Serializers\Native::$transformUseVariables = $transformer;
+    }
+
+    /**
+     * Sets the serializable closure secret key.
+     *
+     * @param  \Closure|null  $resolver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function resolveUseVariablesUsing($resolver)
+    {
+        Serializers\Native::$resolveUseVariables = $resolver;
+    }
+
+    /**
+     * Get the serializable representation of the closure.
+     *
+     * @return array{serializable: \Laravel\SerializableClosure\Serializers\Signed|\Laravel\SerializableClosure\Contracts\Serializable}
+     */
+    <span style="background-color: red">p</span>ublic function __serialize()
+    {
+        return [
+            &#039;serializable&#039; =&gt; $this-&gt;serializable,
+        ];
+    }
+
+    /**
+     * Restore the closure after serialization.
+     *
+     * @param  array{serializable: \Laravel\SerializableClosure\Serializers\Signed|\Laravel\SerializableClosure\Contracts\Serializable}  $data
+     * @return void
+     *
+     * @throws \Laravel\SerializableClosure\Exceptions\InvalidSignatureException
+     */
+    <span style="background-color: red">p</span>ublic function __unserialize($data)
+    {
+        <span style="background-color: red">i</span>f (Signed::$signer &amp;&amp; <span style="background-color: red">!</span> $data[&#039;serializable&#039;] instanceof Signed) {
+            throw new InvalidSignatureException();
+        <span style="background-color: red">}</span>
+
+        $this-&gt;serializable = $data[&#039;serializable&#039;];
+    }
+}
+</pre>

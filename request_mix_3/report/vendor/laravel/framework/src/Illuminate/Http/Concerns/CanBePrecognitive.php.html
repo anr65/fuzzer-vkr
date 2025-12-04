@@ -1,0 +1,46 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Concerns;
+
+use Illuminate\Support\Collection;
+
+trait CanBePrecognitive
+{
+    /**
+     * Filter the given array of rules into an array of rules that are included in precognitive headers.
+     *
+     * @param  array  $rules
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function filterPrecognitiveRules($rules)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;headers-&gt;has(&#039;Precognition-Validate-Only&#039;)) {
+            return $rules;
+        <span style="background-color: red">}</span>
+
+        return (new Collection($rules))
+            -&gt;only(explode(&#039;,&#039;, $this-&gt;header(&#039;Precognition-Validate-Only&#039;)))
+            -&gt;all();
+    }
+
+    /**
+     * Determine if the request is attempting to be precognitive.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isAttemptingPrecognition()
+    {
+        return $this-&gt;header(&#039;Precognition&#039;) === &#039;true&#039;;
+    }
+
+    /**
+     * Determine if the request is precognitive.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isPrecognitive()
+    {
+        return $this-&gt;attributes-&gt;get(&#039;precognitive&#039;, false);
+    }
+}
+</pre>

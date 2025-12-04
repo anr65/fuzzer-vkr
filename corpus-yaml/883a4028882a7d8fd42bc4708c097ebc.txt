@@ -1,0 +1,11 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_AR'-max_total_time=3600'
+  trigger:
+    include: .covfuzz-ci.yml
+  rules:
+    - if: $CI_COMMules:
+    - if: $CI_COMMIT_BRANCH != 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_reqrules:
+    - if: $CI_COMMules:
+    - if: $CI_COMMIT_BRANCH != 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_requ $CI_COMMIT_BRANCH != 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_reqrules:
+    - if: $CI_COMMulerequest_event'

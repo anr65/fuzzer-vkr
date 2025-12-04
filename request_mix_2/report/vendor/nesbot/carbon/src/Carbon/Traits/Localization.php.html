@@ -1,0 +1,729 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonInterface;
+use Carbon\Exceptions\InvalidTypeException;
+use Carbon\Exceptions\NotLocaleAwareException;
+use Carbon\Language;
+use Carbon\Translator;
+use Carbon\TranslatorStrongTypeInterface;
+use Closure;
+use Symfony\Component\Translation\TranslatorBagInterface;
+use Symfony\Contracts\Translation\LocaleAwareInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+/**
+ * Trait Localization.
+ *
+ * Embed default and locale translators and translation base methods.
+ */
+trait Localization
+{
+    use StaticLocalization;
+
+    /**
+     * Specific translator of the current instance.
+     */
+    protected ?TranslatorInterface $localTranslator = null;
+
+    /**
+     * Return true if the current instance has its own translator.
+     */
+    <span style="background-color: red">p</span>ublic function hasLocalTranslator(): bool
+    {
+        return isset($this-&gt;localTranslator);
+    }
+
+    /**
+     * Get the translator of the current instance or the default if none set.
+     */
+    <span style="background-color: red">p</span>ublic function getLocalTranslator(): TranslatorInterface
+    {
+        return $this-&gt;localTranslator ?? <span style="background-color: red">$</span>this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::getTranslator());
+    }
+
+    /**
+     * Set the translator for the current instance.
+     */
+    <span style="background-color: red">p</span>ublic function setLocalTranslator(TranslatorInterface $translator): self
+    {
+        $this-&gt;localTranslator = $translator;
+
+        return $this;
+    }
+
+    /**
+     * Returns raw translation message for a given key.
+     *
+     * @param TranslatorInterface|null $translator the translator to use
+     * @param string                   $key        key to find
+     * @param string|null              $locale     current locale used if null
+     * @param string|null              $default    default value if translation returns the key
+     *
+     * @return string|Closure|null
+     */
+    <span style="background-color: red">p</span>ublic static function getTranslationMessageWith($translator, string $key, ?string $locale = null, ?string $default = null)
+    {
+        <span style="background-color: red">i</span>f (!($translator instanceof TranslatorBagInterface &amp;&amp; <span style="background-color: red">$</span>translator instanceof TranslatorInterface)) {
+            throw new InvalidTypeException(
+                &#039;Translator does not implement &#039;.TranslatorInterface::class.&#039; and &#039;.TranslatorBagInterface::class.&#039;. &#039;.
+                (\is_object($translator) ? \get_class($translator) : <span style="background-color: red">\</span>gettype($translator)).&#039; has been given.&#039;,
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$locale &amp;&amp; <span style="background-color: red">$</span>translator instanceof LocaleAwareInterface) {
+            $locale = $translator-&gt;getLocale();
+        <span style="background-color: red">}</span>
+
+        $result = self::getFromCatalogue($translator, $translator-&gt;getCatalogue($locale), $key);
+
+        return $result === $key ? $default : <span style="background-color: red">$</span>result;
+    }
+
+    /**
+     * Returns raw translation message for a given key.
+     *
+     * @param string              $key        key to find
+     * @param string|null         $locale     current locale used if null
+     * @param string|null         $default    default value if translation returns the key
+     * @param TranslatorInterface $translator an optional translator to use
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getTranslationMessage(string $key, ?string $locale = null, ?string $default = null, $translator = null)
+    {
+        return static::getTranslationMessageWith($translator ?? <span style="background-color: red">$</span>this-&gt;getLocalTranslator(), $key, $locale, $default);
+    }
+
+    /**
+     * Translate using translation string or callback available.
+     *
+     * @param TranslatorInterface $translator an optional translator to use
+     * @param string              $key        key to find
+     * @param array               $parameters replacement parameters
+     * @param int|float|null      $number     number if plural
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function translateWith(TranslatorInterface $translator, string $key, array $parameters = [], $number = null): string
+    {
+        $message = static::getTranslationMessageWith($translator, $key, null, $key);
+        <span style="background-color: red">i</span>f ($message instanceof Closure) {
+            return (string) $message(...array_values($parameters));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($number !== null) {
+            $parameters[&#039;%count%&#039;] = $number;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($parameters[&#039;%count%&#039;])) {
+            $parameters[&#039;:count&#039;] = $parameters[&#039;%count%&#039;];
+        <span style="background-color: red">}</span>
+
+        return (string) $translator-&gt;trans($key, $parameters);
+    }
+
+    /**
+     * Translate using translation string or callback available.
+     *
+     * @param string                   $key        key to find
+     * @param array                    $parameters replacement parameters
+     * @param string|int|float|null    $number     number if plural
+     * @param TranslatorInterface|null $translator an optional translator to use
+     * @param bool                     $altNumbers pass true to use alternative numbers
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function translate(
+        string $key,
+        array $parameters = [],
+        string|int|float|null $number = null,
+        ?TranslatorInterface $translator = null,
+        bool $altNumbers = false,
+    ): string {
+        $translation = static::translateWith($translator ?? <span style="background-color: red">$</span>this-&gt;getLocalTranslator(), $key, $parameters, $number);
+
+        <span style="background-color: red">i</span>f ($number !== null &amp;&amp; <span style="background-color: red">$</span>altNumbers) {
+            return str_replace((string) $number, $this-&gt;translateNumber((int) $number), $translation);
+        <span style="background-color: red">}</span>
+
+        return $translation;
+    }
+
+    /**
+     * Returns the alternative number for a given integer if available in the current locale.
+     *
+     * @param int $number
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function translateNumber(int $number): string
+    {
+        $translateKey = &quot;alt_numbers.$number&quot;;
+        $symbol = $this-&gt;translate($translateKey);
+
+        <span style="background-color: red">i</span>f ($symbol !== $translateKey) {
+            return $symbol;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($number &gt; 99 &amp;&amp; <span style="background-color: red">$</span>this-&gt;translate(&#039;alt_numbers.99&#039;) !== &#039;alt_numbers.99&#039;) {
+            $start = &#039;&#039;;
+            <span style="background-color: red">f</span>oreach ([10000, 1000, 100] as $exp) {
+                $key = &quot;alt_numbers_pow.$exp&quot;;
+                <span style="background-color: red">i</span>f ($number &gt;= $exp &amp;&amp; <span style="background-color: red">$</span>number &lt; $exp * 10 &amp;&amp; <span style="background-color: red">(</span>$pow = $this-&gt;translate($key)) !== $key) {
+                    $unit = floor($number / $exp);
+                    $number -= $unit * $exp;
+                    $start .= ($unit &gt; 1 ? $this-&gt;translate(&quot;alt_numbers.$unit&quot;) : <span style="background-color: red">'</span>&#039;).$pow;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            $result = &#039;&#039;;
+            <span style="background-color: red">w</span>hile ($number) {
+                $chunk = $number % 100;
+                $result = $this-&gt;translate(&quot;alt_numbers.$chunk&quot;).$result;
+                $number = floor($number / 100);
+            <span style="background-color: red">}</span>
+
+            return &quot;$start$result&quot;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($number &gt; 9 &amp;&amp; <span style="background-color: red">$</span>this-&gt;translate(&#039;alt_numbers.9&#039;) !== &#039;alt_numbers.9&#039;) {
+            $result = &#039;&#039;;
+            <span style="background-color: red">w</span>hile ($number) {
+                $chunk = $number % 10;
+                $result = $this-&gt;translate(&quot;alt_numbers.$chunk&quot;).$result;
+                $number = floor($number / 10);
+            <span style="background-color: red">}</span>
+
+            return $result;
+        <span style="background-color: red">}</span>
+
+        return (string) $number;
+    }
+
+    /**
+     * Translate a time string from a locale to an other.
+     *
+     * @param string      $timeString date/time/duration string to translate (may also contain English)
+     * @param string|null $from       input locale of the $timeString parameter (`Carbon::getLocale()` by default)
+     * @param string|null $to         output locale of the result returned (`&quot;en&quot;` by default)
+     * @param int         $mode       specify what to translate with options:
+     *                                - CarbonInterface::TRANSLATE_ALL (default)
+     *                                - CarbonInterface::TRANSLATE_MONTHS
+     *                                - CarbonInterface::TRANSLATE_DAYS
+     *                                - CarbonInterface::TRANSLATE_UNITS
+     *                                - CarbonInterface::TRANSLATE_MERIDIEM
+     *                                You can use pipe to group: CarbonInterface::TRANSLATE_MONTHS | CarbonInterface::TRANSLATE_DAYS
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function translateTimeString(
+        string $timeString,
+        ?string $from = null,
+        ?string $to = null,
+        int $mode = CarbonInterface::TRANSLATE_ALL,
+    ): string {
+        // Fallback source and destination locales
+        $from = $from ?: <span style="background-color: red">s</span>tatic::getLocale();
+        $to = $to ?: <span style="background-color: red">C</span>arbonInterface::DEFAULT_LOCALE;
+
+        <span style="background-color: red">i</span>f ($from === $to) {
+            return $timeString;
+        <span style="background-color: red">}</span>
+
+        // Standardize apostrophe
+        $timeString = strtr($timeString, [&#039;’&#039; =&gt; &quot;&#039;&quot;]);
+
+        $fromTranslations = [];
+        $toTranslations = [];
+
+        <span style="background-color: red">f</span>oreach ([&#039;from&#039;, &#039;to&#039;] as $key) {
+            $language = $$key;
+            $translator = Translator::get($language);
+            $translations = $translator-&gt;getMessages();
+
+            <span style="background-color: red">i</span>f (!isset($translations[$language])) {
+                return $timeString;
+            <span style="background-color: red">}</span>
+
+            $translationKey = $key.&#039;Translations&#039;;
+            $messages = $translations[$language];
+            $months = $messages[&#039;months&#039;] ?? <span style="background-color: red">[</span>];
+            $weekdays = $messages[&#039;weekdays&#039;] ?? <span style="background-color: red">[</span>];
+            $meridiem = $messages[&#039;meridiem&#039;] ?? <span style="background-color: red">[</span>&#039;AM&#039;, &#039;PM&#039;];
+
+            <span style="background-color: red">i</span>f (isset($messages[&#039;ordinal_words&#039;])) {
+                $timeString = self::replaceOrdinalWords(
+                    $timeString,
+                    $key === &#039;from&#039; ? array_flip($messages[&#039;ordinal_words&#039;]) : <span style="background-color: red">$</span>messages[&#039;ordinal_words&#039;]
+                );
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($key === &#039;from&#039;) {
+                <span style="background-color: red">f</span>oreach ([&#039;months&#039;, &#039;weekdays&#039;] as $variable) {
+                    $list = $messages[$variable.&#039;_standalone&#039;] ?? <span style="background-color: red">n</span>ull;
+
+                    <span style="background-color: red">i</span>f ($list) {
+                        <span style="background-color: red">f</span>oreach ($$variable as $index =&gt; &amp;$name) {
+                            $name .= &#039;|&#039;.$messages[$variable.&#039;_standalone&#039;][$index];
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $$translationKey = array_merge(
+                $mode &amp; CarbonInterface::TRANSLATE_MONTHS ? static::getTranslationArray($months, static::MONTHS_PER_YEAR, $timeString) : <span style="background-color: red">[</span>],
+                $mode &amp; CarbonInterface::TRANSLATE_MONTHS ? static::getTranslationArray($messages[&#039;months_short&#039;] ?? <span style="background-color: red">[</span>], static::MONTHS_PER_YEAR, $timeString) : <span style="background-color: red">[</span>],
+                $mode &amp; CarbonInterface::TRANSLATE_DAYS ? static::getTranslationArray($weekdays, static::DAYS_PER_WEEK, $timeString) : <span style="background-color: red">[</span>],
+                $mode &amp; CarbonInterface::TRANSLATE_DAYS ? static::getTranslationArray($messages[&#039;weekdays_short&#039;] ?? <span style="background-color: red">[</span>], static::DAYS_PER_WEEK, $timeString) : <span style="background-color: red">[</span>],
+                $mode &amp; CarbonInterface::TRANSLATE_DIFF ? static::translateWordsByKeys([
+                    &#039;diff_now&#039;,
+                    &#039;diff_today&#039;,
+                    &#039;diff_yesterday&#039;,
+                    &#039;diff_tomorrow&#039;,
+                    &#039;diff_before_yesterday&#039;,
+                    &#039;diff_after_tomorrow&#039;,
+                ], $messages, $key) : <span style="background-color: red">[</span>],
+                $mode &amp; CarbonInterface::TRANSLATE_UNITS ? static::translateWordsByKeys([
+                    &#039;year&#039;,
+                    &#039;month&#039;,
+                    &#039;week&#039;,
+                    &#039;day&#039;,
+                    &#039;hour&#039;,
+                    &#039;minute&#039;,
+                    &#039;second&#039;,
+                ], $messages, $key) : <span style="background-color: red">[</span>],
+                $mode &amp; CarbonInterface::TRANSLATE_MERIDIEM ? array_map(<span style="background-color: red">f</span>unction ($hour) use ($meridiem) {
+                    <span style="background-color: red">i</span>f (\is_array($meridiem)) {
+                        return $meridiem[$hour &lt; static::HOURS_PER_DAY / 2 ? 0 : <span style="background-color: red">1</span>];
+                    <span style="background-color: red">}</span>
+
+                    return $meridiem($hour, 0, false);
+                }, range(0, 23)) : <span style="background-color: red">[</span>],
+            );
+        <span style="background-color: red">}</span>
+
+        return substr(preg_replace_callback(&#039;/(?&lt;=[\d\s+.\/,_-])(&#039;.implode(&#039;|&#039;, $fromTranslations).&#039;)(?=[\d\s+.\/,_-])/iu&#039;, <span style="background-color: red">f</span>unction ($match) use ($fromTranslations, $toTranslations) {
+            [$chunk] = $match;
+
+            <span style="background-color: red">f</span>oreach ($fromTranslations as $index =&gt; $word) {
+                <span style="background-color: red">i</span>f (preg_match(&quot;/^$word\$/iu&quot;, $chunk)) {
+                    return $toTranslations[$index] ?? <span style="background-color: red">'</span>&#039;;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return $chunk; // @codeCoverageIgnore
+        }, &quot; $timeString &quot;), 1, -1);
+    }
+
+    /**
+     * Translate a time string from the current locale (`$date-&gt;locale()`) to an other.
+     *
+     * @param string      $timeString time string to translate
+     * @param string|null $to         output locale of the result returned (&quot;en&quot; by default)
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function translateTimeStringTo(string $timeString, ?string $to = null): string
+    {
+        return static::translateTimeString($timeString, $this-&gt;getTranslatorLocale(), $to);
+    }
+
+    /**
+     * Get/set the locale for the current instance.
+     *
+     * @param string|null $locale
+     * @param string      ...$fallbackLocales
+     *
+     * @return $this|string
+     */
+    <span style="background-color: red">p</span>ublic function locale(?string $locale = null, string ...$fallbackLocales): static|string
+    {
+        <span style="background-color: red">i</span>f ($locale === null) {
+            return $this-&gt;getTranslatorLocale();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$this-&gt;localTranslator || <span style="background-color: red">$</span>this-&gt;getTranslatorLocale($this-&gt;localTranslator) !== $locale) {
+            $translator = Translator::get($locale);
+
+            <span style="background-color: red">i</span>f (!empty($fallbackLocales)) {
+                $translator-&gt;setFallbackLocales($fallbackLocales);
+
+                <span style="background-color: red">f</span>oreach ($fallbackLocales as $fallbackLocale) {
+                    $messages = Translator::get($fallbackLocale)-&gt;getMessages();
+
+                    <span style="background-color: red">i</span>f (isset($messages[$fallbackLocale])) {
+                        $translator-&gt;setMessages($fallbackLocale, $messages[$fallbackLocale]);
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $this-&gt;localTranslator = $translator;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Get the current translator locale.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function getLocale(): string
+    {
+        return static::getLocaleAwareTranslator()-&gt;getLocale();
+    }
+
+    /**
+     * Set the current translator locale and indicate if the source locale file exists.
+     * Pass &#039;auto&#039; as locale to use the closest language to the current LC_TIME locale.
+     *
+     * @param string $locale locale ex. en
+     */
+    <span style="background-color: red">p</span>ublic static function setLocale(string $locale): void
+    {
+        static::getLocaleAwareTranslator()-&gt;setLocale($locale);
+    }
+
+    /**
+     * Set the fallback locale.
+     *
+     * @see https://symfony.com/doc/current/components/translation.html#fallback-locales
+     *
+     * @param string $locale
+     */
+    <span style="background-color: red">p</span>ublic static function setFallbackLocale(string $locale): void
+    {
+        $translator = static::getTranslator();
+
+        <span style="background-color: red">i</span>f (method_exists($translator, &#039;setFallbackLocales&#039;)) {
+            $translator-&gt;setFallbackLocales([$locale]);
+
+            <span style="background-color: red">i</span>f ($translator instanceof Translator) {
+                $preferredLocale = $translator-&gt;getLocale();
+                $translator-&gt;setMessages($preferredLocale, array_replace_recursive(
+                    $translator-&gt;getMessages()[$locale] ?? <span style="background-color: red">[</span>],
+                    Translator::get($locale)-&gt;getMessages()[$locale] ?? <span style="background-color: red">[</span>],
+                    $translator-&gt;getMessages($preferredLocale),
+                ));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the fallback locale.
+     *
+     * @see https://symfony.com/doc/current/components/translation.html#fallback-locales
+     */
+    <span style="background-color: red">p</span>ublic static function getFallbackLocale(): ?string
+    {
+        $translator = static::getTranslator();
+
+        <span style="background-color: red">i</span>f (method_exists($translator, &#039;getFallbackLocales&#039;)) {
+            return $translator-&gt;getFallbackLocales()[0] ?? <span style="background-color: red">n</span>ull;
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Set the current locale to the given, execute the passed function, reset the locale to previous one,
+     * then return the result of the closure (or null if the closure was void).
+     *
+     * @param string   $locale locale ex. en
+     * @param callable $func
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function executeWithLocale(string $locale, callable $func): mixed
+    {
+        $currentLocale = static::getLocale();
+        static::setLocale($locale);
+        $newLocale = static::getLocale();
+        $result = $func(
+            $newLocale === &#039;en&#039; &amp;&amp; <span style="background-color: red">s</span>trtolower(substr((string) $locale, 0, 2)) !== &#039;en&#039;
+                ? false
+                : <span style="background-color: red">$</span>newLocale,
+            static::getTranslator(),
+        );
+        static::setLocale($currentLocale);
+
+        return $result;
+    }
+
+    /**
+     * Returns true if the given locale is internally supported and has short-units support.
+     * Support is considered enabled if either year, day or hour has a short variant translated.
+     *
+     * @param string $locale locale ex. en
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function localeHasShortUnits(string $locale): bool
+    {
+        return static::executeWithLocale($locale, <span style="background-color: red">f</span>unction ($newLocale, TranslatorInterface $translator) {
+            return ($newLocale &amp;&amp; (<span style="background-color: red">(</span>$y = static::translateWith($translator, &#039;y&#039;)) !== &#039;y&#039; &amp;&amp; <span style="background-color: red">$</span>y !== static::translateWith($translator, &#039;year&#039;))) || (
+                <span style="background-color: red">(</span>$y = static::translateWith($translator, &#039;d&#039;)) !== &#039;d&#039; &amp;&amp;
+                    <span style="background-color: red">$</span>y !== static::translateWith($translator, &#039;day&#039;)
+            ) || (
+                <span style="background-color: red">(</span>$y = static::translateWith($translator, &#039;h&#039;)) !== &#039;h&#039; &amp;&amp;
+                    <span style="background-color: red">$</span>y !== static::translateWith($translator, &#039;hour&#039;)
+            );
+        });
+    }
+
+    /**
+     * Returns true if the given locale is internally supported and has diff syntax support (ago, from now, before, after).
+     * Support is considered enabled if the 4 sentences are translated in the given locale.
+     *
+     * @param string $locale locale ex. en
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function localeHasDiffSyntax(string $locale): bool
+    {
+        return static::executeWithLocale($locale, <span style="background-color: red">f</span>unction ($newLocale, TranslatorInterface $translator) {
+            <span style="background-color: red">i</span>f (!$newLocale) {
+                return false;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ([&#039;ago&#039;, &#039;from_now&#039;, &#039;before&#039;, &#039;after&#039;] as $key) {
+                <span style="background-color: red">i</span>f ($translator instanceof TranslatorBagInterface &amp;&amp;
+                    <span style="background-color: red">s</span>elf::getFromCatalogue($translator, $translator-&gt;getCatalogue($newLocale), $key) instanceof Closure
+                ) {
+                    continue;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($translator-&gt;trans($key) === $key) {
+                    return false;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return true;
+        });
+    }
+
+    /**
+     * Returns true if the given locale is internally supported and has words for 1-day diff (just now, yesterday, tomorrow).
+     * Support is considered enabled if the 3 words are translated in the given locale.
+     *
+     * @param string $locale locale ex. en
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function localeHasDiffOneDayWords(string $locale): bool
+    {
+        return static::executeWithLocale($locale, <span style="background-color: red">f</span>unction ($newLocale, TranslatorInterface $translator) {
+            return $newLocale &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;diff_now&#039;) !== &#039;diff_now&#039; &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;diff_yesterday&#039;) !== &#039;diff_yesterday&#039; &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;diff_tomorrow&#039;) !== &#039;diff_tomorrow&#039;;
+        });
+    }
+
+    /**
+     * Returns true if the given locale is internally supported and has words for 2-days diff (before yesterday, after tomorrow).
+     * Support is considered enabled if the 2 words are translated in the given locale.
+     *
+     * @param string $locale locale ex. en
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function localeHasDiffTwoDayWords(string $locale): bool
+    {
+        return static::executeWithLocale($locale, <span style="background-color: red">f</span>unction ($newLocale, TranslatorInterface $translator) {
+            return $newLocale &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;diff_before_yesterday&#039;) !== &#039;diff_before_yesterday&#039; &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;diff_after_tomorrow&#039;) !== &#039;diff_after_tomorrow&#039;;
+        });
+    }
+
+    /**
+     * Returns true if the given locale is internally supported and has period syntax support (X times, every X, from X, to X).
+     * Support is considered enabled if the 4 sentences are translated in the given locale.
+     *
+     * @param string $locale locale ex. en
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function localeHasPeriodSyntax($locale)
+    {
+        return static::executeWithLocale($locale, <span style="background-color: red">f</span>unction ($newLocale, TranslatorInterface $translator) {
+            return $newLocale &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;period_recurrences&#039;) !== &#039;period_recurrences&#039; &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;period_interval&#039;) !== &#039;period_interval&#039; &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;period_start_date&#039;) !== &#039;period_start_date&#039; &amp;&amp;
+                <span style="background-color: red">$</span>translator-&gt;trans(&#039;period_end_date&#039;) !== &#039;period_end_date&#039;;
+        });
+    }
+
+    /**
+     * Returns the list of internally available locales and already loaded custom locales.
+     * (It will ignore custom translator dynamic loading.)
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function getAvailableLocales()
+    {
+        $translator = static::getLocaleAwareTranslator();
+
+        return $translator instanceof Translator
+            ? $translator-&gt;getAvailableLocales()
+            : <span style="background-color: red">[</span>$translator-&gt;getLocale()];
+    }
+
+    /**
+     * Returns list of Language object for each available locale. This object allow you to get the ISO name, native
+     * name, region and variant of the locale.
+     *
+     * @return Language[]
+     */
+    <span style="background-color: red">p</span>ublic static function getAvailableLocalesInfo()
+    {
+        $languages = [];
+        <span style="background-color: red">f</span>oreach (static::getAvailableLocales() as $id) {
+            $languages[$id] = new Language($id);
+        <span style="background-color: red">}</span>
+
+        return $languages;
+    }
+
+    /**
+     * Get the locale of a given translator.
+     *
+     * If null or omitted, current local translator is used.
+     * If no local translator is in use, current global translator is used.
+     */
+    <span style="background-color: red">p</span>rotected function getTranslatorLocale($translator = null): ?string
+    {
+        <span style="background-color: red">i</span>f (\func_num_args() === 0) {
+            $translator = $this-&gt;getLocalTranslator();
+        <span style="background-color: red">}</span>
+
+        $translator = static::getLocaleAwareTranslator($translator);
+
+        return $translator?-&gt;getLocale();
+    }
+
+    /**
+     * Throw an error if passed object is not LocaleAwareInterface.
+     *
+     * @param LocaleAwareInterface|null $translator
+     *
+     * @return LocaleAwareInterface|null
+     */
+    <span style="background-color: red">p</span>rotected static function getLocaleAwareTranslator($translator = null)
+    {
+        <span style="background-color: red">i</span>f (\func_num_args() === 0) {
+            $translator = static::getTranslator();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($translator &amp;&amp; <span style="background-color: red">!</span>($translator instanceof LocaleAwareInterface || <span style="background-color: red">m</span>ethod_exists($translator, &#039;getLocale&#039;))) {
+            throw new NotLocaleAwareException($translator); // @codeCoverageIgnore
+        <span style="background-color: red">}</span>
+
+        return $translator;
+    }
+
+    /**
+     * @param mixed                                                    $translator
+     * @param \Symfony\Component\Translation\MessageCatalogueInterface $catalogue
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rivate static function getFromCatalogue($translator, $catalogue, string $id, string $domain = &#039;messages&#039;)
+    {
+        return $translator instanceof TranslatorStrongTypeInterface
+            ? $translator-&gt;getFromCatalogue($catalogue, $id, $domain)
+            : <span style="background-color: red">$</span>catalogue-&gt;get($id, $domain); // @codeCoverageIgnore
+    }
+
+    /**
+     * Return the word cleaned from its translation codes.
+     *
+     * @param string $word
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rivate static function cleanWordFromTranslationString($word)
+    {
+        $word = str_replace([&#039;:count&#039;, &#039;%count&#039;, &#039;:time&#039;], &#039;&#039;, $word);
+        $word = strtr($word, [&#039;’&#039; =&gt; &quot;&#039;&quot;]);
+        $word = preg_replace(&#039;/({\d+(,(\d+|Inf))?}|[\[\]]\d+(,(\d+|Inf))?[\[\]])/&#039;, &#039;&#039;, $word);
+
+        return trim($word);
+    }
+
+    /**
+     * Translate a list of words.
+     *
+     * @param string[] $keys     keys to translate.
+     * @param string[] $messages messages bag handling translations.
+     * @param string   $key      &#039;to&#039; (to get the translation) or &#039;from&#039; (to get the detection RegExp pattern).
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>rivate static function translateWordsByKeys($keys, $messages, $key): array
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($wordKey) use ($messages, $key) {
+            $message = $key === &#039;from&#039; &amp;&amp; <span style="background-color: red">i</span>sset($messages[$wordKey.&#039;_regexp&#039;])
+                ? $messages[$wordKey.&#039;_regexp&#039;]
+                : (<span style="background-color: red">$</span>messages[$wordKey] ?? <span style="background-color: red">n</span>ull);
+
+            <span style="background-color: red">i</span>f (!$message) {
+                return &#039;&gt;&gt;DO NOT REPLACE&lt;&lt;&#039;;
+            <span style="background-color: red">}</span>
+
+            $parts = explode(&#039;|&#039;, $message);
+
+            return $key === &#039;to&#039;
+                ? self::cleanWordFromTranslationString(end($parts))
+                : <span style="background-color: red">'</span>(?:&#039;.implode(&#039;|&#039;, array_map([static::class, &#039;cleanWordFromTranslationString&#039;], $parts)).&#039;)&#039;;
+        }, $keys);
+    }
+
+    /**
+     * Get an array of translations based on the current date.
+     *
+     * @param callable $translation
+     * @param int      $length
+     * @param string   $timeString
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>rivate static function getTranslationArray($translation, $length, $timeString): array
+    {
+        $filler = &#039;&gt;&gt;DO NOT REPLACE&lt;&lt;&#039;;
+
+        <span style="background-color: red">i</span>f (\is_array($translation)) {
+            return array_pad($translation, $length, $filler);
+        <span style="background-color: red">}</span>
+
+        $list = [];
+        $date = static::now();
+
+        <span style="background-color: red">f</span>or ($i = 0; $i &lt; $length; $i++) {
+            $list[] = $translation($date, $timeString, $i) ?? <span style="background-color: red">$</span>filler;
+        <span style="background-color: red">}</span>
+
+        return $list;
+    }
+
+    <span style="background-color: red">p</span>rivate static function replaceOrdinalWords(string $timeString, array $ordinalWords): string
+    {
+        return preg_replace_callback(&#039;/(?&lt;![a-z])[a-z]+(?![a-z])/i&#039;, <span style="background-color: red">f</span>unction (array $match) use ($ordinalWords) {
+            return $ordinalWords[mb_strtolower($match[0])] ?? <span style="background-color: red">$</span>match[0];
+        }, $timeString);
+    }
+}
+</pre>

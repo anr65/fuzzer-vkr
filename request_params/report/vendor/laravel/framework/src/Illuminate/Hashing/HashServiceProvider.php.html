@@ -1,0 +1,36 @@
+<pre>&lt;?php
+
+namespace Illuminate\Hashing;
+
+use Illuminate\Contracts\Support\DeferrableProvider;
+use Illuminate\Support\ServiceProvider;
+
+class HashServiceProvider extends ServiceProvider implements DeferrableProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;app-&gt;singleton(&#039;hash&#039;, <span style="background-color: green">f</span>unction ($app) {
+            return new HashManager($app);
+        });
+
+        $this-&gt;app-&gt;singleton(&#039;hash.driver&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return $app[&#039;hash&#039;]-&gt;driver();
+        });
+    }
+
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function provides()
+    {
+        return [&#039;hash&#039;, &#039;hash.driver&#039;];
+    }
+}
+</pre>

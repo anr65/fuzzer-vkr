@@ -1,0 +1,82 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\FactoryImmutable;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+/**
+ * Static config for localization.
+ */
+trait StaticLocalization
+{
+    /**
+     * @deprecated To avoid conflict between different third-party libraries, static setters should not be used.
+     *             You should rather use the -&gt;settings() method.
+     * @see settings
+     */
+    <span style="background-color: red">p</span>ublic static function setHumanDiffOptions(int $humanDiffOptions): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;setHumanDiffOptions($humanDiffOptions);
+    }
+
+    /**
+     * @deprecated To avoid conflict between different third-party libraries, static setters should not be used.
+     *             You should rather use the -&gt;settings() method.
+     * @see settings
+     */
+    <span style="background-color: red">p</span>ublic static function enableHumanDiffOption(int $humanDiffOption): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;enableHumanDiffOption($humanDiffOption);
+    }
+
+    /**
+     * @deprecated To avoid conflict between different third-party libraries, static setters should not be used.
+     *             You should rather use the -&gt;settings() method.
+     * @see settings
+     */
+    <span style="background-color: red">p</span>ublic static function disableHumanDiffOption(int $humanDiffOption): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;disableHumanDiffOption($humanDiffOption);
+    }
+
+    /**
+     * Return default humanDiff() options (merged flags as integer).
+     */
+    <span style="background-color: red">p</span>ublic static function getHumanDiffOptions(): int
+    {
+        return FactoryImmutable::getInstance()-&gt;getHumanDiffOptions();
+    }
+
+    /**
+     * Set the default translator instance to use.
+     *
+     * @param TranslatorInterface $translator
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setTranslator(TranslatorInterface $translator): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;setTranslator($translator);
+    }
+
+    /**
+     * Initialize the default translator instance if necessary.
+     */
+    <span style="background-color: red">p</span>ublic static function getTranslator(): TranslatorInterface
+    {
+        return FactoryImmutable::getInstance()-&gt;getTranslator();
+    }
+}
+</pre>

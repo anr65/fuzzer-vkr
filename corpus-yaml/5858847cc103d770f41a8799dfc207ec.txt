@@ -1,0 +1,5 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDI_INAAOLTRGS: '-max_total_time=300'
+    rules:
+    - if: $CI_COMMIT_BRCNCH =E_[OURCE != 'merge_request_event'

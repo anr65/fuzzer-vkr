@@ -1,0 +1,74 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation;
+
+use Closure;
+
+class EnvironmentDetector
+{
+    /**
+     * Detect the application&#039;s current environment.
+     *
+     * @param  \Closure  $callback
+     * @param  array|null  $consoleArgs
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function detect(Closure $callback, $consoleArgs = null)
+    {
+        <span style="background-color: green">i</span>f ($consoleArgs) {
+            return $this-&gt;detectConsoleEnvironment($callback, $consoleArgs);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;detectWebEnvironment($callback);
+    }
+
+    /**
+     * Set the application environment for a web request.
+     *
+     * @param  \Closure  $callback
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function detectWebEnvironment(Closure $callback)
+    {
+        return $callback();
+    }
+
+    /**
+     * Set the application environment from command-line arguments.
+     *
+     * @param  \Closure  $callback
+     * @param  array  $args
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function detectConsoleEnvironment(Closure $callback, array $args)
+    {
+        // First we will check if an environment argument was passed via console arguments
+        // and if it was that automatically overrides as the environment. Otherwise, we
+        // will check the environment as a &quot;web&quot; request like a typical HTTP request.
+        <span style="background-color: red">i</span>f (! is_null($value = $this-&gt;getEnvironmentArgument($args))) {
+            return $value;
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;detectWebEnvironment($callback);
+    }
+
+    /**
+     * Get the environment argument from the console.
+     *
+     * @param  array  $args
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>rotected function getEnvironmentArgument(array $args)
+    {
+        <span style="background-color: green">f</span>oreach ($args as $i =&gt; $value) {
+            <span style="background-color: red">i</span>f ($value === &#039;--env&#039;) {
+                return $args[$i + 1] ?? <span style="background-color: red">n</span>ull;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (str_starts_with($value, &#039;--env=&#039;)) {
+                return head(array_slice(explode(&#039;=&#039;, $value), 1));
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+    }
+}
+</pre>

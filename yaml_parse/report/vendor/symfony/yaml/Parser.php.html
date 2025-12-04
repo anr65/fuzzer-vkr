@@ -1,0 +1,1272 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Yaml;
+
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Tag\TaggedValue;
+
+/**
+ * Parser parses YAML strings to convert them to PHP arrays.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @final
+ */
+class Parser
+{
+    public const TAG_PATTERN = &#039;(?P&lt;tag&gt;![\w!.\/:-]+)&#039;;
+    public const BLOCK_SCALAR_HEADER_PATTERN = &#039;(?P&lt;separator&gt;\||&gt;)(?P&lt;modifiers&gt;\+|\-|\d+|\+\d+|\-\d+|\d+\+|\d+\-)?(?P&lt;comments&gt; +#.*)?&#039;;
+    public const REFERENCE_PATTERN = &#039;#^&amp;(?P&lt;ref&gt;[^ ]++) *+(?P&lt;value&gt;.*)#u&#039;;
+
+    private ?string $filename = null;
+    private int $offset = 0;
+    private int $numberOfParsedLines = 0;
+    private ?int $totalNumberOfLines = null;
+    private array $lines = [];
+    private int $currentLineNb = -1;
+    private string $currentLine = &#039;&#039;;
+    private array $refs = [];
+    private array $skippedLineNumbers = [];
+    private array $locallySkippedLineNumbers = [];
+    private array $refsBeingParsed = [];
+
+    /**
+     * Parses a YAML file into a PHP value.
+     *
+     * @param string                     $filename The path to the YAML file to be parsed
+     * @param int-mask-of&lt;Yaml::PARSE_*&gt; $flags    A bit field of Yaml::PARSE_* constants to customize the YAML parser behavior
+     *
+     * @throws ParseException If the file could not be read or the YAML is not valid
+     */
+    <span style="background-color: green">p</span>ublic function parseFile(string $filename, int $flags = 0): mixed
+    {
+        <span style="background-color: green">i</span>f (!is_file($filename)) {
+            throw new ParseException(\sprintf(&#039;File &quot;%s&quot; does not exist.&#039;, $filename));
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (!is_readable($filename)) {
+            throw new ParseException(\sprintf(&#039;File &quot;%s&quot; cannot be read.&#039;, $filename));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;filename = $filename;
+
+        try {
+            return $this-&gt;parse(file_get_contents($filename), $flags);
+        } <span style="background-color: red">f</span>inally {
+            $this-&gt;filename = null;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Parses a YAML string to a PHP value.
+     *
+     * @param string                     $value A YAML string
+     * @param int-mask-of&lt;Yaml::PARSE_*&gt; $flags A bit field of Yaml::PARSE_* constants to customize the YAML parser behavior
+     *
+     * @throws ParseException If the YAML is not valid
+     */
+    <span style="background-color: green">p</span>ublic function parse(string $value, int $flags = 0): mixed
+    {
+        <span style="background-color: green">i</span>f (false === preg_match(&#039;//u&#039;, $value)) {
+            throw new ParseException(&#039;The YAML value does not appear to be valid UTF-8.&#039;, -1, null, $this-&gt;filename);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;refs = [];
+
+        try {
+            $data = $this-&gt;doParse($value, $flags);
+        } <span style="background-color: green">f</span>inally {
+            $this-&gt;refsBeingParsed = [];
+            $this-&gt;offset = 0;
+            $this-&gt;lines = [];
+            $this-&gt;currentLine = &#039;&#039;;
+            $this-&gt;numberOfParsedLines = 0;
+            $this-&gt;refs = [];
+            $this-&gt;skippedLineNumbers = [];
+            $this-&gt;locallySkippedLineNumbers = [];
+            $this-&gt;totalNumberOfLines = null;
+        <span style="background-color: green">}</span>
+
+        return $data;
+    }
+
+    <span style="background-color: green">p</span>rivate function doParse(string $value, int $flags): mixed
+    {
+        $this-&gt;currentLineNb = -1;
+        $this-&gt;currentLine = &#039;&#039;;
+        $value = $this-&gt;cleanup($value);
+        $this-&gt;lines = explode(&quot;\n&quot;, $value);
+        $this-&gt;numberOfParsedLines = \count($this-&gt;lines);
+        $this-&gt;locallySkippedLineNumbers = [];
+        $this-&gt;totalNumberOfLines ??= <span style="background-color: green">$</span>this-&gt;numberOfParsedLines;
+
+        <span style="background-color: red">i</span>f (!$this-&gt;moveToNextLine()) {
+            return null;
+        <span style="background-color: green">}</span>
+
+        $data = [];
+        $context = null;
+        $allowOverwrite = false;
+
+        <span style="background-color: green">w</span>hile ($this-&gt;isCurrentLineEmpty()) {
+            <span style="background-color: green">i</span>f (!$this-&gt;moveToNextLine()) {
+                return null;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        // Resolves the tag and returns if end of the document
+        <span style="background-color: red">i</span>f (null !== ($tag = $this-&gt;getLineTag($this-&gt;currentLine, $flags, false)) &amp;&amp; <span style="background-color: green">!</span>$this-&gt;moveToNextLine()) {
+            return new TaggedValue($tag, &#039;&#039;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">d</span>o {
+            <span style="background-color: green">i</span>f ($this-&gt;isCurrentLineEmpty()) {
+                continue;
+            <span style="background-color: green">}</span>
+
+            // tab?
+            <span style="background-color: green">i</span>f (&quot;\t&quot; === $this-&gt;currentLine[0]) {
+                throw new ParseException(&#039;A YAML file cannot contain tabs as indentation.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+            <span style="background-color: green">}</span>
+
+            Inline::initialize($flags, $this-&gt;getRealCurrentLineNb(), $this-&gt;filename);
+
+            $isRef = $mergeNode = false;
+            <span style="background-color: green">i</span>f (&#039;-&#039; === $this-&gt;currentLine[0] &amp;&amp; <span style="background-color: green">s</span>elf::preg_match(&#039;#^\-((?P&lt;leadspaces&gt;\s+)(?P&lt;value&gt;.+))?$#u&#039;, rtrim($this-&gt;currentLine), $values)) {
+                <span style="background-color: red">i</span>f ($context &amp;&amp; <span style="background-color: red">'</span>mapping&#039; == $context) {
+                    throw new ParseException(&#039;You cannot define a sequence item when in a mapping.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: green">}</span>
+                $context = &#039;sequence&#039;;
+
+                <span style="background-color: red">i</span>f (isset($values[&#039;value&#039;]) &amp;&amp; <span style="background-color: green">'</span>&amp;&#039; === $values[&#039;value&#039;][0] &amp;&amp; <span style="background-color: red">s</span>elf::preg_match(self::REFERENCE_PATTERN, $values[&#039;value&#039;], $matches)) {
+                    $isRef = $matches[&#039;ref&#039;];
+                    $this-&gt;refsBeingParsed[] = $isRef;
+                    $values[&#039;value&#039;] = $matches[&#039;value&#039;];
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: green">i</span>f (isset($values[&#039;value&#039;][1]) &amp;&amp; <span style="background-color: green">'</span>?&#039; === $values[&#039;value&#039;][0] &amp;&amp; <span style="background-color: green">'</span> &#039; === $values[&#039;value&#039;][1]) {
+                    throw new ParseException(&#039;Complex mappings are not supported.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine);
+                <span style="background-color: green">}</span>
+
+                // array
+                <span style="background-color: red">i</span>f (isset($values[&#039;value&#039;]) &amp;&amp; <span style="background-color: green">s</span>tr_starts_with(ltrim($values[&#039;value&#039;], &#039; &#039;), &#039;-&#039;)) {
+                    // Inline first child
+                    $currentLineNumber = $this-&gt;getRealCurrentLineNb();
+
+                    $sequenceIndentation = \strlen($values[&#039;leadspaces&#039;]) + 1;
+                    $sequenceYaml = substr($this-&gt;currentLine, $sequenceIndentation);
+                    $sequenceYaml .= &quot;\n&quot;.$this-&gt;getNextEmbedBlock($sequenceIndentation, true);
+
+                    $data[] = $this-&gt;parseBlock($currentLineNumber, rtrim($sequenceYaml), $flags);
+                } <span style="background-color: green">e</span>lseif (!isset($values[&#039;value&#039;]) || <span style="background-color: green">'</span>&#039; == trim($values[&#039;value&#039;], &#039; &#039;) || <span style="background-color: green">s</span>tr_starts_with(ltrim($values[&#039;value&#039;], &#039; &#039;), &#039;#&#039;)) {
+                    $data[] = $this-&gt;parseBlock($this-&gt;getRealCurrentLineNb() + 1, $this-&gt;getNextEmbedBlock(null, true) ?? <span style="background-color: red">'</span>&#039;, $flags);
+                } <span style="background-color: red">e</span>lseif (null !== $subTag = $this-&gt;getLineTag(ltrim($values[&#039;value&#039;], &#039; &#039;), $flags)) {
+                    $data[] = new TaggedValue(
+                        $subTag,
+                        $this-&gt;parseBlock($this-&gt;getRealCurrentLineNb() + 1, $this-&gt;getNextEmbedBlock(null, true), $flags)
+                    );
+                } <span style="background-color: green">e</span>lse {
+                    <span style="background-color: red">i</span>f (
+                        isset($values[&#039;leadspaces&#039;])
+                        &amp;&amp; (
+                            <span style="background-color: green">'</span>!&#039; === $values[&#039;value&#039;][0]
+                            || <span style="background-color: green">s</span>elf::preg_match(&#039;#^(?P&lt;key&gt;&#039;.Inline::REGEX_QUOTED_STRING.&#039;|[^ \&#039;&quot;\{\[].*?) *\:(\s+(?P&lt;value&gt;.+?))?\s*$#u&#039;, $this-&gt;trimTag($values[&#039;value&#039;]), $matches)
+                        )
+                    ) {
+                        $block = $values[&#039;value&#039;];
+                        <span style="background-color: red">i</span>f ($this-&gt;isNextLineIndented() || <span style="background-color: red">i</span>sset($matches[&#039;value&#039;]) &amp;&amp; <span style="background-color: red">'</span>&gt;-&#039; === $matches[&#039;value&#039;]) {
+                            $block .= &quot;\n&quot;.$this-&gt;getNextEmbedBlock($this-&gt;getCurrentLineIndentation() + \strlen($values[&#039;leadspaces&#039;]) + 1);
+                        <span style="background-color: red">}</span>
+
+                        $data[] = $this-&gt;parseBlock($this-&gt;getRealCurrentLineNb(), $block, $flags);
+                    } <span style="background-color: green">e</span>lse {
+                        $data[] = $this-&gt;parseValue($values[&#039;value&#039;], $flags, $context);
+                    <span style="background-color: green">}</span>
+                <span style="background-color: green">}</span>
+                <span style="background-color: red">i</span>f ($isRef) {
+                    $this-&gt;refs[$isRef] = end($data);
+                    array_pop($this-&gt;refsBeingParsed);
+                <span style="background-color: green">}</span>
+            } <span style="background-color: green">e</span>lseif (
+                self::preg_match(&#039;#^(?P&lt;key&gt;(?:![^\s]++\s++)?(?:&#039;.Inline::REGEX_QUOTED_STRING.&#039;|[^ \&#039;&quot;\[\{!].*?)) *\:(( |\t)++(?P&lt;value&gt;.+))?$#u&#039;, rtrim($this-&gt;currentLine), $values)
+                &amp;&amp; (<span style="background-color: green">!</span>str_contains($values[&#039;key&#039;], &#039; #&#039;) || <span style="background-color: red">\</span>in_array($values[&#039;key&#039;][0], [&#039;&quot;&#039;, &quot;&#039;&quot;]))
+            ) {
+                <span style="background-color: green">i</span>f ($context &amp;&amp; <span style="background-color: green">'</span>sequence&#039; == $context) {
+                    throw new ParseException(&#039;You cannot define a mapping item when in a sequence.&#039;, $this-&gt;currentLineNb + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: green">}</span>
+                $context = &#039;mapping&#039;;
+
+                try {
+                    $key = Inline::parseScalar($values[&#039;key&#039;]);
+                } <span style="background-color: red">c</span>atch (ParseException $e) {
+                    $e-&gt;setParsedLine($this-&gt;getRealCurrentLineNb() + 1);
+                    $e-&gt;setSnippet($this-&gt;currentLine);
+
+                    throw $e;
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: green">i</span>f (!\is_string($key) &amp;&amp; <span style="background-color: green">!</span>\is_int($key)) {
+                    throw new ParseException((is_numeric($key) ? &#039;Numeric&#039; : <span style="background-color: red">'</span>Non-string&#039;).&#039; keys are not supported. Quote your evaluable mapping keys instead.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine);
+                <span style="background-color: green">}</span>
+
+                // Convert float keys to strings, to avoid being converted to integers by PHP
+                <span style="background-color: red">i</span>f (\is_float($key)) {
+                    $key = (string) $key;
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: green">i</span>f (&#039;&lt;&lt;&#039; === $key &amp;&amp; (<span style="background-color: green">!</span>isset($values[&#039;value&#039;]) || <span style="background-color: green">'</span>&amp;&#039; !== $values[&#039;value&#039;][0] || <span style="background-color: green">!</span>self::preg_match(&#039;#^&amp;(?P&lt;ref&gt;[^ ]+)#u&#039;, $values[&#039;value&#039;], $refMatches))) {
+                    $mergeNode = true;
+                    $allowOverwrite = true;
+                    <span style="background-color: red">i</span>f (isset($values[&#039;value&#039;][0]) &amp;&amp; <span style="background-color: green">'</span>*&#039; === $values[&#039;value&#039;][0]) {
+                        $refName = substr(rtrim($values[&#039;value&#039;]), 1);
+                        <span style="background-color: red">i</span>f (!\array_key_exists($refName, $this-&gt;refs)) {
+                            <span style="background-color: red">i</span>f (false !== $pos = array_search($refName, $this-&gt;refsBeingParsed, true)) {
+                                throw new ParseException(\sprintf(&#039;Circular reference [%s] detected for reference &quot;%s&quot;.&#039;, implode(&#039;, &#039;, array_merge(\array_slice($this-&gt;refsBeingParsed, $pos), [$refName])), $refName), $this-&gt;currentLineNb + 1, $this-&gt;currentLine, $this-&gt;filename);
+                            <span style="background-color: red">}</span>
+
+                            throw new ParseException(\sprintf(&#039;Reference &quot;%s&quot; does not exist.&#039;, $refName), $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: red">}</span>
+
+                        $refValue = $this-&gt;refs[$refName];
+
+                        <span style="background-color: red">i</span>f (Yaml::PARSE_OBJECT_FOR_MAP &amp; $flags &amp;&amp; <span style="background-color: red">$</span>refValue instanceof \stdClass) {
+                            $refValue = (array) $refValue;
+                        <span style="background-color: red">}</span>
+
+                        <span style="background-color: red">i</span>f (!\is_array($refValue)) {
+                            throw new ParseException(&#039;YAML merge keys used with a scalar value instead of an array.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: red">}</span>
+
+                        $data += $refValue; // array union
+                    } <span style="background-color: green">e</span>lse {
+                        <span style="background-color: green">i</span>f (isset($values[&#039;value&#039;]) &amp;&amp; <span style="background-color: green">'</span>&#039; !== $values[&#039;value&#039;]) {
+                            $value = $values[&#039;value&#039;];
+                        } <span style="background-color: red">e</span>lse {
+                            $value = $this-&gt;getNextEmbedBlock();
+                        <span style="background-color: green">}</span>
+                        $parsed = $this-&gt;parseBlock($this-&gt;getRealCurrentLineNb() + 1, $value, $flags);
+
+                        <span style="background-color: red">i</span>f (Yaml::PARSE_OBJECT_FOR_MAP &amp; $flags &amp;&amp; <span style="background-color: red">$</span>parsed instanceof \stdClass) {
+                            $parsed = (array) $parsed;
+                        <span style="background-color: red">}</span>
+
+                        <span style="background-color: red">i</span>f (!\is_array($parsed)) {
+                            throw new ParseException(&#039;YAML merge keys used with a scalar value instead of an array.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: red">}</span>
+
+                        <span style="background-color: red">i</span>f (isset($parsed[0])) {
+                            // If the value associated with the merge key is a sequence, then this sequence is expected to contain mapping nodes
+                            // and each of these nodes is merged in turn according to its order in the sequence. Keys in mapping nodes earlier
+                            // in the sequence override keys specified in later mapping nodes.
+                            <span style="background-color: red">f</span>oreach ($parsed as $parsedItem) {
+                                <span style="background-color: red">i</span>f (Yaml::PARSE_OBJECT_FOR_MAP &amp; $flags &amp;&amp; <span style="background-color: red">$</span>parsedItem instanceof \stdClass) {
+                                    $parsedItem = (array) $parsedItem;
+                                <span style="background-color: red">}</span>
+
+                                <span style="background-color: red">i</span>f (!\is_array($parsedItem)) {
+                                    throw new ParseException(&#039;Merge items must be arrays.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $parsedItem, $this-&gt;filename);
+                                <span style="background-color: red">}</span>
+
+                                $data += $parsedItem; // array union
+                            <span style="background-color: red">}</span>
+                        } <span style="background-color: red">e</span>lse {
+                            // If the value associated with the key is a single mapping node, each of its key/value pairs is inserted into the
+                            // current mapping, unless the key already exists in it.
+                            $data += $parsed; // array union
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: red">e</span>lseif (&#039;&lt;&lt;&#039; !== $key &amp;&amp; <span style="background-color: green">i</span>sset($values[&#039;value&#039;]) &amp;&amp; <span style="background-color: green">'</span>&amp;&#039; === $values[&#039;value&#039;][0] &amp;&amp; <span style="background-color: red">s</span>elf::preg_match(self::REFERENCE_PATTERN, $values[&#039;value&#039;], $matches)) {
+                    $isRef = $matches[&#039;ref&#039;];
+                    $this-&gt;refsBeingParsed[] = $isRef;
+                    $values[&#039;value&#039;] = $matches[&#039;value&#039;];
+                <span style="background-color: green">}</span>
+
+                $subTag = null;
+                <span style="background-color: red">i</span>f ($mergeNode) {
+                    // Merge keys
+                } <span style="background-color: green">e</span>lseif (!isset($values[&#039;value&#039;]) || <span style="background-color: green">'</span>&#039; === $values[&#039;value&#039;] || <span style="background-color: green">s</span>tr_starts_with($values[&#039;value&#039;], &#039;#&#039;) || (<span style="background-color: green">n</span>ull !== $subTag = $this-&gt;getLineTag($values[&#039;value&#039;], $flags)) || <span style="background-color: green">'</span>&lt;&lt;&#039; === $key) {
+                    // hash
+                    // if next line is less indented or equal, then it means that the current value is null
+                    <span style="background-color: green">i</span>f (!$this-&gt;isNextLineIndented() &amp;&amp; <span style="background-color: green">!</span>$this-&gt;isNextLineUnIndentedCollection()) {
+                        // Spec: Keys MUST be unique; first one wins.
+                        // But overwriting is allowed when a merge node is used in current block.
+                        <span style="background-color: green">i</span>f ($allowOverwrite || <span style="background-color: green">!</span>isset($data[$key])) {
+                            <span style="background-color: red">i</span>f (!$allowOverwrite &amp;&amp; <span style="background-color: green">\</span>array_key_exists($key, $data)) {
+                                trigger_deprecation(&#039;symfony/yaml&#039;, &#039;7.2&#039;, &#039;Duplicate key &quot;%s&quot; detected on line %d whilst parsing YAML. Silent handling of duplicate mapping keys in YAML is deprecated and will throw a ParseException in 8.0.&#039;, $key, $this-&gt;getRealCurrentLineNb() + 1);
+                            <span style="background-color: green">}</span>
+
+                            <span style="background-color: red">i</span>f (null !== $subTag) {
+                                $data[$key] = new TaggedValue($subTag, &#039;&#039;);
+                            } <span style="background-color: green">e</span>lse {
+                                $data[$key] = null;
+                            <span style="background-color: green">}</span>
+                        } <span style="background-color: red">e</span>lse {
+                            throw new ParseException(\sprintf(&#039;Duplicate key &quot;%s&quot; detected.&#039;, $key), $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine);
+                        <span style="background-color: green">}</span>
+                    } <span style="background-color: red">e</span>lse {
+                        // remember the parsed line number here in case we need it to provide some contexts in error messages below
+                        $realCurrentLineNbKey = $this-&gt;getRealCurrentLineNb();
+                        $value = $this-&gt;parseBlock($this-&gt;getRealCurrentLineNb() + 1, $this-&gt;getNextEmbedBlock(), $flags);
+                        <span style="background-color: red">i</span>f (&#039;&lt;&lt;&#039; === $key) {
+                            $this-&gt;refs[$refMatches[&#039;ref&#039;]] = $value;
+
+                            <span style="background-color: red">i</span>f (Yaml::PARSE_OBJECT_FOR_MAP &amp; $flags &amp;&amp; <span style="background-color: red">$</span>value instanceof \stdClass) {
+                                $value = (array) $value;
+                            <span style="background-color: red">}</span>
+
+                            $data += $value;
+                        } <span style="background-color: red">e</span>lseif ($allowOverwrite || <span style="background-color: red">!</span>isset($data[$key])) {
+                            <span style="background-color: red">i</span>f (!$allowOverwrite &amp;&amp; <span style="background-color: red">\</span>array_key_exists($key, $data)) {
+                                trigger_deprecation(&#039;symfony/yaml&#039;, &#039;7.2&#039;, &#039;Duplicate key &quot;%s&quot; detected on line %d whilst parsing YAML. Silent handling of duplicate mapping keys in YAML is deprecated and will throw a ParseException in 8.0.&#039;, $key, $this-&gt;getRealCurrentLineNb() + 1);
+                            <span style="background-color: red">}</span>
+
+                            // Spec: Keys MUST be unique; first one wins.
+                            // But overwriting is allowed when a merge node is used in current block.
+                            <span style="background-color: red">i</span>f (null !== $subTag) {
+                                $data[$key] = new TaggedValue($subTag, $value);
+                            } <span style="background-color: red">e</span>lse {
+                                $data[$key] = $value;
+                            <span style="background-color: red">}</span>
+                        } <span style="background-color: red">e</span>lse {
+                            throw new ParseException(\sprintf(&#039;Duplicate key &quot;%s&quot; detected.&#039;, $key), $realCurrentLineNbKey + 1, $this-&gt;currentLine);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: green">}</span>
+                } <span style="background-color: green">e</span>lse {
+                    $value = $this-&gt;parseValue(rtrim($values[&#039;value&#039;]), $flags, $context);
+                    // Spec: Keys MUST be unique; first one wins.
+                    // But overwriting is allowed when a merge node is used in current block.
+                    <span style="background-color: green">i</span>f ($allowOverwrite || <span style="background-color: green">!</span>isset($data[$key])) {
+                        <span style="background-color: red">i</span>f (!$allowOverwrite &amp;&amp; <span style="background-color: green">\</span>array_key_exists($key, $data)) {
+                            trigger_deprecation(&#039;symfony/yaml&#039;, &#039;7.2&#039;, &#039;Duplicate key &quot;%s&quot; detected on line %d whilst parsing YAML. Silent handling of duplicate mapping keys in YAML is deprecated and will throw a ParseException in 8.0.&#039;, $key, $this-&gt;getRealCurrentLineNb() + 1);
+                        <span style="background-color: green">}</span>
+
+                        $data[$key] = $value;
+                    } <span style="background-color: red">e</span>lse {
+                        throw new ParseException(\sprintf(&#039;Duplicate key &quot;%s&quot; detected.&#039;, $key), $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine);
+                    <span style="background-color: green">}</span>
+                <span style="background-color: green">}</span>
+                <span style="background-color: red">i</span>f ($isRef) {
+                    $this-&gt;refs[$isRef] = $data[$key];
+                    array_pop($this-&gt;refsBeingParsed);
+                <span style="background-color: green">}</span>
+            } <span style="background-color: red">e</span>lseif (&#039;&quot;&#039; === $this-&gt;currentLine[0] || <span style="background-color: green">"</span>&#039;&quot; === $this-&gt;currentLine[0]) {
+                <span style="background-color: red">i</span>f (null !== $context) {
+                    throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: red">}</span>
+
+                try {
+                    return Inline::parse($this-&gt;lexInlineQuotedString(), $flags, $this-&gt;refs);
+                } <span style="background-color: red">c</span>atch (ParseException $e) {
+                    $e-&gt;setParsedLine($this-&gt;getRealCurrentLineNb() + 1);
+                    $e-&gt;setSnippet($this-&gt;currentLine);
+
+                    throw $e;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: green">e</span>lseif (&#039;{&#039; === $this-&gt;currentLine[0]) {
+                <span style="background-color: red">i</span>f (null !== $context) {
+                    throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: green">}</span>
+
+                try {
+                    $parsedMapping = Inline::parse($this-&gt;lexInlineMapping(), $flags, $this-&gt;refs);
+
+                    <span style="background-color: red">w</span>hile ($this-&gt;moveToNextLine()) {
+                        <span style="background-color: red">i</span>f (!$this-&gt;isCurrentLineEmpty()) {
+                            throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: green">}</span>
+
+                    return $parsedMapping;
+                } <span style="background-color: green">c</span>atch (ParseException $e) {
+                    $e-&gt;setParsedLine($this-&gt;getRealCurrentLineNb() + 1);
+                    $e-&gt;setSnippet($this-&gt;currentLine);
+
+                    throw $e;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: green">e</span>lseif (&#039;[&#039; === $this-&gt;currentLine[0]) {
+                <span style="background-color: green">i</span>f (null !== $context) {
+                    throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: green">}</span>
+
+                try {
+                    $parsedSequence = Inline::parse($this-&gt;lexInlineSequence(), $flags, $this-&gt;refs);
+
+                    <span style="background-color: green">w</span>hile ($this-&gt;moveToNextLine()) {
+                        <span style="background-color: red">i</span>f (!$this-&gt;isCurrentLineEmpty()) {
+                            throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: green">}</span>
+                    <span style="background-color: green">}</span>
+
+                    return $parsedSequence;
+                } <span style="background-color: green">c</span>atch (ParseException $e) {
+                    $e-&gt;setParsedLine($this-&gt;getRealCurrentLineNb() + 1);
+                    $e-&gt;setSnippet($this-&gt;currentLine);
+
+                    throw $e;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: green">e</span>lse {
+                // multiple documents are not supported
+                <span style="background-color: red">i</span>f (&#039;---&#039; === $this-&gt;currentLine) {
+                    throw new ParseException(&#039;Multiple documents are not supported.&#039;, $this-&gt;currentLineNb + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: red">i</span>f (isset($this-&gt;currentLine[1]) &amp;&amp; <span style="background-color: green">'</span>?&#039; === $this-&gt;currentLine[0] &amp;&amp; <span style="background-color: red">'</span> &#039; === $this-&gt;currentLine[1]) {
+                    throw new ParseException(&#039;Complex mappings are not supported.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine);
+                <span style="background-color: green">}</span>
+
+                // 1-liner optionally followed by newline(s)
+                <span style="background-color: green">i</span>f (\is_string($value) &amp;&amp; <span style="background-color: green">$</span>this-&gt;lines[0] === trim($value)) {
+                    try {
+                        $value = Inline::parse($this-&gt;lines[0], $flags, $this-&gt;refs);
+                    } <span style="background-color: green">c</span>atch (ParseException $e) {
+                        $e-&gt;setParsedLine($this-&gt;getRealCurrentLineNb() + 1);
+                        $e-&gt;setSnippet($this-&gt;currentLine);
+
+                        throw $e;
+                    <span style="background-color: green">}</span>
+
+                    return $value;
+                <span style="background-color: green">}</span>
+
+                // try to parse the value as a multi-line string as a last resort
+                <span style="background-color: green">i</span>f (0 === $this-&gt;currentLineNb) {
+                    $previousLineWasNewline = false;
+                    $previousLineWasTerminatedWithBackslash = false;
+                    $value = &#039;&#039;;
+
+                    <span style="background-color: green">f</span>oreach ($this-&gt;lines as $line) {
+                        $trimmedLine = trim($line);
+                        <span style="background-color: red">i</span>f (&#039;#&#039; === ($trimmedLine[0] ?? <span style="background-color: green">'</span>&#039;)) {
+                            continue;
+                        <span style="background-color: green">}</span>
+                        // If the indentation is not consistent at offset 0, it is to be considered as a ParseError
+                        <span style="background-color: green">i</span>f (0 === $this-&gt;offset &amp;&amp; <span style="background-color: green">i</span>sset($line[0]) &amp;&amp; <span style="background-color: green">'</span> &#039; === $line[0]) {
+                            throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: green">}</span>
+
+                        <span style="background-color: green">i</span>f (str_contains($line, &#039;: &#039;)) {
+                            throw new ParseException(&#039;Mapping values are not allowed in multi-line blocks.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+                        <span style="background-color: green">}</span>
+
+                        <span style="background-color: green">i</span>f (&#039;&#039; === $trimmedLine) {
+                            $value .= &quot;\n&quot;;
+                        } <span style="background-color: green">e</span>lseif (!$previousLineWasNewline &amp;&amp; <span style="background-color: green">!</span>$previousLineWasTerminatedWithBackslash) {
+                            $value .= &#039; &#039;;
+                        <span style="background-color: green">}</span>
+
+                        <span style="background-color: green">i</span>f (&#039;&#039; !== $trimmedLine &amp;&amp; <span style="background-color: green">s</span>tr_ends_with($line, &#039;\\&#039;)) {
+                            $value .= ltrim(substr($line, 0, -1));
+                        } <span style="background-color: green">e</span>lseif (&#039;&#039; !== $trimmedLine) {
+                            $value .= $trimmedLine;
+                        <span style="background-color: green">}</span>
+
+                        <span style="background-color: green">i</span>f (&#039;&#039; === $trimmedLine) {
+                            $previousLineWasNewline = true;
+                            $previousLineWasTerminatedWithBackslash = false;
+                        } <span style="background-color: green">e</span>lseif (str_ends_with($line, &#039;\\&#039;)) {
+                            $previousLineWasNewline = false;
+                            $previousLineWasTerminatedWithBackslash = true;
+                        } <span style="background-color: green">e</span>lse {
+                            $previousLineWasNewline = false;
+                            $previousLineWasTerminatedWithBackslash = false;
+                        <span style="background-color: green">}</span>
+                    <span style="background-color: green">}</span>
+
+                    try {
+                        return Inline::parse(trim($value));
+                    } <span style="background-color: red">c</span>atch (ParseException) {
+                        // fall-through to the ParseException thrown below
+                    <span style="background-color: red">}</span>
+                <span style="background-color: green">}</span>
+
+                throw new ParseException(&#039;Unable to parse.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+            <span style="background-color: green">}</span>
+        } while ($this-&gt;moveToNextLine())<span style="background-color: green">;</span>
+
+        <span style="background-color: red">i</span>f (null !== $tag) {
+            $data = new TaggedValue($tag, $data);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (Yaml::PARSE_OBJECT_FOR_MAP &amp; $flags &amp;&amp; <span style="background-color: green">'</span>mapping&#039; === $context &amp;&amp; <span style="background-color: green">!</span>\is_object($data)) {
+            $object = new \stdClass();
+
+            <span style="background-color: green">f</span>oreach ($data as $key =&gt; $value) {
+                $object-&gt;$key = $value;
+            <span style="background-color: green">}</span>
+
+            $data = $object;
+        <span style="background-color: green">}</span>
+
+        return $data ?: <span style="background-color: red">n</span>ull;
+    }
+
+    <span style="background-color: green">p</span>rivate function parseBlock(int $offset, string $yaml, int $flags): mixed
+    {
+        $skippedLineNumbers = $this-&gt;skippedLineNumbers;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;locallySkippedLineNumbers as $lineNumber) {
+            <span style="background-color: red">i</span>f ($lineNumber &lt; $offset) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $skippedLineNumbers[] = $lineNumber;
+        <span style="background-color: green">}</span>
+
+        $parser = new self();
+        $parser-&gt;offset = $offset;
+        $parser-&gt;totalNumberOfLines = $this-&gt;totalNumberOfLines;
+        $parser-&gt;skippedLineNumbers = $skippedLineNumbers;
+        $parser-&gt;refs = &amp;$this-&gt;refs;
+        $parser-&gt;refsBeingParsed = $this-&gt;refsBeingParsed;
+
+        return $parser-&gt;doParse($yaml, $flags);
+    }
+
+    /**
+     * Returns the current line number (takes the offset into account).
+     *
+     * @internal
+     */
+    <span style="background-color: green">p</span>ublic function getRealCurrentLineNb(): int
+    {
+        $realCurrentLineNumber = $this-&gt;currentLineNb + $this-&gt;offset;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;skippedLineNumbers as $skippedLineNumber) {
+            <span style="background-color: red">i</span>f ($skippedLineNumber &gt; $realCurrentLineNumber) {
+                break;
+            <span style="background-color: red">}</span>
+
+            ++$realCurrentLineNumber;
+        <span style="background-color: green">}</span>
+
+        return $realCurrentLineNumber;
+    }
+
+    <span style="background-color: green">p</span>rivate function getCurrentLineIndentation(): int
+    {
+        <span style="background-color: green">i</span>f (&#039; &#039; !== ($this-&gt;currentLine[0] ?? <span style="background-color: green">'</span>&#039;)) {
+            return 0;
+        <span style="background-color: red">}</span>
+
+        return \strlen($this-&gt;currentLine) - \strlen(ltrim($this-&gt;currentLine, &#039; &#039;));
+    }
+
+    /**
+     * Returns the next embed block of YAML.
+     *
+     * @param int|null $indentation The indent level at which the block is to be read, or null for default
+     * @param bool     $inSequence  True if the enclosing data structure is a sequence
+     *
+     * @throws ParseException When indentation problem are detected
+     */
+    <span style="background-color: green">p</span>rivate function getNextEmbedBlock(?int $indentation = null, bool $inSequence = false): string
+    {
+        $oldLineIndentation = $this-&gt;getCurrentLineIndentation();
+
+        <span style="background-color: green">i</span>f (!$this-&gt;moveToNextLine()) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (null === $indentation) {
+            $newIndent = null;
+            $movements = 0;
+
+            <span style="background-color: red">d</span>o {
+                $EOF = false;
+
+                // empty and comment-like lines do not influence the indentation depth
+                <span style="background-color: red">i</span>f ($this-&gt;isCurrentLineEmpty() || <span style="background-color: red">$</span>this-&gt;isCurrentLineComment()) {
+                    $EOF = !$this-&gt;moveToNextLine();
+
+                    <span style="background-color: red">i</span>f (!$EOF) {
+                        ++$movements;
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: red">e</span>lse {
+                    $newIndent = $this-&gt;getCurrentLineIndentation();
+                <span style="background-color: red">}</span>
+            } while (!$EOF &amp;&amp; <span style="background-color: red">n</span>ull === $newIndent)<span style="background-color: red">;</span>
+
+            <span style="background-color: red">f</span>or ($i = 0; $i &lt; $movements; ++$i) {
+                $this-&gt;moveToPreviousLine();
+            <span style="background-color: red">}</span>
+
+            $unindentedEmbedBlock = $this-&gt;isStringUnIndentedCollectionItem();
+
+            <span style="background-color: red">i</span>f (!$this-&gt;isCurrentLineEmpty() &amp;&amp; <span style="background-color: red">0</span> === $newIndent &amp;&amp; <span style="background-color: red">!</span>$unindentedEmbedBlock) {
+                throw new ParseException(&#039;Indentation problem.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $newIndent = $indentation;
+        <span style="background-color: red">}</span>
+
+        $data = [];
+
+        <span style="background-color: red">i</span>f ($this-&gt;getCurrentLineIndentation() &gt;= $newIndent) {
+            $data[] = substr($this-&gt;currentLine, $newIndent ?? <span style="background-color: red">0</span>);
+        } <span style="background-color: red">e</span>lseif ($this-&gt;isCurrentLineEmpty() || <span style="background-color: red">$</span>this-&gt;isCurrentLineComment()) {
+            $data[] = $this-&gt;currentLine;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;moveToPreviousLine();
+
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($inSequence &amp;&amp; <span style="background-color: red">$</span>oldLineIndentation === $newIndent &amp;&amp; <span style="background-color: red">i</span>sset($data[0][0]) &amp;&amp; <span style="background-color: red">'</span>-&#039; === $data[0][0]) {
+            // the previous line contained a dash but no item content, this line is a sequence item with the same indentation
+            // and therefore no nested list or mapping
+            $this-&gt;moveToPreviousLine();
+
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        $isItUnindentedCollection = $this-&gt;isStringUnIndentedCollectionItem();
+        $isItComment = $this-&gt;isCurrentLineComment();
+
+        <span style="background-color: red">w</span>hile ($this-&gt;moveToNextLine()) {
+            <span style="background-color: red">i</span>f ($isItComment &amp;&amp; <span style="background-color: red">!</span>$isItUnindentedCollection) {
+                $isItUnindentedCollection = $this-&gt;isStringUnIndentedCollectionItem();
+                $isItComment = $this-&gt;isCurrentLineComment();
+            <span style="background-color: red">}</span>
+
+            $indent = $this-&gt;getCurrentLineIndentation();
+
+            <span style="background-color: red">i</span>f ($isItUnindentedCollection &amp;&amp; <span style="background-color: red">!</span>$this-&gt;isCurrentLineEmpty() &amp;&amp; <span style="background-color: red">!</span>$this-&gt;isStringUnIndentedCollectionItem() &amp;&amp; <span style="background-color: red">$</span>newIndent === $indent) {
+                $this-&gt;moveToPreviousLine();
+                break;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;isCurrentLineBlank()) {
+                $data[] = substr($this-&gt;currentLine, $newIndent ?? <span style="background-color: red">0</span>);
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($indent &gt;= $newIndent) {
+                $data[] = substr($this-&gt;currentLine, $newIndent ?? <span style="background-color: red">0</span>);
+            } <span style="background-color: red">e</span>lseif ($this-&gt;isCurrentLineComment()) {
+                $data[] = $this-&gt;currentLine;
+            } <span style="background-color: red">e</span>lseif (0 == $indent) {
+                $this-&gt;moveToPreviousLine();
+
+                break;
+            } <span style="background-color: red">e</span>lse {
+                throw new ParseException(&#039;Indentation problem.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $this-&gt;currentLine, $this-&gt;filename);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return implode(&quot;\n&quot;, $data);
+    }
+
+    <span style="background-color: green">p</span>rivate function hasMoreLines(): bool
+    {
+        return (\count($this-&gt;lines) - 1) &gt; $this-&gt;currentLineNb;
+    }
+
+    /**
+     * Moves the parser to the next line.
+     */
+    <span style="background-color: green">p</span>rivate function moveToNextLine(): bool
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;currentLineNb &gt;= $this-&gt;numberOfParsedLines - 1) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;currentLine = $this-&gt;lines[++$this-&gt;currentLineNb];
+
+        return true;
+    }
+
+    /**
+     * Moves the parser to the previous line.
+     */
+    <span style="background-color: green">p</span>rivate function moveToPreviousLine(): bool
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;currentLineNb &lt; 1) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;currentLine = $this-&gt;lines[--$this-&gt;currentLineNb];
+
+        return true;
+    }
+
+    /**
+     * Parses a YAML value.
+     *
+     * @param string $value   A YAML value
+     * @param int    $flags   A bit field of Yaml::PARSE_* constants to customize the YAML parser behavior
+     * @param string $context The parser context (either sequence or mapping)
+     *
+     * @throws ParseException When reference does not exist
+     */
+    <span style="background-color: green">p</span>rivate function parseValue(string $value, int $flags, string $context): mixed
+    {
+        <span style="background-color: green">i</span>f (str_starts_with($value, &#039;*&#039;)) {
+            <span style="background-color: red">i</span>f (false !== $pos = strpos($value, &#039;#&#039;)) {
+                $value = substr($value, 1, $pos - 2);
+            } <span style="background-color: green">e</span>lse {
+                $value = substr($value, 1);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f (!\array_key_exists($value, $this-&gt;refs)) {
+                <span style="background-color: red">i</span>f (false !== $pos = array_search($value, $this-&gt;refsBeingParsed, true)) {
+                    throw new ParseException(\sprintf(&#039;Circular reference [%s] detected for reference &quot;%s&quot;.&#039;, implode(&#039;, &#039;, array_merge(\array_slice($this-&gt;refsBeingParsed, $pos), [$value])), $value), $this-&gt;currentLineNb + 1, $this-&gt;currentLine, $this-&gt;filename);
+                <span style="background-color: green">}</span>
+
+                throw new ParseException(\sprintf(&#039;Reference &quot;%s&quot; does not exist.&#039;, $value), $this-&gt;currentLineNb + 1, $this-&gt;currentLine, $this-&gt;filename);
+            <span style="background-color: red">}</span>
+
+            return $this-&gt;refs[$value];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (\in_array($value[0], [&#039;!&#039;, &#039;|&#039;, &#039;&gt;&#039;], true) &amp;&amp; <span style="background-color: red">s</span>elf::preg_match(&#039;/^(?:&#039;.self::TAG_PATTERN.&#039; +)?&#039;.self::BLOCK_SCALAR_HEADER_PATTERN.&#039;$/&#039;, $value, $matches)) {
+            $modifiers = $matches[&#039;modifiers&#039;] ?? <span style="background-color: red">'</span>&#039;;
+
+            $data = $this-&gt;parseBlockScalar($matches[&#039;separator&#039;], preg_replace(&#039;#\d+#&#039;, &#039;&#039;, $modifiers), abs((int) $modifiers));
+
+            <span style="background-color: red">i</span>f (&#039;&#039; !== $matches[&#039;tag&#039;] &amp;&amp; <span style="background-color: red">'</span>!&#039; !== $matches[&#039;tag&#039;]) {
+                <span style="background-color: red">i</span>f (&#039;!!binary&#039; === $matches[&#039;tag&#039;]) {
+                    return Inline::evaluateBinaryScalar($data);
+                <span style="background-color: red">}</span>
+
+                return new TaggedValue(substr($matches[&#039;tag&#039;], 1), $data);
+            <span style="background-color: red">}</span>
+
+            return $data;
+        <span style="background-color: green">}</span>
+
+        try {
+            <span style="background-color: red">i</span>f (&#039;&#039; !== $value &amp;&amp; <span style="background-color: green">'</span>{&#039; === $value[0]) {
+                $cursor = \strlen(rtrim($this-&gt;currentLine)) - \strlen(rtrim($value));
+
+                return Inline::parse($this-&gt;lexInlineMapping($cursor), $flags, $this-&gt;refs);
+            } <span style="background-color: green">e</span>lseif (&#039;&#039; !== $value &amp;&amp; <span style="background-color: green">'</span>[&#039; === $value[0]) {
+                $cursor = \strlen(rtrim($this-&gt;currentLine)) - \strlen(rtrim($value));
+
+                return Inline::parse($this-&gt;lexInlineSequence($cursor), $flags, $this-&gt;refs);
+            <span style="background-color: green">}</span>
+
+            switch ($value[0] ?? <span style="background-color: red">'</span>&#039;) {
+                <span style="background-color: red">c</span>ase &#039;&quot;&#039;:
+                <span style="background-color: red">c</span>ase &quot;&#039;&quot;:
+                    $cursor = \strlen(rtrim($this-&gt;currentLine)) - \strlen(rtrim($value));
+                    $parsedValue = Inline::parse($this-&gt;lexInlineQuotedString($cursor), $flags, $this-&gt;refs);
+
+                    <span style="background-color: red">i</span>f (isset($this-&gt;currentLine[$cursor]) &amp;&amp; <span style="background-color: red">p</span>reg_replace(&#039;/\s*(#.*)?$/A&#039;, &#039;&#039;, substr($this-&gt;currentLine, $cursor))) {
+                        throw new ParseException(\sprintf(&#039;Unexpected characters near &quot;%s&quot;.&#039;, substr($this-&gt;currentLine, $cursor)));
+                    <span style="background-color: red">}</span>
+
+                    return $parsedValue;
+                <span style="background-color: green">d</span>efault:
+                    $lines = [];
+
+                    <span style="background-color: green">w</span>hile ($this-&gt;moveToNextLine()) {
+                        // unquoted strings end before the first unindented line
+                        <span style="background-color: green">i</span>f (0 === $this-&gt;getCurrentLineIndentation()) {
+                            $this-&gt;moveToPreviousLine();
+
+                            break;
+                        <span style="background-color: red">}</span>
+
+                        $lines[] = trim($this-&gt;currentLine);
+                    <span style="background-color: green">}</span>
+
+                    <span style="background-color: red">f</span>or ($i = 0, $linesCount = \count($lines), $previousLineBlank = false; $i &lt; $linesCount; ++$i) {
+                        <span style="background-color: red">i</span>f (&#039;&#039; === $lines[$i]) {
+                            $value .= &quot;\n&quot;;
+                            $previousLineBlank = true;
+                        } <span style="background-color: red">e</span>lseif ($previousLineBlank) {
+                            $value .= $lines[$i];
+                            $previousLineBlank = false;
+                        } <span style="background-color: red">e</span>lse {
+                            $value .= &#039; &#039;.$lines[$i];
+                            $previousLineBlank = false;
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: green">}</span>
+
+                    Inline::$parsedLineNumber = $this-&gt;getRealCurrentLineNb();
+
+                    $parsedValue = Inline::parse($value, $flags, $this-&gt;refs);
+
+                    <span style="background-color: red">i</span>f (&#039;mapping&#039; === $context &amp;&amp; <span style="background-color: green">\</span>is_string($parsedValue) &amp;&amp; <span style="background-color: green">'</span>&quot;&#039; !== $value[0] &amp;&amp; <span style="background-color: green">"</span>&#039;&quot; !== $value[0] &amp;&amp; <span style="background-color: green">'</span>[&#039; !== $value[0] &amp;&amp; <span style="background-color: green">'</span>{&#039; !== $value[0] &amp;&amp; <span style="background-color: green">'</span>!&#039; !== $value[0] &amp;&amp; <span style="background-color: green">s</span>tr_contains($parsedValue, &#039;: &#039;)) {
+                        throw new ParseException(&#039;A colon cannot be used in an unquoted mapping value.&#039;, $this-&gt;getRealCurrentLineNb() + 1, $value, $this-&gt;filename);
+                    <span style="background-color: green">}</span>
+
+                    return $parsedValue;
+            <span style="background-color: red">}</span>
+        } <span style="background-color: green">c</span>atch (ParseException $e) {
+            $e-&gt;setParsedLine($this-&gt;getRealCurrentLineNb() + 1);
+            $e-&gt;setSnippet($this-&gt;currentLine);
+
+            throw $e;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Parses a block scalar.
+     *
+     * @param string $style       The style indicator that was used to begin this block scalar (| or &gt;)
+     * @param string $chomping    The chomping indicator that was used to begin this block scalar (+ or -)
+     * @param int    $indentation The indentation indicator that was used to begin this block scalar
+     */
+    <span style="background-color: red">p</span>rivate function parseBlockScalar(string $style, string $chomping = &#039;&#039;, int $indentation = 0): string
+    {
+        $notEOF = $this-&gt;moveToNextLine();
+        <span style="background-color: red">i</span>f (!$notEOF) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        $isCurrentLineBlank = $this-&gt;isCurrentLineBlank();
+        $blockLines = [];
+
+        // leading blank lines are consumed before determining indentation
+        <span style="background-color: red">w</span>hile ($notEOF &amp;&amp; <span style="background-color: red">$</span>isCurrentLineBlank) {
+            // newline only if not EOF
+            <span style="background-color: red">i</span>f ($notEOF = $this-&gt;moveToNextLine()) {
+                $blockLines[] = &#039;&#039;;
+                $isCurrentLineBlank = $this-&gt;isCurrentLineBlank();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        // determine indentation if not specified
+        <span style="background-color: red">i</span>f (0 === $indentation) {
+            $currentLineLength = \strlen($this-&gt;currentLine);
+
+            <span style="background-color: red">f</span>or ($i = 0; $i &lt; $currentLineLength &amp;&amp; <span style="background-color: red">'</span> &#039; === $this-&gt;currentLine[$i]; ++$i) {
+                ++$indentation;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($indentation &gt; 0) {
+            $pattern = \sprintf(&#039;/^ {%d}(.*)$/&#039;, $indentation);
+
+            <span style="background-color: red">w</span>hile (
+                $notEOF &amp;&amp; (
+                    <span style="background-color: red">$</span>isCurrentLineBlank
+                    || <span style="background-color: red">s</span>elf::preg_match($pattern, $this-&gt;currentLine, $matches)
+                )
+            ) {
+                <span style="background-color: red">i</span>f ($isCurrentLineBlank &amp;&amp; <span style="background-color: red">\</span>strlen($this-&gt;currentLine) &gt; $indentation) {
+                    $blockLines[] = substr($this-&gt;currentLine, $indentation);
+                } <span style="background-color: red">e</span>lseif ($isCurrentLineBlank) {
+                    $blockLines[] = &#039;&#039;;
+                } <span style="background-color: red">e</span>lse {
+                    $blockLines[] = $matches[1];
+                <span style="background-color: red">}</span>
+
+                // newline only if not EOF
+                <span style="background-color: red">i</span>f ($notEOF = $this-&gt;moveToNextLine()) {
+                    $isCurrentLineBlank = $this-&gt;isCurrentLineBlank();
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif ($notEOF) {
+            $blockLines[] = &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($notEOF) {
+            $blockLines[] = &#039;&#039;;
+            $this-&gt;moveToPreviousLine();
+        } <span style="background-color: red">e</span>lseif (!$this-&gt;isCurrentLineLastLineInDocument()) {
+            $blockLines[] = &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        // folded style
+        <span style="background-color: red">i</span>f (&#039;&gt;&#039; === $style) {
+            $text = &#039;&#039;;
+            $previousLineIndented = false;
+            $previousLineBlank = false;
+
+            <span style="background-color: red">f</span>or ($i = 0, $blockLinesCount = \count($blockLines); $i &lt; $blockLinesCount; ++$i) {
+                <span style="background-color: red">i</span>f (&#039;&#039; === $blockLines[$i]) {
+                    $text .= &quot;\n&quot;;
+                    $previousLineIndented = false;
+                    $previousLineBlank = true;
+                } <span style="background-color: red">e</span>lseif (&#039; &#039; === $blockLines[$i][0]) {
+                    $text .= &quot;\n&quot;.$blockLines[$i];
+                    $previousLineIndented = true;
+                    $previousLineBlank = false;
+                } <span style="background-color: red">e</span>lseif ($previousLineIndented) {
+                    $text .= &quot;\n&quot;.$blockLines[$i];
+                    $previousLineIndented = false;
+                    $previousLineBlank = false;
+                } <span style="background-color: red">e</span>lseif ($previousLineBlank || <span style="background-color: red">0</span> === $i) {
+                    $text .= $blockLines[$i];
+                    $previousLineIndented = false;
+                    $previousLineBlank = false;
+                } <span style="background-color: red">e</span>lse {
+                    $text .= &#039; &#039;.$blockLines[$i];
+                    $previousLineIndented = false;
+                    $previousLineBlank = false;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $text = implode(&quot;\n&quot;, $blockLines);
+        <span style="background-color: red">}</span>
+
+        // deal with trailing newlines
+        <span style="background-color: red">i</span>f (&#039;&#039; === $chomping) {
+            $text = preg_replace(&#039;/\n+$/&#039;, &quot;\n&quot;, $text);
+        } <span style="background-color: red">e</span>lseif (&#039;-&#039; === $chomping) {
+            $text = preg_replace(&#039;/\n+$/&#039;, &#039;&#039;, $text);
+        <span style="background-color: red">}</span>
+
+        return $text;
+    }
+
+    /**
+     * Returns true if the next line is indented.
+     */
+    <span style="background-color: green">p</span>rivate function isNextLineIndented(): bool
+    {
+        $currentIndentation = $this-&gt;getCurrentLineIndentation();
+        $movements = 0;
+
+        <span style="background-color: green">d</span>o {
+            $EOF = !$this-&gt;moveToNextLine();
+
+            <span style="background-color: green">i</span>f (!$EOF) {
+                ++$movements;
+            <span style="background-color: green">}</span>
+        } while (!$EOF &amp;&amp; (<span style="background-color: green">$</span>this-&gt;isCurrentLineEmpty() || <span style="background-color: green">$</span>this-&gt;isCurrentLineComment()))<span style="background-color: green">;</span>
+
+        <span style="background-color: green">i</span>f ($EOF) {
+            <span style="background-color: green">f</span>or ($i = 0; $i &lt; $movements; ++$i) {
+                $this-&gt;moveToPreviousLine();
+            <span style="background-color: green">}</span>
+
+            return false;
+        <span style="background-color: green">}</span>
+
+        $ret = $this-&gt;getCurrentLineIndentation() &gt; $currentIndentation;
+
+        <span style="background-color: green">f</span>or ($i = 0; $i &lt; $movements; ++$i) {
+            $this-&gt;moveToPreviousLine();
+        <span style="background-color: green">}</span>
+
+        return $ret;
+    }
+
+    <span style="background-color: green">p</span>rivate function isCurrentLineEmpty(): bool
+    {
+        return $this-&gt;isCurrentLineBlank() || <span style="background-color: green">$</span>this-&gt;isCurrentLineComment();
+    }
+
+    <span style="background-color: green">p</span>rivate function isCurrentLineBlank(): bool
+    {
+        return &#039;&#039; === $this-&gt;currentLine || <span style="background-color: green">'</span>&#039; === trim($this-&gt;currentLine, &#039; &#039;);
+    }
+
+    <span style="background-color: green">p</span>rivate function isCurrentLineComment(): bool
+    {
+        // checking explicitly the first char of the trim is faster than loops or strpos
+        $ltrimmedLine = &#039;&#039; !== $this-&gt;currentLine &amp;&amp; <span style="background-color: green">'</span> &#039; === $this-&gt;currentLine[0] ? ltrim($this-&gt;currentLine, &#039; &#039;) : <span style="background-color: green">$</span>this-&gt;currentLine;
+
+        return &#039;&#039; !== $ltrimmedLine &amp;&amp; <span style="background-color: green">'</span>#&#039; === $ltrimmedLine[0];
+    }
+
+    <span style="background-color: red">p</span>rivate function isCurrentLineLastLineInDocument(): bool
+    {
+        return ($this-&gt;offset + $this-&gt;currentLineNb) &gt;= ($this-&gt;totalNumberOfLines - 1);
+    }
+
+    <span style="background-color: green">p</span>rivate function cleanup(string $value): string
+    {
+        $value = str_replace([&quot;\r\n&quot;, &quot;\r&quot;], &quot;\n&quot;, $value);
+
+        // strip YAML header
+        $count = 0;
+        $value = preg_replace(&#039;#^\%YAML[: ][\d\.]+.*\n#u&#039;, &#039;&#039;, $value, -1, $count);
+        $this-&gt;offset += $count;
+
+        // remove leading comments
+        $trimmedValue = preg_replace(&#039;#^(\#.*?\n)+#s&#039;, &#039;&#039;, $value, -1, $count);
+        <span style="background-color: green">i</span>f (1 === $count) {
+            // items have been removed, update the offset
+            $this-&gt;offset += substr_count($value, &quot;\n&quot;) - substr_count($trimmedValue, &quot;\n&quot;);
+            $value = $trimmedValue;
+        <span style="background-color: green">}</span>
+
+        // remove start of the document marker (---)
+        $trimmedValue = preg_replace(&#039;#^\-\-\-.*?\n#s&#039;, &#039;&#039;, $value, -1, $count);
+        <span style="background-color: green">i</span>f (1 === $count) {
+            // items have been removed, update the offset
+            $this-&gt;offset += substr_count($value, &quot;\n&quot;) - substr_count($trimmedValue, &quot;\n&quot;);
+            $value = $trimmedValue;
+
+            // remove end of the document marker (...)
+            $value = preg_replace(&#039;#\.\.\.\s*$#&#039;, &#039;&#039;, $value);
+        <span style="background-color: green">}</span>
+
+        return $value;
+    }
+
+    <span style="background-color: green">p</span>rivate function isNextLineUnIndentedCollection(): bool
+    {
+        $currentIndentation = $this-&gt;getCurrentLineIndentation();
+        $movements = 0;
+
+        <span style="background-color: green">d</span>o {
+            $EOF = !$this-&gt;moveToNextLine();
+
+            <span style="background-color: green">i</span>f (!$EOF) {
+                ++$movements;
+            <span style="background-color: green">}</span>
+        } while (!$EOF &amp;&amp; (<span style="background-color: green">$</span>this-&gt;isCurrentLineEmpty() || <span style="background-color: green">$</span>this-&gt;isCurrentLineComment()))<span style="background-color: green">;</span>
+
+        <span style="background-color: green">i</span>f ($EOF) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        $ret = $this-&gt;getCurrentLineIndentation() === $currentIndentation &amp;&amp; <span style="background-color: green">$</span>this-&gt;isStringUnIndentedCollectionItem();
+
+        <span style="background-color: green">f</span>or ($i = 0; $i &lt; $movements; ++$i) {
+            $this-&gt;moveToPreviousLine();
+        <span style="background-color: green">}</span>
+
+        return $ret;
+    }
+
+    <span style="background-color: green">p</span>rivate function isStringUnIndentedCollectionItem(): bool
+    {
+        return &#039;-&#039; === rtrim($this-&gt;currentLine) || <span style="background-color: green">s</span>tr_starts_with($this-&gt;currentLine, &#039;- &#039;);
+    }
+
+    /**
+     * A local wrapper for &quot;preg_match&quot; which will throw a ParseException if there
+     * is an internal error in the PCRE engine.
+     *
+     * This avoids us needing to check for &quot;false&quot; every time PCRE is used
+     * in the YAML engine
+     *
+     * @throws ParseException on a PCRE internal error
+     *
+     * @internal
+     */
+    <span style="background-color: green">p</span>ublic static function preg_match(string $pattern, string $subject, ?array &amp;$matches = null, int $flags = 0, int $offset = 0): int
+    {
+        <span style="background-color: red">i</span>f (false === $ret = preg_match($pattern, $subject, $matches, $flags, $offset)) {
+            throw new ParseException(preg_last_error_msg());
+        <span style="background-color: green">}</span>
+
+        return $ret;
+    }
+
+    /**
+     * Trim the tag on top of the value.
+     *
+     * Prevent values such as &quot;!foo {quz: bar}&quot; to be considered as
+     * a mapping block.
+     */
+    <span style="background-color: green">p</span>rivate function trimTag(string $value): string
+    {
+        <span style="background-color: red">i</span>f (&#039;!&#039; === $value[0]) {
+            return ltrim(substr($value, 1, strcspn($value, &quot; \r\n&quot;, 1)), &#039; &#039;);
+        <span style="background-color: green">}</span>
+
+        return $value;
+    }
+
+    <span style="background-color: green">p</span>rivate function getLineTag(string $value, int $flags, bool $nextLineCheck = true): ?string
+    {
+        <span style="background-color: green">i</span>f (&#039;&#039; === $value || <span style="background-color: green">'</span>!&#039; !== $value[0] || <span style="background-color: green">1</span> !== self::preg_match(&#039;/^&#039;.self::TAG_PATTERN.&#039; *( +#.*)?$/&#039;, $value, $matches)) {
+            return null;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($nextLineCheck &amp;&amp; <span style="background-color: red">!</span>$this-&gt;isNextLineIndented()) {
+            return null;
+        <span style="background-color: green">}</span>
+
+        $tag = substr($matches[&#039;tag&#039;], 1);
+
+        // Built-in tags
+        <span style="background-color: red">i</span>f ($tag &amp;&amp; <span style="background-color: green">'</span>!&#039; === $tag[0]) {
+            throw new ParseException(\sprintf(&#039;The built-in tag &quot;!%s&quot; is not implemented.&#039;, $tag), $this-&gt;getRealCurrentLineNb() + 1, $value, $this-&gt;filename);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (Yaml::PARSE_CUSTOM_TAGS &amp; $flags) {
+            return $tag;
+        <span style="background-color: green">}</span>
+
+        throw new ParseException(\sprintf(&#039;Tags support is not enabled. You must use the flag &quot;Yaml::PARSE_CUSTOM_TAGS&quot; to use &quot;%s&quot;.&#039;, $matches[&#039;tag&#039;]), $this-&gt;getRealCurrentLineNb() + 1, $value, $this-&gt;filename);
+    }
+
+    <span style="background-color: green">p</span>rivate function lexInlineQuotedString(int &amp;$cursor = 0): string
+    {
+        $quotation = $this-&gt;currentLine[$cursor];
+        $value = $quotation;
+        ++$cursor;
+
+        $previousLineWasNewline = true;
+        $previousLineWasTerminatedWithBackslash = false;
+        $lineNumber = 0;
+
+        <span style="background-color: green">d</span>o {
+            <span style="background-color: red">i</span>f (++$lineNumber &gt; 1) {
+                $cursor += strspn($this-&gt;currentLine, &#039; &#039;, $cursor);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;isCurrentLineBlank()) {
+                $value .= &quot;\n&quot;;
+            } <span style="background-color: red">e</span>lseif (!$previousLineWasNewline &amp;&amp; <span style="background-color: red">!</span>$previousLineWasTerminatedWithBackslash) {
+                $value .= &#039; &#039;;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">f</span>or (; \strlen($this-&gt;currentLine) &gt; $cursor; ++$cursor) {
+                switch ($this-&gt;currentLine[$cursor]) {
+                    <span style="background-color: red">c</span>ase &#039;\\&#039;:
+                        <span style="background-color: red">i</span>f (&quot;&#039;&quot; === $quotation) {
+                            $value .= &#039;\\&#039;;
+                        } <span style="background-color: red">e</span>lseif (isset($this-&gt;currentLine[++$cursor])) {
+                            $value .= &#039;\\&#039;.$this-&gt;currentLine[$cursor];
+                        <span style="background-color: red">}</span>
+
+                        break;
+                    <span style="background-color: green">c</span>ase $quotation:
+                        ++$cursor;
+
+                        <span style="background-color: red">i</span>f (&quot;&#039;&quot; === $quotation &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;currentLine[$cursor]) &amp;&amp; <span style="background-color: red">"</span>&#039;&quot; === $this-&gt;currentLine[$cursor]) {
+                            $value .= &quot;&#039;&#039;&quot;;
+                            break;
+                        <span style="background-color: green">}</span>
+
+                        return $value.$quotation;
+                    <span style="background-color: green">d</span>efault:
+                        $value .= $this-&gt;currentLine[$cursor];
+                <span style="background-color: green">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;isCurrentLineBlank()) {
+                $previousLineWasNewline = true;
+                $previousLineWasTerminatedWithBackslash = false;
+            } <span style="background-color: red">e</span>lseif (&#039;\\&#039; === $this-&gt;currentLine[-1]) {
+                $previousLineWasNewline = false;
+                $previousLineWasTerminatedWithBackslash = true;
+            } <span style="background-color: red">e</span>lse {
+                $previousLineWasNewline = false;
+                $previousLineWasTerminatedWithBackslash = false;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;hasMoreLines()) {
+                $cursor = 0;
+            <span style="background-color: red">}</span>
+        } while ($this-&gt;moveToNextLine())<span style="background-color: red">;</span>
+
+        throw new ParseException(&#039;Malformed inline YAML string.&#039;);
+    }
+
+    <span style="background-color: green">p</span>rivate function lexUnquotedString(int &amp;$cursor): string
+    {
+        $offset = $cursor;
+
+        <span style="background-color: green">w</span>hile ($cursor &lt; strlen($this-&gt;currentLine)) {
+            <span style="background-color: green">i</span>f (in_array($this-&gt;currentLine[$cursor], [&#039;[&#039;, &#039;]&#039;, &#039;{&#039;, &#039;}&#039;, &#039;,&#039;, &#039;:&#039;], true)) {
+                break;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (\in_array($this-&gt;currentLine[$cursor], [&#039; &#039;, &quot;\t&quot;], true) &amp;&amp; <span style="background-color: green">'</span>#&#039; === ($this-&gt;currentLine[$cursor + 1] ?? <span style="background-color: red">'</span>&#039;)) {
+                break;
+            <span style="background-color: green">}</span>
+
+            ++$cursor;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($cursor === $offset) {
+            throw new ParseException(&#039;Malformed unquoted YAML string.&#039;);
+        <span style="background-color: green">}</span>
+
+        return substr($this-&gt;currentLine, $offset, $cursor - $offset);
+    }
+
+    <span style="background-color: green">p</span>rivate function lexInlineMapping(int &amp;$cursor = 0, bool $consumeUntilEol = true): string
+    {
+        return $this-&gt;lexInlineStructure($cursor, &#039;}&#039;, $consumeUntilEol);
+    }
+
+    <span style="background-color: green">p</span>rivate function lexInlineSequence(int &amp;$cursor = 0, bool $consumeUntilEol = true): string
+    {
+        return $this-&gt;lexInlineStructure($cursor, &#039;]&#039;, $consumeUntilEol);
+    }
+
+    <span style="background-color: green">p</span>rivate function lexInlineStructure(int &amp;$cursor, string $closingTag, bool $consumeUntilEol = true): string
+    {
+        $value = $this-&gt;currentLine[$cursor];
+        ++$cursor;
+
+        <span style="background-color: green">d</span>o {
+            $this-&gt;consumeWhitespaces($cursor);
+
+            <span style="background-color: green">w</span>hile (isset($this-&gt;currentLine[$cursor])) {
+                switch ($this-&gt;currentLine[$cursor]) {
+                    <span style="background-color: green">c</span>ase &#039;&quot;&#039;:
+                    <span style="background-color: green">c</span>ase &quot;&#039;&quot;:
+                        $value .= $this-&gt;lexInlineQuotedString($cursor);
+                        break;
+                    <span style="background-color: green">c</span>ase &#039;:&#039;:
+                    <span style="background-color: green">c</span>ase &#039;,&#039;:
+                        $value .= $this-&gt;currentLine[$cursor];
+                        ++$cursor;
+                        break;
+                    <span style="background-color: green">c</span>ase &#039;{&#039;:
+                        $value .= $this-&gt;lexInlineMapping($cursor, false);
+                        break;
+                    <span style="background-color: green">c</span>ase &#039;[&#039;:
+                        $value .= $this-&gt;lexInlineSequence($cursor, false);
+                        break;
+                    <span style="background-color: green">c</span>ase $closingTag:
+                        $value .= $this-&gt;currentLine[$cursor];
+                        ++$cursor;
+
+                        <span style="background-color: green">i</span>f ($consumeUntilEol &amp;&amp; <span style="background-color: green">i</span>sset($this-&gt;currentLine[$cursor]) &amp;&amp; <span style="background-color: green">(</span>$whitespaces = strspn($this-&gt;currentLine, &#039; &#039;, $cursor) + $cursor) &lt; strlen($this-&gt;currentLine) &amp;&amp; <span style="background-color: green">'</span>#&#039; !== $this-&gt;currentLine[$whitespaces]) {
+                            throw new ParseException(sprintf(&#039;Unexpected token &quot;%s&quot;.&#039;, trim(substr($this-&gt;currentLine, $cursor))));
+                        <span style="background-color: green">}</span>
+
+                        return $value;
+                    <span style="background-color: red">c</span>ase &#039;#&#039;:
+                        break 2;
+                    <span style="background-color: green">d</span>efault:
+                        $value .= $this-&gt;lexUnquotedString($cursor);
+                <span style="background-color: green">}</span>
+
+                <span style="background-color: green">i</span>f ($this-&gt;consumeWhitespaces($cursor)) {
+                    $value .= &#039; &#039;;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;hasMoreLines()) {
+                $cursor = 0;
+            <span style="background-color: green">}</span>
+        } while ($this-&gt;moveToNextLine())<span style="background-color: green">;</span>
+
+        throw new ParseException(&#039;Malformed inline YAML string.&#039;);
+    }
+
+    <span style="background-color: green">p</span>rivate function consumeWhitespaces(int &amp;$cursor): bool
+    {
+        $whitespacesConsumed = 0;
+
+        <span style="background-color: green">d</span>o {
+            $whitespaceOnlyTokenLength = strspn($this-&gt;currentLine, &quot; \t&quot;, $cursor);
+            $whitespacesConsumed += $whitespaceOnlyTokenLength;
+            $cursor += $whitespaceOnlyTokenLength;
+
+            <span style="background-color: green">i</span>f (isset($this-&gt;currentLine[$cursor])) {
+                return 0 &lt; $whitespacesConsumed;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f ($this-&gt;hasMoreLines()) {
+                $cursor = 0;
+            <span style="background-color: green">}</span>
+        } while ($this-&gt;moveToNextLine())<span style="background-color: green">;</span>
+
+        return 0 &lt; $whitespacesConsumed;
+    }
+}
+</pre>

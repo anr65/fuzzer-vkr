@@ -1,0 +1,175 @@
+<pre>&lt;?php
+
+use Illuminate\Support\Str;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Database Connection Name
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify which of the database connections below you wish
+    | to use as your default connection for database operations. This is
+    | the connection which will be utilized unless another connection
+    | is explicitly specified when you execute a query / statement.
+    |
+    */
+
+    &#039;default&#039; =&gt; env(&#039;DB_CONNECTION&#039;, &#039;sqlite&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Database Connections
+    |--------------------------------------------------------------------------
+    |
+    | Below are all of the database connections defined for your application.
+    | An example configuration is provided for each database system which
+    | is supported by Laravel. You&#039;re free to add / remove connections.
+    |
+    */
+
+    &#039;connections&#039; =&gt; [
+
+        &#039;sqlite&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;sqlite&#039;,
+            &#039;url&#039; =&gt; env(&#039;DB_URL&#039;),
+            &#039;database&#039; =&gt; env(&#039;DB_DATABASE&#039;, database_path(&#039;database.sqlite&#039;)),
+            &#039;prefix&#039; =&gt; &#039;&#039;,
+            &#039;foreign_key_constraints&#039; =&gt; env(&#039;DB_FOREIGN_KEYS&#039;, true),
+            &#039;busy_timeout&#039; =&gt; null,
+            &#039;journal_mode&#039; =&gt; null,
+            &#039;synchronous&#039; =&gt; null,
+        ],
+
+        &#039;mysql&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;mysql&#039;,
+            &#039;url&#039; =&gt; env(&#039;DB_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;DB_HOST&#039;, &#039;127.0.0.1&#039;),
+            &#039;port&#039; =&gt; env(&#039;DB_PORT&#039;, &#039;3306&#039;),
+            &#039;database&#039; =&gt; env(&#039;DB_DATABASE&#039;, &#039;laravel&#039;),
+            &#039;username&#039; =&gt; env(&#039;DB_USERNAME&#039;, &#039;root&#039;),
+            &#039;password&#039; =&gt; env(&#039;DB_PASSWORD&#039;, &#039;&#039;),
+            &#039;unix_socket&#039; =&gt; env(&#039;DB_SOCKET&#039;, &#039;&#039;),
+            &#039;charset&#039; =&gt; env(&#039;DB_CHARSET&#039;, &#039;utf8mb4&#039;),
+            &#039;collation&#039; =&gt; env(&#039;DB_COLLATION&#039;, &#039;utf8mb4_unicode_ci&#039;),
+            &#039;prefix&#039; =&gt; &#039;&#039;,
+            &#039;prefix_indexes&#039; =&gt; true,
+            &#039;strict&#039; =&gt; true,
+            &#039;engine&#039; =&gt; null,
+            &#039;options&#039; =&gt; extension_loaded(&#039;pdo_mysql&#039;) ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA =&gt; env(&#039;MYSQL_ATTR_SSL_CA&#039;),
+            ]) : <span style="background-color: red">[</span>],
+        ],
+
+        &#039;mariadb&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;mariadb&#039;,
+            &#039;url&#039; =&gt; env(&#039;DB_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;DB_HOST&#039;, &#039;127.0.0.1&#039;),
+            &#039;port&#039; =&gt; env(&#039;DB_PORT&#039;, &#039;3306&#039;),
+            &#039;database&#039; =&gt; env(&#039;DB_DATABASE&#039;, &#039;laravel&#039;),
+            &#039;username&#039; =&gt; env(&#039;DB_USERNAME&#039;, &#039;root&#039;),
+            &#039;password&#039; =&gt; env(&#039;DB_PASSWORD&#039;, &#039;&#039;),
+            &#039;unix_socket&#039; =&gt; env(&#039;DB_SOCKET&#039;, &#039;&#039;),
+            &#039;charset&#039; =&gt; env(&#039;DB_CHARSET&#039;, &#039;utf8mb4&#039;),
+            &#039;collation&#039; =&gt; env(&#039;DB_COLLATION&#039;, &#039;utf8mb4_unicode_ci&#039;),
+            &#039;prefix&#039; =&gt; &#039;&#039;,
+            &#039;prefix_indexes&#039; =&gt; true,
+            &#039;strict&#039; =&gt; true,
+            &#039;engine&#039; =&gt; null,
+            &#039;options&#039; =&gt; extension_loaded(&#039;pdo_mysql&#039;) ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA =&gt; env(&#039;MYSQL_ATTR_SSL_CA&#039;),
+            ]) : <span style="background-color: red">[</span>],
+        ],
+
+        &#039;pgsql&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;pgsql&#039;,
+            &#039;url&#039; =&gt; env(&#039;DB_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;DB_HOST&#039;, &#039;127.0.0.1&#039;),
+            &#039;port&#039; =&gt; env(&#039;DB_PORT&#039;, &#039;5432&#039;),
+            &#039;database&#039; =&gt; env(&#039;DB_DATABASE&#039;, &#039;laravel&#039;),
+            &#039;username&#039; =&gt; env(&#039;DB_USERNAME&#039;, &#039;root&#039;),
+            &#039;password&#039; =&gt; env(&#039;DB_PASSWORD&#039;, &#039;&#039;),
+            &#039;charset&#039; =&gt; env(&#039;DB_CHARSET&#039;, &#039;utf8&#039;),
+            &#039;prefix&#039; =&gt; &#039;&#039;,
+            &#039;prefix_indexes&#039; =&gt; true,
+            &#039;search_path&#039; =&gt; &#039;public&#039;,
+            &#039;sslmode&#039; =&gt; &#039;prefer&#039;,
+        ],
+
+        &#039;sqlsrv&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;sqlsrv&#039;,
+            &#039;url&#039; =&gt; env(&#039;DB_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;DB_HOST&#039;, &#039;localhost&#039;),
+            &#039;port&#039; =&gt; env(&#039;DB_PORT&#039;, &#039;1433&#039;),
+            &#039;database&#039; =&gt; env(&#039;DB_DATABASE&#039;, &#039;laravel&#039;),
+            &#039;username&#039; =&gt; env(&#039;DB_USERNAME&#039;, &#039;root&#039;),
+            &#039;password&#039; =&gt; env(&#039;DB_PASSWORD&#039;, &#039;&#039;),
+            &#039;charset&#039; =&gt; env(&#039;DB_CHARSET&#039;, &#039;utf8&#039;),
+            &#039;prefix&#039; =&gt; &#039;&#039;,
+            &#039;prefix_indexes&#039; =&gt; true,
+            // &#039;encrypt&#039; =&gt; env(&#039;DB_ENCRYPT&#039;, &#039;yes&#039;),
+            // &#039;trust_server_certificate&#039; =&gt; env(&#039;DB_TRUST_SERVER_CERTIFICATE&#039;, &#039;false&#039;),
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Migration Repository Table
+    |--------------------------------------------------------------------------
+    |
+    | This table keeps track of all the migrations that have already run for
+    | your application. Using this information, we can determine which of
+    | the migrations on disk haven&#039;t actually been run on the database.
+    |
+    */
+
+    &#039;migrations&#039; =&gt; [
+        &#039;table&#039; =&gt; &#039;migrations&#039;,
+        &#039;update_date_on_publish&#039; =&gt; true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Redis Databases
+    |--------------------------------------------------------------------------
+    |
+    | Redis is an open source, fast, and advanced key-value store that also
+    | provides a richer body of commands than a typical key-value system
+    | such as Memcached. You may define your connection settings here.
+    |
+    */
+
+    &#039;redis&#039; =&gt; [
+
+        &#039;client&#039; =&gt; env(&#039;REDIS_CLIENT&#039;, &#039;phpredis&#039;),
+
+        &#039;options&#039; =&gt; [
+            &#039;cluster&#039; =&gt; env(&#039;REDIS_CLUSTER&#039;, &#039;redis&#039;),
+            &#039;prefix&#039; =&gt; env(&#039;REDIS_PREFIX&#039;, Str::slug(env(&#039;APP_NAME&#039;, &#039;laravel&#039;), &#039;_&#039;).&#039;_database_&#039;),
+            &#039;persistent&#039; =&gt; env(&#039;REDIS_PERSISTENT&#039;, false),
+        ],
+
+        &#039;default&#039; =&gt; [
+            &#039;url&#039; =&gt; env(&#039;REDIS_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;REDIS_HOST&#039;, &#039;127.0.0.1&#039;),
+            &#039;username&#039; =&gt; env(&#039;REDIS_USERNAME&#039;),
+            &#039;password&#039; =&gt; env(&#039;REDIS_PASSWORD&#039;),
+            &#039;port&#039; =&gt; env(&#039;REDIS_PORT&#039;, &#039;6379&#039;),
+            &#039;database&#039; =&gt; env(&#039;REDIS_DB&#039;, &#039;0&#039;),
+        ],
+
+        &#039;cache&#039; =&gt; [
+            &#039;url&#039; =&gt; env(&#039;REDIS_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;REDIS_HOST&#039;, &#039;127.0.0.1&#039;),
+            &#039;username&#039; =&gt; env(&#039;REDIS_USERNAME&#039;),
+            &#039;password&#039; =&gt; env(&#039;REDIS_PASSWORD&#039;),
+            &#039;port&#039; =&gt; env(&#039;REDIS_PORT&#039;, &#039;6379&#039;),
+            &#039;database&#039; =&gt; env(&#039;REDIS_CACHE_DB&#039;, &#039;1&#039;),
+        ],
+
+    ],
+
+];
+</pre>

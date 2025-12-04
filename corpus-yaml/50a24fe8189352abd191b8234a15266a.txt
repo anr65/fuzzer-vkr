@@ -1,0 +1,17 @@
+[!z: s:@ bvh,ng :
+bvh,ng :
+  !z,,!zz,  !t r  !l z,,!zz,  !l z,,!zz,,t :
+bvh,t,
+~ ngbvh,ng :
+  !r  !l z,,!bvh,g :
+  !r  !l :,,!zz,,t :
+bvh,t,~ ng bvh,ng :
+  !r  !l z,,!zz,bvh,ng :
+ l z
+  ,!zz,  !l z,,!zz,,t :
+bvh,t,~ ngbvh,ng :
+  !r  !l z,,!bvh,g :
+  !r  !l :,,!zz,,t :
+bvh,t!r  ,,!zz,!,t :
+bvh,]
+t,0

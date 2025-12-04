@@ -1,0 +1,192 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Http\Middleware;
+
+use Closure;
+use ErrorException;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\Http\MaintenanceModeBypassCookie;
+use Illuminate\Foundation\Http\Middleware\Concerns\ExcludesPaths;
+use Illuminate\Support\Arr;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+
+class PreventRequestsDuringMaintenance
+{
+    use ExcludesPaths;
+
+    /**
+     * The application implementation.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected $app;
+
+    /**
+     * The URIs that should be excluded.
+     *
+     * @var array&lt;int, string&gt;
+     */
+    protected $except = [];
+
+    /**
+     * The URIs that should be accessible during maintenance.
+     *
+     * @var array
+     */
+    protected static $neverPrevent = [];
+
+    /**
+     * Create a new middleware instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Application $app)
+    {
+        $this-&gt;app = $app;
+    }
+
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+     * @throws \ErrorException
+     */
+    <span style="background-color: green">p</span>ublic function handle($request, Closure $next)
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;inExceptArray($request)) {
+            return $next($request);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;app-&gt;maintenanceMode()-&gt;active()) {
+            try {
+                $data = $this-&gt;app-&gt;maintenanceMode()-&gt;data();
+            } <span style="background-color: red">c</span>atch (ErrorException $exception) {
+                <span style="background-color: red">i</span>f (! $this-&gt;app-&gt;maintenanceMode()-&gt;active()) {
+                    return $next($request);
+                <span style="background-color: red">}</span>
+
+                throw $exception;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset($data[&#039;secret&#039;]) &amp;&amp; <span style="background-color: red">$</span>request-&gt;path() === $data[&#039;secret&#039;]) {
+                return $this-&gt;bypassResponse($data[&#039;secret&#039;]);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;hasValidBypassCookie($request, $data)) {
+                return $next($request);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset($data[&#039;redirect&#039;])) {
+                $path = $data[&#039;redirect&#039;] === &#039;/&#039;
+                    ? $data[&#039;redirect&#039;]
+                    : <span style="background-color: red">t</span>rim($data[&#039;redirect&#039;], &#039;/&#039;);
+
+                <span style="background-color: red">i</span>f ($request-&gt;path() !== $path) {
+                    return redirect($path);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset($data[&#039;template&#039;])) {
+                return response(
+                    $data[&#039;template&#039;],
+                    $data[&#039;status&#039;] ?? <span style="background-color: red">5</span>03,
+                    $this-&gt;getHeaders($data)
+                );
+            <span style="background-color: red">}</span>
+
+            throw new HttpException(
+                $data[&#039;status&#039;] ?? <span style="background-color: red">5</span>03,
+                &#039;Service Unavailable&#039;,
+                null,
+                $this-&gt;getHeaders($data)
+            );
+        <span style="background-color: green">}</span>
+
+        return $next($request);
+    }
+
+    /**
+     * Determine if the incoming request has a maintenance mode bypass cookie.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $data
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function hasValidBypassCookie($request, array $data)
+    {
+        return isset($data[&#039;secret&#039;]) &amp;&amp;
+                <span style="background-color: red">$</span>request-&gt;cookie(&#039;laravel_maintenance&#039;) &amp;&amp;
+                <span style="background-color: red">M</span>aintenanceModeBypassCookie::isValid(
+                    $request-&gt;cookie(&#039;laravel_maintenance&#039;),
+                    $data[&#039;secret&#039;]
+                );
+    }
+
+    /**
+     * Redirect the user back to the root of the application with a maintenance mode bypass cookie.
+     *
+     * @param  string  $secret
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>rotected function bypassResponse(string $secret)
+    {
+        return redirect(&#039;/&#039;)-&gt;withCookie(
+            MaintenanceModeBypassCookie::create($secret)
+        );
+    }
+
+    /**
+     * Get the headers that should be sent with the response.
+     *
+     * @param  array  $data
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getHeaders($data)
+    {
+        $headers = isset($data[&#039;retry&#039;]) ? [&#039;Retry-After&#039; =&gt; $data[&#039;retry&#039;]] : <span style="background-color: red">[</span>];
+
+        <span style="background-color: red">i</span>f (isset($data[&#039;refresh&#039;])) {
+            $headers[&#039;Refresh&#039;] = $data[&#039;refresh&#039;];
+        <span style="background-color: red">}</span>
+
+        return $headers;
+    }
+
+    /**
+     * Get the URIs that should be excluded.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function getExcludedPaths()
+    {
+        return array_merge($this-&gt;except, static::$neverPrevent);
+    }
+
+    /**
+     * Indicate that the given URIs should always be accessible.
+     *
+     * @param  array|string  $uris
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function except($uris)
+    {
+        static::$neverPrevent = array_values(array_unique(
+            array_merge(static::$neverPrevent, Arr::wrap($uris))
+        ));
+    }
+
+    /**
+     * Flush the state of the middleware.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushState()
+    {
+        static::$neverPrevent = [];
+    }
+}
+</pre>

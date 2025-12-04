@@ -1,0 +1,280 @@
+REDUCE run: 56 ( 571/s), ft: 7569 (0/s), corp: 1395 (58kb), len:   7/516, t: 0s, mem: 53mb
+REDUCE run: 167 ( 642/s), ft: 7569 (0/s), corp: 1395 (58kb), len: 185/516, t: 0s, mem: 53mb
+REDUCE run: 184 ( 657/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  64/516, t: 0s, mem: 53mb
+REDUCE run: 637 ( 663/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  25/516, t: 1s, mem: 53mb
+REDUCE run: 1553 ( 669/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  65/516, t: 2s, mem: 54mb
+REDUCE run: 1885 ( 673/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  50/516, t: 3s, mem: 54mb
+CRASH in yaml_parse/output//crash-48c32efffbeb40157e82e2dc27bf3daa.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php:326
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(531): Symfony\Component\Yaml\Parser->doParse(',j:s:<<u >', 0)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(318): Symfony\Component\Yaml\Parser->parseBlock(1, '\ns........!zz:\n...', 0)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse(': yf,g:\n\n s.......', 0)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(115): Symfony\Component\Yaml\Parser->parse(': yf,g:\n\n s.......', 0)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(207): PhpFuzzer\Fuzzer::{closure}(': yf,g:\n\n s.......')
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(133): PhpFuzzer\Fuzzer->runInput(': yf,g:\n\n s.......')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(490): PhpFuzzer\Fuzzer->fuzz()
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(450): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#9 {main}
+CRASH in yaml_parse/output//crash-620e2ec705acb29b857dbe1a3c8c827a.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(391): Symfony\Component\Yaml\Inline::parseMapping('{<<: !:\x1C\x12suss: ...', 512, 33, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(72): Symfony\Component\Yaml\Inline::parseSequence('[alpha, !:: <<:...', 512, 45, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(401): Symfony\Component\Yaml\Inline::parse('[alpha, !:: <<:...', 512, Array)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('[alpha, !:\n:\n <...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('[alpha, !:\n:\n <...', 512)
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(207): PhpFuzzer\Fuzzer::{closure}('!:\n:\n <<: !:\n\x1C\x12...')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(133): PhpFuzzer\Fuzzer->runInput('!:\n:\n <<: !:\n\x1C\x12...')
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(490): PhpFuzzer\Fuzzer->fuzz()
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(450): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#9 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#10 {main}
+REDUCE run: 330 ( 652/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  27/516, t: 1s, mem: 53mb
+REDUCE run: 529 ( 649/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  66/516, t: 1s, mem: 53mb
+REDUCE run: 752 ( 657/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  15/516, t: 1s, mem: 54mb
+REDUCE run: 953 ( 669/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  21/516, t: 1s, mem: 54mb
+REDUCE run: 1584 ( 676/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  75/516, t: 2s, mem: 54mb
+REDUCE run: 1695 ( 678/s), ft: 7569 (0/s), corp: 1395 (58kb), len:  12/516, t: 3s, mem: 54mb
+NEW    run: 1722 ( 677/s), ft: 7570 (0/s), corp: 1396 (58kb), len: 172/516, t: 3s, mem: 54mb
+REDUCE run: 1760 ( 676/s), ft: 7570 (0/s), corp: 1396 (58kb), len:  39/516, t: 3s, mem: 54mb
+REDUCE run: 1826 ( 676/s), ft: 7570 (0/s), corp: 1396 (58kb), len:  20/516, t: 3s, mem: 54mb
+Memory limit of 60 MB exceeded, aborting
+REDUCE run: 52 ( 770/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  76/516, t: 0s, mem: 53mb
+REDUCE run: 1069 ( 651/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  24/516, t: 2s, mem: 54mb
+REDUCE run: 1255 ( 656/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  77/516, t: 2s, mem: 54mb
+REDUCE run: 1483 ( 651/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  34/516, t: 2s, mem: 54mb
+REDUCE run: 2229 ( 645/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  69/516, t: 3s, mem: 54mb
+CRASH in yaml_parse/output//crash-605312d0e3133663172c8e7b13bd94a1.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php:326
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(531): Symfony\Component\Yaml\Parser->doParse('&&&\x03z`\x1A', 512)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(318): Symfony\Component\Yaml\Parser->parseBlock(2, '<<: &&\x03zd\n &&&\x03...', 512)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('zzssi:', 512)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('key: zzssi:\nge:...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('zzssi:\nge: !zzq...')
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('zzssi:\nge: !zzq...')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(506): PhpFuzzer\Fuzzer->fuzz()
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(466): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#9 {main}
+REDUCE run: 2431 ( 648/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  16/516, t: 4s, mem: 54mb
+REDUCE run: 2497 ( 648/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  72/516, t: 4s, mem: 54mb
+REDUCE run: 2533 ( 649/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  54/516, t: 4s, mem: 54mb
+REDUCE run: 2829 ( 645/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  13/516, t: 4s, mem: 54mb
+CRASH in yaml_parse/output//crash-d46023bfea01306333f45d926ba23331.txt!
+TypeError: Unsupported operand types: array + null in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(76): Symfony\Component\Yaml\Inline::parseMapping('{foo: : !:p {} ...', 512, 20, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(380): Symfony\Component\Yaml\Inline::parse('{foo: : !:p {} ...', 512, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('{foo: : !:p\n {}...', 512)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('{foo: : !:p\n {}...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}(': !:p\n {} <<: \x00...')
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput(': !:p\n {} <<: \x00...')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(506): PhpFuzzer\Fuzzer->fuzz()
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(466): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#9 {main}
+REDUCE run: 3207 ( 648/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  30/516, t: 5s, mem: 55mb
+REDUCE run: 3738 ( 654/s), ft: 7570 (0/s), corp: 1395 (58kb), len:   9/516, t: 6s, mem: 55mb
+REDUCE run: 4084 ( 658/s), ft: 7570 (0/s), corp: 1395 (58kb), len: 236/516, t: 6s, mem: 56mb
+REDUCE run: 4520 ( 660/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  10/516, t: 7s, mem: 56mb
+REDUCE run: 5316 ( 661/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  51/516, t: 8s, mem: 57mb
+REDUCE run: 5540 ( 660/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  70/516, t: 8s, mem: 57mb
+CRASH in yaml_parse/output//crash-e549ffab73ec3055d13317af6006f467.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(391): Symfony\Component\Yaml\Inline::parseMapping('{<<: \x00<}', 512, 7, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(72): Symfony\Component\Yaml\Inline::parseSequence('[alpha, !: \x00<<:...', 512, 19, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(401): Symfony\Component\Yaml\Inline::parse('[alpha, !: \x00<<:...', 512, Array)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('[alpha, !: \x00<<:...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('[alpha, !: \x00<<:...', 512)
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('!: \x00<<: \x00< ')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('!: \x00<<: \x00< ')
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(506): PhpFuzzer\Fuzzer->fuzz()
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(466): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#9 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#10 {main}
+Memory limit of 70 MB exceeded, aborting
+Memory limit of 70 MB exceeded, aborting
+Memory limit of 70 MB exceeded, aborting
+Memory limit of 70 MB exceeded, aborting
+Memory limit of 70 MB exceeded, aborting
+CRASH in yaml_parse/output//crash-94ed0d7b8fcb0ba4977e2e5800144a3e.txt!
+Fatal error: Uncaught BadMethodCallException: An interceptor is already active in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/nikic/include-interceptor/src/Interceptor.php:55
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(113): Nikic\IncludeInterceptor\Interceptor->setUp()
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(84): PhpFuzzer\Fuzzer->startInstrumentation()
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->loadTarget('yaml_parse/targ...')
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#4 {main}
+  thrown in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/nikic/include-interceptor/src/Interceptor.php on line 55
+=== Fuzzer run 1 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Exiting with code 1
+=== Fuzzer run 1 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 2 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 3 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 4 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 5 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 6 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 7 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 8 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 9 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 10 ===
+Memory limit of 70 MB exceeded, aborting
+[*] Memory limit hit. Restarting...
+=== Fuzzer run 1 ===
+REDUCE run: 276 ( 670/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  23/516, t: 0s, mem: 53mb
+REDUCE run: 322 ( 679/s), ft: 7570 (0/s), corp: 1395 (58kb), len:   9/516, t: 0s, mem: 53mb
+REDUCE run: 393 ( 680/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  17/516, t: 1s, mem: 53mb
+REDUCE run: 579 ( 681/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  35/516, t: 1s, mem: 53mb
+REDUCE run: 1191 ( 681/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  40/516, t: 2s, mem: 54mb
+CRASH in yaml_parse/output//crash-c88b495be4030987be35492d78622bff.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(391): Symfony\Component\Yaml\Inline::parseMapping('{<<: &}', 0, 6, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(72): Symfony\Component\Yaml\Inline::parseSequence('[alpha, <<: &,:...', 0, 13, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(401): Symfony\Component\Yaml\Inline::parse('[alpha, <<: &,:...', 0, Array)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('[alpha, <<: &,:...', 0)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('[alpha, <<: &,:...', 0)
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('<<: &,:')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('<<: &,:')
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#9 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#10 {main}
+REDUCE run: 1909 ( 668/s), ft: 7570 (0/s), corp: 1395 (58kb), len:   5/516, t: 3s, mem: 54mb
+REDUCE run: 2155 ( 667/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  96/516, t: 3s, mem: 54mb
+REDUCE run: 2702 ( 662/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  17/516, t: 4s, mem: 54mb
+REDUCE run: 3284 ( 649/s), ft: 7570 (0/s), corp: 1395 (58kb), len:   9/516, t: 5s, mem: 55mb
+REDUCE run: 3486 ( 651/s), ft: 7570 (0/s), corp: 1395 (58kb), len: 153/516, t: 5s, mem: 55mb
+REDUCE run: 3722 ( 657/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  67/516, t: 6s, mem: 55mb
+REDUCE run: 4146 ( 659/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  63/516, t: 6s, mem: 56mb
+REDUCE run: 4453 ( 662/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  10/516, t: 7s, mem: 56mb
+REDUCE run: 4667 ( 662/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  57/516, t: 7s, mem: 56mb
+REDUCE run: 4876 ( 662/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  33/516, t: 7s, mem: 56mb
+REDUCE run: 5672 ( 660/s), ft: 7570 (0/s), corp: 1395 (58kb), len:  31/516, t: 9s, mem: 57mb
+NEW    run: 5731 ( 660/s), ft: 7572 (0/s), corp: 1396 (58kb), len: 249/516, t: 9s, mem: 57mb
+CRASH in yaml_parse/output//crash-c5a3778eb4dfadd107965b9d66028b2d.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(391): Symfony\Component\Yaml\Inline::parseMapping('{<<: &2}', 0, 7, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(72): Symfony\Component\Yaml\Inline::parseSequence('[alpha, <<: &2,...', 0, 14, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(401): Symfony\Component\Yaml\Inline::parse('[alpha, <<: &2,...', 0, Array)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('[alpha, <<: &2,...', 0)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('[alpha, <<: &2,...', 0)
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('<<: &2,',:`````...')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('<<: &2,',:`````...')
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#9 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#10 {main}
+REDUCE run: 5891 ( 659/s), ft: 7572 (0/s), corp: 1396 (58kb), len:   9/516, t: 9s, mem: 57mb
+REDUCE run: 5954 ( 660/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  14/516, t: 9s, mem: 57mb
+REDUCE run: 7335 ( 659/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  66/516, t: 11s, mem: 58mb
+CRASH in yaml_parse/output//crash-4e9ce7bf070be54ec32717d04878e3f8.txt!
+TypeError: Unsupported operand types: array + null in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(76): Symfony\Component\Yaml\Inline::parseMapping('{foo: :: !zwwww...', 512, 23, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(380): Symfony\Component\Yaml\Inline::parse('{foo: :: !zwwww...', 512, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('{foo: :: !zwwww...', 512)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('{foo: :: !zwwww...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}(':: !zwwww\r\r {}<...')
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput(':: !zwwww\r\r {}<...')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#9 {main}
+REDUCE run: 7750 ( 660/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  64/516, t: 12s, mem: 58mb
+REDUCE run: 7941 ( 660/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  48/516, t: 12s, mem: 58mb
+REDUCE run: 8477 ( 661/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  51/516, t: 13s, mem: 58mb
+REDUCE run: 8493 ( 660/s), ft: 7572 (0/s), corp: 1396 (58kb), len: 114/516, t: 13s, mem: 58mb
+REDUCE run: 8519 ( 660/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  10/516, t: 13s, mem: 58mb
+REDUCE run: 8955 ( 661/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  35/516, t: 14s, mem: 58mb
+REDUCE run: 9007 ( 662/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  24/516, t: 14s, mem: 58mb
+REDUCE run: 9303 ( 662/s), ft: 7572 (0/s), corp: 1396 (58kb), len:   8/516, t: 14s, mem: 58mb
+REDUCE run: 9814 ( 664/s), ft: 7572 (0/s), corp: 1396 (58kb), len: 132/516, t: 15s, mem: 59mb
+REDUCE run: 9880 ( 664/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  34/516, t: 15s, mem: 59mb
+REDUCE run: 10456 ( 662/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  33/516, t: 16s, mem: 61mb
+REDUCE run: 10482 ( 662/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  19/516, t: 16s, mem: 61mb
+CRASH in yaml_parse/output//crash-c7e6eb565f5bd5bc39b600432a4d3ba9.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php:326
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(531): Symfony\Component\Yaml\Parser->doParse('var:\x03', 512)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(318): Symfony\Component\Yaml\Parser->parseBlock(2, '<<: &&\x03zin:asyn...', 512)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('&r `&c`n:\n4uzzi...', 512)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('&r `&c`n:\n4uzzi...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('`&c`n:\n4uzzing:...')
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('`&c`n:\n4uzzing:...')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#9 {main}
+REDUCE run: 10619 ( 663/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  43/516, t: 16s, mem: 62mb
+REDUCE run: 12169 ( 657/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  51/516, t: 19s, mem: 62mb
+REDUCE run: 12955 ( 654/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  53/516, t: 20s, mem: 62mb
+CRASH in yaml_parse/output//crash-55f29507a911d65582f65aa4735fb749.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(391): Symfony\Component\Yaml\Inline::parseMapping('{<<: \x00<}', 0, 7, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(72): Symfony\Component\Yaml\Inline::parseSequence('[alpha, <<: \x00< ...', 0, 15, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(401): Symfony\Component\Yaml\Inline::parse('[alpha, <<: \x00< ...', 0, Array)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('[alpha, \n<<: \x00<...', 0)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('[alpha, \r<<: \x00<...', 0)
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('\r<<: \x00< ')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('\r<<: \x00< ')
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#9 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#10 {main}
+CRASH in yaml_parse/output//crash-b19c822f074ad66954591d2b06ca219e.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(76): Symfony\Component\Yaml\Inline::parseMapping('{foo: s: ,<<: \x00...', 0, 16, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(380): Symfony\Component\Yaml\Inline::parse('{foo: s: ,<<: \x00...', 0, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('{foo: s:\n ,<<: ...', 0)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('{foo: s:\n ,<<: ...', 0)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('s:\n ,<<: \x00#')
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('s:\n ,<<: \x00#')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#9 {main}
+CRASH in yaml_parse/output//crash-d4b7f39c189b5c9d68d3f18f5d4ccbe5.txt!
+TypeError: Unsupported operand types: array + string in /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php:536
+Stack trace:
+#0 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(391): Symfony\Component\Yaml\Inline::parseMapping('{<<: \x00OCe}', 512, 9, Array)
+#1 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Inline.php(72): Symfony\Component\Yaml\Inline::parseSequence('[alpha, !r: <<:...', 512, 20, Array)
+#2 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(401): Symfony\Component\Yaml\Inline::parse('[alpha, !r: <<:...', 512, Array)
+#3 /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/symfony/yaml/Parser.php(86): Symfony\Component\Yaml\Parser->doParse('[alpha, !r:\n <<...', 512)
+#4 /Users/anr65/PhpstormProjects/PHP-Fuzzer/yaml_parse/target.php(104): Symfony\Component\Yaml\Parser->parse('[alpha, !r:\n <<...', 512)
+#5 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(216): PhpFuzzer\Fuzzer::{closure}('!r:\n <<: \x00OCe')
+#6 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(142): PhpFuzzer\Fuzzer->runInput('!r:\n <<: \x00OCe')
+#7 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(505): PhpFuzzer\Fuzzer->fuzz()
+#8 /Users/anr65/PhpstormProjects/PHP-Fuzzer/src/Fuzzer.php(465): PhpFuzzer\Fuzzer->handleFuzzCommand(Object(GetOpt\GetOpt))
+#9 /Users/anr65/PhpstormProjects/PHP-Fuzzer/bin/php-fuzzer(23): PhpFuzzer\Fuzzer->handleCliArgs()
+#10 {main}
+REDUCE run: 16204 ( 651/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  20/516, t: 25s, mem: 64mb
+REDUCE run: 16295 ( 651/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  13/516, t: 25s, mem: 64mb
+REDUCE run: 16416 ( 651/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  30/516, t: 25s, mem: 64mb
+REDUCE run: 16458 ( 651/s), ft: 7572 (0/s), corp: 1396 (58kb), len:  23/516, t: 25s, mem: 64mb

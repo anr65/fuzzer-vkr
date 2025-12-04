@@ -1,0 +1,4 @@
+_zfuing:
+? ':
+  - r ariables:
+    CO=74,  

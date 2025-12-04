@@ -1,0 +1,175 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Input;
+
+use Symfony\Component\Console\Exception\InvalidArgumentException;
+use Symfony\Component\Console\Exception\RuntimeException;
+
+/**
+ * Input is the base class for all concrete Input classes.
+ *
+ * Three concrete classes are provided by default:
+ *
+ *  * `ArgvInput`: The input comes from the CLI arguments (argv)
+ *  * `StringInput`: The input is provided as a string
+ *  * `ArrayInput`: The input is provided as an array
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+abstract class Input implements InputInterface, StreamableInputInterface
+{
+    protected InputDefinition $definition;
+    /** @var resource */
+    protected $stream;
+    protected array $options = [];
+    protected array $arguments = [];
+    protected bool $interactive = true;
+
+    <span style="background-color: green">p</span>ublic function __construct(?InputDefinition $definition = null)
+    {
+        <span style="background-color: green">i</span>f (null === $definition) {
+            $this-&gt;definition = new InputDefinition();
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;bind($definition);
+            $this-&gt;validate();
+        <span style="background-color: green">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function bind(InputDefinition $definition): void
+    {
+        $this-&gt;arguments = [];
+        $this-&gt;options = [];
+        $this-&gt;definition = $definition;
+
+        $this-&gt;parse();
+    }
+
+    /**
+     * Processes command line arguments.
+     */
+    abstract protected function parse(): void;
+
+    <span style="background-color: red">p</span>ublic function validate(): void
+    {
+        $definition = $this-&gt;definition;
+        $givenArguments = $this-&gt;arguments;
+
+        $missingArguments = array_filter(array_keys($definition-&gt;getArguments()), fn ($argument) =&gt; <span style="background-color: red">!</span>\array_key_exists($argument, $givenArguments) &amp;&amp; <span style="background-color: red">$</span>definition-&gt;getArgument($argument)-&gt;isRequired());
+
+        <span style="background-color: red">i</span>f (\count($missingArguments) &gt; 0) {
+            throw new RuntimeException(\sprintf(&#039;Not enough arguments (missing: &quot;%s&quot;).&#039;, implode(&#039;, &#039;, $missingArguments)));
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function isInteractive(): bool
+    {
+        return $this-&gt;interactive;
+    }
+
+    <span style="background-color: red">p</span>ublic function setInteractive(bool $interactive): void
+    {
+        $this-&gt;interactive = $interactive;
+    }
+
+    <span style="background-color: red">p</span>ublic function getArguments(): array
+    {
+        return array_merge($this-&gt;definition-&gt;getArgumentDefaults(), $this-&gt;arguments);
+    }
+
+    <span style="background-color: red">p</span>ublic function getArgument(string $name): mixed
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasArgument($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;%s&quot; argument does not exist.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;arguments[$name] ?? <span style="background-color: red">$</span>this-&gt;definition-&gt;getArgument($name)-&gt;getDefault();
+    }
+
+    <span style="background-color: red">p</span>ublic function setArgument(string $name, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasArgument($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;%s&quot; argument does not exist.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;arguments[$name] = $value;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasArgument(string $name): bool
+    {
+        return $this-&gt;definition-&gt;hasArgument($name);
+    }
+
+    <span style="background-color: red">p</span>ublic function getOptions(): array
+    {
+        return array_merge($this-&gt;definition-&gt;getOptionDefaults(), $this-&gt;options);
+    }
+
+    <span style="background-color: red">p</span>ublic function getOption(string $name): mixed
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;definition-&gt;hasNegation($name)) {
+            <span style="background-color: red">i</span>f (null === $value = $this-&gt;getOption($this-&gt;definition-&gt;negationToName($name))) {
+                return $value;
+            <span style="background-color: red">}</span>
+
+            return !$value;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$this-&gt;definition-&gt;hasOption($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;%s&quot; option does not exist.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        return \array_key_exists($name, $this-&gt;options) ? $this-&gt;options[$name] : <span style="background-color: red">$</span>this-&gt;definition-&gt;getOption($name)-&gt;getDefault();
+    }
+
+    <span style="background-color: red">p</span>ublic function setOption(string $name, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;definition-&gt;hasNegation($name)) {
+            $this-&gt;options[$this-&gt;definition-&gt;negationToName($name)] = !$value;
+
+            return;
+        } <span style="background-color: red">e</span>lseif (!$this-&gt;definition-&gt;hasOption($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;%s&quot; option does not exist.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;options[$name] = $value;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasOption(string $name): bool
+    {
+        return $this-&gt;definition-&gt;hasOption($name) || <span style="background-color: red">$</span>this-&gt;definition-&gt;hasNegation($name);
+    }
+
+    /**
+     * Escapes a token through escapeshellarg if it contains unsafe chars.
+     */
+    <span style="background-color: red">p</span>ublic function escapeToken(string $token): string
+    {
+        return preg_match(&#039;{^[\w-]+$}&#039;, $token) ? $token : <span style="background-color: red">e</span>scapeshellarg($token);
+    }
+
+    /**
+     * @param resource $stream
+     */
+    <span style="background-color: red">p</span>ublic function setStream($stream): void
+    {
+        $this-&gt;stream = $stream;
+    }
+
+    /**
+     * @return resource
+     */
+    <span style="background-color: red">p</span>ublic function getStream()
+    {
+        return $this-&gt;stream;
+    }
+}
+</pre>

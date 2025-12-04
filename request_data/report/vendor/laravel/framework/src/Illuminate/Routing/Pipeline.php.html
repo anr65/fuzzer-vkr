@@ -1,0 +1,60 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Http\Request;
+use Illuminate\Pipeline\Pipeline as BasePipeline;
+use Throwable;
+
+/**
+ * This extended pipeline catches any exceptions that occur during each slice.
+ *
+ * The exceptions are converted to HTTP responses for proper middleware handling.
+ */
+class Pipeline extends BasePipeline
+{
+    /**
+     * Handles the value returned from each pipe before passing it to the next.
+     *
+     * @param  mixed  $carry
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected function handleCarry($carry)
+    {
+        return $carry instanceof Responsable
+            ? $carry-&gt;toResponse($this-&gt;getContainer()-&gt;make(Request::class))
+            : <span style="background-color: green">$</span>carry;
+    }
+
+    /**
+     * Handle the given exception.
+     *
+     * @param  mixed  $passable
+     * @param  \Throwable  $e
+     * @return mixed
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: green">p</span>rotected function handleException($passable, Throwable $e)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;container-&gt;bound(ExceptionHandler::class) ||
+            <span style="background-color: green">!</span> $passable instanceof Request) {
+            throw $e;
+        <span style="background-color: green">}</span>
+
+        $handler = $this-&gt;container-&gt;make(ExceptionHandler::class);
+
+        $handler-&gt;report($e);
+
+        $response = $handler-&gt;render($passable, $e);
+
+        <span style="background-color: green">i</span>f (is_object($response) &amp;&amp; <span style="background-color: green">m</span>ethod_exists($response, &#039;withException&#039;)) {
+            $response-&gt;withException($e);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;handleCarry($response);
+    }
+}
+</pre>

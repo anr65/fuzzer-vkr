@@ -1,0 +1,5 @@
+sync_fuzzing:
+  variables:
+    COVFADDITIONAL_ARGS: '-max__ARGS: '-max_total_time=300tal_time=300'
+  tri'
+ gger 

@@ -1,0 +1,363 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Bootstrap;
+
+use ErrorException;
+use Exception;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Log\LogManager;
+use Illuminate\Support\Env;
+use Monolog\Handler\NullHandler;
+use PHPUnit\Runner\ErrorHandler;
+use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\ErrorHandler\Error\FatalError;
+use Throwable;
+
+class HandleExceptions
+{
+    /**
+     * Reserved memory so that errors can be displayed properly on memory exhaustion.
+     *
+     * @var string|null
+     */
+    public static $reservedMemory;
+
+    /**
+     * The application instance.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected static $app;
+
+    /**
+     * Bootstrap the given application.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function bootstrap(Application $app)
+    {
+        static::$reservedMemory = str_repeat(&#039;x&#039;, 32768);
+
+        static::$app = $app;
+
+        error_reporting(-1);
+
+        set_error_handler($this-&gt;forwardsTo(&#039;handleError&#039;));
+
+        set_exception_handler($this-&gt;forwardsTo(&#039;handleException&#039;));
+
+        register_shutdown_function($this-&gt;forwardsTo(&#039;handleShutdown&#039;));
+
+        <span style="background-color: green">i</span>f (! $app-&gt;environment(&#039;testing&#039;)) {
+            ini_set(&#039;display_errors&#039;, &#039;Off&#039;);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Report PHP deprecations, or convert PHP errors to ErrorException instances.
+     *
+     * @param  int  $level
+     * @param  string  $message
+     * @param  string  $file
+     * @param  int  $line
+     * @return void
+     *
+     * @throws \ErrorException
+     */
+    <span style="background-color: red">p</span>ublic function handleError($level, $message, $file = &#039;&#039;, $line = 0)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isDeprecation($level)) {
+            $this-&gt;handleDeprecationError($message, $file, $line, $level);
+        } <span style="background-color: red">e</span>lseif (error_reporting() &amp; $level) {
+            throw new ErrorException($message, 0, $level, $file, $line);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Reports a deprecation to the &quot;deprecations&quot; logger.
+     *
+     * @param  string  $message
+     * @param  string  $file
+     * @param  int  $line
+     * @param  int  $level
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function handleDeprecationError($message, $file, $line, $level = E_DEPRECATED)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;shouldIgnoreDeprecationErrors()) {
+            return;
+        <span style="background-color: red">}</span>
+
+        try {
+            $logger = static::$app-&gt;make(LogManager::class);
+        } <span style="background-color: red">c</span>atch (Exception) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;ensureDeprecationLoggerIsConfigured();
+
+        $options = static::$app[&#039;config&#039;]-&gt;get(&#039;logging.deprecations&#039;) ?? <span style="background-color: red">[</span>];
+
+        with($logger-&gt;channel(&#039;deprecations&#039;), <span style="background-color: red">f</span>unction ($log) use ($message, $file, $line, $level, $options) {
+            <span style="background-color: red">i</span>f ($options[&#039;trace&#039;] ?? <span style="background-color: red">f</span>alse) {
+                $log-&gt;warning((string) new ErrorException($message, 0, $level, $file, $line));
+            } <span style="background-color: red">e</span>lse {
+                $log-&gt;warning(sprintf(&#039;%s in %s on line %s&#039;,
+                    $message, $file, $line
+                ));
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Determine if deprecation errors should be ignored.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function shouldIgnoreDeprecationErrors()
+    {
+        return ! class_exists(LogManager::class)
+            || <span style="background-color: red">!</span> static::$app-&gt;hasBeenBootstrapped()
+            || (<span style="background-color: red">s</span>tatic::$app-&gt;runningUnitTests() &amp;&amp; <span style="background-color: red">!</span> Env::get(&#039;LOG_DEPRECATIONS_WHILE_TESTING&#039;));
+    }
+
+    /**
+     * Ensure the &quot;deprecations&quot; logger is configured.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function ensureDeprecationLoggerIsConfigured()
+    {
+        with(static::$app[&#039;config&#039;], <span style="background-color: red">f</span>unction ($config) {
+            <span style="background-color: red">i</span>f ($config-&gt;get(&#039;logging.channels.deprecations&#039;)) {
+                return;
+            <span style="background-color: red">}</span>
+
+            $this-&gt;ensureNullLogDriverIsConfigured();
+
+            <span style="background-color: red">i</span>f (is_array($options = $config-&gt;get(&#039;logging.deprecations&#039;))) {
+                $driver = $options[&#039;channel&#039;] ?? <span style="background-color: red">'</span>null&#039;;
+            } <span style="background-color: red">e</span>lse {
+                $driver = $options ?? <span style="background-color: red">'</span>null&#039;;
+            <span style="background-color: red">}</span>
+
+            $config-&gt;set(&#039;logging.channels.deprecations&#039;, $config-&gt;get(&quot;logging.channels.{$driver}&quot;));
+        });
+    }
+
+    /**
+     * Ensure the &quot;null&quot; log driver is configured.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function ensureNullLogDriverIsConfigured()
+    {
+        with(static::$app[&#039;config&#039;], <span style="background-color: red">f</span>unction ($config) {
+            <span style="background-color: red">i</span>f ($config-&gt;get(&#039;logging.channels.null&#039;)) {
+                return;
+            <span style="background-color: red">}</span>
+
+            $config-&gt;set(&#039;logging.channels.null&#039;, [
+                &#039;driver&#039; =&gt; &#039;monolog&#039;,
+                &#039;handler&#039; =&gt; NullHandler::class,
+            ]);
+        });
+    }
+
+    /**
+     * Handle an uncaught exception from the application.
+     *
+     * Note: Most exceptions can be handled via the try / catch block in
+     * the HTTP and Console kernels. But, fatal error exceptions must
+     * be handled differently since they are not normal exceptions.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function handleException(Throwable $e)
+    {
+        static::$reservedMemory = null;
+
+        try {
+            $this-&gt;getExceptionHandler()-&gt;report($e);
+        } <span style="background-color: red">c</span>atch (Exception) {
+            $exceptionHandlerFailed = true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::$app-&gt;runningInConsole()) {
+            $this-&gt;renderForConsole($e);
+
+            <span style="background-color: red">i</span>f ($exceptionHandlerFailed ?? <span style="background-color: red">f</span>alse) {
+                exit(1);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;renderHttpResponse($e);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Render an exception to the console.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function renderForConsole(Throwable $e)
+    {
+        $this-&gt;getExceptionHandler()-&gt;renderForConsole(new ConsoleOutput, $e);
+    }
+
+    /**
+     * Render an exception as an HTTP response and send it.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function renderHttpResponse(Throwable $e)
+    {
+        $this-&gt;getExceptionHandler()-&gt;render(static::$app[&#039;request&#039;], $e)-&gt;send();
+    }
+
+    /**
+     * Handle the PHP shutdown event.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function handleShutdown()
+    {
+        static::$reservedMemory = null;
+
+        <span style="background-color: red">i</span>f (! is_null($error = error_get_last()) &amp;&amp; <span style="background-color: red">$</span>this-&gt;isFatal($error[&#039;type&#039;])) {
+            $this-&gt;handleException($this-&gt;fatalErrorFromPhpError($error, 0));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a new fatal error instance from an error array.
+     *
+     * @param  array  $error
+     * @param  int|null  $traceOffset
+     * @return \Symfony\Component\ErrorHandler\Error\FatalError
+     */
+    <span style="background-color: red">p</span>rotected function fatalErrorFromPhpError(array $error, $traceOffset = null)
+    {
+        return new FatalError($error[&#039;message&#039;], 0, $error, $traceOffset);
+    }
+
+    /**
+     * Forward a method call to the given method if an application instance exists.
+     *
+     * @return callable
+     */
+    <span style="background-color: green">p</span>rotected function forwardsTo($method)
+    {
+        return fn (...$arguments) =&gt; <span style="background-color: red">s</span>tatic::$app
+            ? $this-&gt;{$method}(...$arguments)
+            : <span style="background-color: red">f</span>alse;
+    }
+
+    /**
+     * Determine if the error level is a deprecation.
+     *
+     * @param  int  $level
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isDeprecation($level)
+    {
+        return in_array($level, [E_DEPRECATED, E_USER_DEPRECATED]);
+    }
+
+    /**
+     * Determine if the error type is fatal.
+     *
+     * @param  int  $type
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isFatal($type)
+    {
+        return in_array($type, [E_COMPILE_ERROR, E_CORE_ERROR, E_ERROR, E_PARSE]);
+    }
+
+    /**
+     * Get an instance of the exception handler.
+     *
+     * @return \Illuminate\Contracts\Debug\ExceptionHandler
+     */
+    <span style="background-color: red">p</span>rotected function getExceptionHandler()
+    {
+        return static::$app-&gt;make(ExceptionHandler::class);
+    }
+
+    /**
+     * Clear the local application instance from memory.
+     *
+     * @return void
+     *
+     * @deprecated This method will be removed in a future Laravel version.
+     */
+    <span style="background-color: red">p</span>ublic static function forgetApp()
+    {
+        static::$app = null;
+    }
+
+    /**
+     * Flush the bootstrapper&#039;s global state.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushState()
+    {
+        <span style="background-color: red">i</span>f (is_null(static::$app)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        static::flushHandlersState();
+
+        static::$app = null;
+
+        static::$reservedMemory = null;
+    }
+
+    /**
+     * Flush the bootstrapper&#039;s global handlers state.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushHandlersState()
+    {
+        <span style="background-color: red">w</span>hile (true) {
+            $previousHandler = set_exception_handler(static fn () =&gt; <span style="background-color: red">n</span>ull);
+
+            restore_exception_handler();
+
+            <span style="background-color: red">i</span>f ($previousHandler === null) {
+                break;
+            <span style="background-color: red">}</span>
+
+            restore_exception_handler();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">w</span>hile (true) {
+            $previousHandler = set_error_handler(static fn () =&gt; <span style="background-color: red">n</span>ull);
+
+            restore_error_handler();
+
+            <span style="background-color: red">i</span>f ($previousHandler === null) {
+                break;
+            <span style="background-color: red">}</span>
+
+            restore_error_handler();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (class_exists(ErrorHandler::class)) {
+            $instance = ErrorHandler::instance();
+
+            <span style="background-color: red">i</span>f ((fn () =&gt; <span style="background-color: red">$</span>this-&gt;enabled ?? <span style="background-color: red">f</span>alse)-&gt;call($instance)) {
+                $instance-&gt;disable();
+                $instance-&gt;enable();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

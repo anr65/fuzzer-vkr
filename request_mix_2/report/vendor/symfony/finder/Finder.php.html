@@ -1,0 +1,853 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder;
+
+use Symfony\Component\Finder\Comparator\DateComparator;
+use Symfony\Component\Finder\Comparator\NumberComparator;
+use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
+use Symfony\Component\Finder\Iterator\CustomFilterIterator;
+use Symfony\Component\Finder\Iterator\DateRangeFilterIterator;
+use Symfony\Component\Finder\Iterator\DepthRangeFilterIterator;
+use Symfony\Component\Finder\Iterator\ExcludeDirectoryFilterIterator;
+use Symfony\Component\Finder\Iterator\FilecontentFilterIterator;
+use Symfony\Component\Finder\Iterator\FilenameFilterIterator;
+use Symfony\Component\Finder\Iterator\LazyIterator;
+use Symfony\Component\Finder\Iterator\SizeRangeFilterIterator;
+use Symfony\Component\Finder\Iterator\SortableIterator;
+
+/**
+ * Finder allows to build rules to find files and directories.
+ *
+ * It is a thin wrapper around several specialized iterator classes.
+ *
+ * All rules may be invoked several times.
+ *
+ * All methods return the current Finder object to allow chaining:
+ *
+ *     $finder = Finder::create()-&gt;files()-&gt;name(&#039;*.php&#039;)-&gt;in(__DIR__);
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @implements \IteratorAggregate&lt;string, SplFileInfo&gt;
+ */
+class Finder implements \IteratorAggregate, \Countable
+{
+    public const IGNORE_VCS_FILES = 1;
+    public const IGNORE_DOT_FILES = 2;
+    public const IGNORE_VCS_IGNORED_FILES = 4;
+
+    private int $mode = 0;
+    private array $names = [];
+    private array $notNames = [];
+    private array $exclude = [];
+    private array $filters = [];
+    private array $pruneFilters = [];
+    private array $depths = [];
+    private array $sizes = [];
+    private bool $followLinks = false;
+    private bool $reverseSorting = false;
+    private \Closure|int|false $sort = false;
+    private int $ignore = 0;
+    private array $dirs = [];
+    private array $dates = [];
+    private array $iterators = [];
+    private array $contains = [];
+    private array $notContains = [];
+    private array $paths = [];
+    private array $notPaths = [];
+    private bool $ignoreUnreadableDirs = false;
+
+    private static array $vcsPatterns = [&#039;.svn&#039;, &#039;_svn&#039;, &#039;CVS&#039;, &#039;_darcs&#039;, &#039;.arch-params&#039;, &#039;.monotone&#039;, &#039;.bzr&#039;, &#039;.git&#039;, &#039;.hg&#039;];
+
+    <span style="background-color: green">p</span>ublic function __construct()
+    {
+        $this-&gt;ignore = static::IGNORE_VCS_FILES | static::IGNORE_DOT_FILES;
+    }
+
+    /**
+     * Creates a new Finder.
+     */
+    <span style="background-color: green">p</span>ublic static function create(): static
+    {
+        return new static();
+    }
+
+    /**
+     * Restricts the matching to directories only.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function directories(): static
+    {
+        $this-&gt;mode = Iterator\FileTypeFilterIterator::ONLY_DIRECTORIES;
+
+        return $this;
+    }
+
+    /**
+     * Restricts the matching to files only.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function files(): static
+    {
+        $this-&gt;mode = Iterator\FileTypeFilterIterator::ONLY_FILES;
+
+        return $this;
+    }
+
+    /**
+     * Adds tests for the directory depth.
+     *
+     * Usage:
+     *
+     *     $finder-&gt;depth(&#039;&gt; 1&#039;) // the Finder will start matching at level 1.
+     *     $finder-&gt;depth(&#039;&lt; 3&#039;) // the Finder will descend at most 3 levels of directories below the starting point.
+     *     $finder-&gt;depth([&#039;&gt;= 1&#039;, &#039;&lt; 3&#039;])
+     *
+     * @param string|int|string[]|int[] $levels The depth level expression or an array of depth levels
+     *
+     * @return $this
+     *
+     * @see DepthRangeFilterIterator
+     * @see NumberComparator
+     */
+    <span style="background-color: red">p</span>ublic function depth(string|int|array $levels): static
+    {
+        <span style="background-color: red">f</span>oreach ((array) $levels as $level) {
+            $this-&gt;depths[] = new NumberComparator($level);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Adds tests for file dates (last modified).
+     *
+     * The date must be something that strtotime() is able to parse:
+     *
+     *     $finder-&gt;date(&#039;since yesterday&#039;);
+     *     $finder-&gt;date(&#039;until 2 days ago&#039;);
+     *     $finder-&gt;date(&#039;&gt; now - 2 hours&#039;);
+     *     $finder-&gt;date(&#039;&gt;= 2005-10-15&#039;);
+     *     $finder-&gt;date([&#039;&gt;= 2005-10-15&#039;, &#039;&lt;= 2006-05-27&#039;]);
+     *
+     * @param string|string[] $dates A date range string or an array of date ranges
+     *
+     * @return $this
+     *
+     * @see strtotime
+     * @see DateRangeFilterIterator
+     * @see DateComparator
+     */
+    <span style="background-color: red">p</span>ublic function date(string|array $dates): static
+    {
+        <span style="background-color: red">f</span>oreach ((array) $dates as $date) {
+            $this-&gt;dates[] = new DateComparator($date);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Adds rules that files must match.
+     *
+     * You can use patterns (delimited with / sign), globs or simple strings.
+     *
+     *     $finder-&gt;name(&#039;/\.php$/&#039;)
+     *     $finder-&gt;name(&#039;*.php&#039;) // same as above, without dot files
+     *     $finder-&gt;name(&#039;test.php&#039;)
+     *     $finder-&gt;name([&#039;test.py&#039;, &#039;test.php&#039;])
+     *
+     * @param string|string[] $patterns A pattern (a regexp, a glob, or a string) or an array of patterns
+     *
+     * @return $this
+     *
+     * @see FilenameFilterIterator
+     */
+    <span style="background-color: green">p</span>ublic function name(string|array $patterns): static
+    {
+        $this-&gt;names = array_merge($this-&gt;names, (array) $patterns);
+
+        return $this;
+    }
+
+    /**
+     * Adds rules that files must not match.
+     *
+     * @param string|string[] $patterns A pattern (a regexp, a glob, or a string) or an array of patterns
+     *
+     * @return $this
+     *
+     * @see FilenameFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function notName(string|array $patterns): static
+    {
+        $this-&gt;notNames = array_merge($this-&gt;notNames, (array) $patterns);
+
+        return $this;
+    }
+
+    /**
+     * Adds tests that file contents must match.
+     *
+     * Strings or PCRE patterns can be used:
+     *
+     *     $finder-&gt;contains(&#039;Lorem ipsum&#039;)
+     *     $finder-&gt;contains(&#039;/Lorem ipsum/i&#039;)
+     *     $finder-&gt;contains([&#039;dolor&#039;, &#039;/ipsum/i&#039;])
+     *
+     * @param string|string[] $patterns A pattern (string or regexp) or an array of patterns
+     *
+     * @return $this
+     *
+     * @see FilecontentFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function contains(string|array $patterns): static
+    {
+        $this-&gt;contains = array_merge($this-&gt;contains, (array) $patterns);
+
+        return $this;
+    }
+
+    /**
+     * Adds tests that file contents must not match.
+     *
+     * Strings or PCRE patterns can be used:
+     *
+     *     $finder-&gt;notContains(&#039;Lorem ipsum&#039;)
+     *     $finder-&gt;notContains(&#039;/Lorem ipsum/i&#039;)
+     *     $finder-&gt;notContains([&#039;lorem&#039;, &#039;/dolor/i&#039;])
+     *
+     * @param string|string[] $patterns A pattern (string or regexp) or an array of patterns
+     *
+     * @return $this
+     *
+     * @see FilecontentFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function notContains(string|array $patterns): static
+    {
+        $this-&gt;notContains = array_merge($this-&gt;notContains, (array) $patterns);
+
+        return $this;
+    }
+
+    /**
+     * Adds rules that filenames must match.
+     *
+     * You can use patterns (delimited with / sign) or simple strings.
+     *
+     *     $finder-&gt;path(&#039;some/special/dir&#039;)
+     *     $finder-&gt;path(&#039;/some\/special\/dir/&#039;) // same as above
+     *     $finder-&gt;path([&#039;some dir&#039;, &#039;another/dir&#039;])
+     *
+     * Use only / as dirname separator.
+     *
+     * @param string|string[] $patterns A pattern (a regexp or a string) or an array of patterns
+     *
+     * @return $this
+     *
+     * @see FilenameFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function path(string|array $patterns): static
+    {
+        $this-&gt;paths = array_merge($this-&gt;paths, (array) $patterns);
+
+        return $this;
+    }
+
+    /**
+     * Adds rules that filenames must not match.
+     *
+     * You can use patterns (delimited with / sign) or simple strings.
+     *
+     *     $finder-&gt;notPath(&#039;some/special/dir&#039;)
+     *     $finder-&gt;notPath(&#039;/some\/special\/dir/&#039;) // same as above
+     *     $finder-&gt;notPath([&#039;some/file.txt&#039;, &#039;another/file.log&#039;])
+     *
+     * Use only / as dirname separator.
+     *
+     * @param string|string[] $patterns A pattern (a regexp or a string) or an array of patterns
+     *
+     * @return $this
+     *
+     * @see FilenameFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function notPath(string|array $patterns): static
+    {
+        $this-&gt;notPaths = array_merge($this-&gt;notPaths, (array) $patterns);
+
+        return $this;
+    }
+
+    /**
+     * Adds tests for file sizes.
+     *
+     *     $finder-&gt;size(&#039;&gt; 10K&#039;);
+     *     $finder-&gt;size(&#039;&lt;= 1Ki&#039;);
+     *     $finder-&gt;size(4);
+     *     $finder-&gt;size([&#039;&gt; 10K&#039;, &#039;&lt; 20K&#039;])
+     *
+     * @param string|int|string[]|int[] $sizes A size range string or an integer or an array of size ranges
+     *
+     * @return $this
+     *
+     * @see SizeRangeFilterIterator
+     * @see NumberComparator
+     */
+    <span style="background-color: red">p</span>ublic function size(string|int|array $sizes): static
+    {
+        <span style="background-color: red">f</span>oreach ((array) $sizes as $size) {
+            $this-&gt;sizes[] = new NumberComparator($size);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Excludes directories.
+     *
+     * Directories passed as argument must be relative to the ones defined with the `in()` method. For example:
+     *
+     *     $finder-&gt;in(__DIR__)-&gt;exclude(&#039;ruby&#039;);
+     *
+     * @param string|array $dirs A directory path or an array of directories
+     *
+     * @return $this
+     *
+     * @see ExcludeDirectoryFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function exclude(string|array $dirs): static
+    {
+        $this-&gt;exclude = array_merge($this-&gt;exclude, (array) $dirs);
+
+        return $this;
+    }
+
+    /**
+     * Excludes &quot;hidden&quot; directories and files (starting with a dot).
+     *
+     * This option is enabled by default.
+     *
+     * @return $this
+     *
+     * @see ExcludeDirectoryFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function ignoreDotFiles(bool $ignoreDotFiles): static
+    {
+        <span style="background-color: red">i</span>f ($ignoreDotFiles) {
+            $this-&gt;ignore |= static::IGNORE_DOT_FILES;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;ignore &amp;= ~static::IGNORE_DOT_FILES;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Forces the finder to ignore version control directories.
+     *
+     * This option is enabled by default.
+     *
+     * @return $this
+     *
+     * @see ExcludeDirectoryFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function ignoreVCS(bool $ignoreVCS): static
+    {
+        <span style="background-color: red">i</span>f ($ignoreVCS) {
+            $this-&gt;ignore |= static::IGNORE_VCS_FILES;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;ignore &amp;= ~static::IGNORE_VCS_FILES;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Forces Finder to obey .gitignore and ignore files based on rules listed there.
+     *
+     * This option is disabled by default.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function ignoreVCSIgnored(bool $ignoreVCSIgnored): static
+    {
+        <span style="background-color: red">i</span>f ($ignoreVCSIgnored) {
+            $this-&gt;ignore |= static::IGNORE_VCS_IGNORED_FILES;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;ignore &amp;= ~static::IGNORE_VCS_IGNORED_FILES;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Adds VCS patterns.
+     *
+     * @see ignoreVCS()
+     *
+     * @param string|string[] $pattern VCS patterns to ignore
+     */
+    <span style="background-color: red">p</span>ublic static function addVCSPattern(string|array $pattern): void
+    {
+        <span style="background-color: red">f</span>oreach ((array) $pattern as $p) {
+            self::$vcsPatterns[] = $p;
+        <span style="background-color: red">}</span>
+
+        self::$vcsPatterns = array_unique(self::$vcsPatterns);
+    }
+
+    /**
+     * Sorts files and directories by an anonymous function.
+     *
+     * The anonymous function receives two \SplFileInfo instances to compare.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sort(\Closure $closure): static
+    {
+        $this-&gt;sort = $closure;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by extension.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByExtension(): static
+    {
+        $this-&gt;sort = SortableIterator::SORT_BY_EXTENSION;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by name.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByName(bool $useNaturalSort = false): static
+    {
+        $this-&gt;sort = $useNaturalSort ? SortableIterator::SORT_BY_NAME_NATURAL : <span style="background-color: red">S</span>ortableIterator::SORT_BY_NAME;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by name case insensitive.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByCaseInsensitiveName(bool $useNaturalSort = false): static
+    {
+        $this-&gt;sort = $useNaturalSort ? SortableIterator::SORT_BY_NAME_NATURAL_CASE_INSENSITIVE : <span style="background-color: red">S</span>ortableIterator::SORT_BY_NAME_CASE_INSENSITIVE;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by size.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortBySize(): static
+    {
+        $this-&gt;sort = SortableIterator::SORT_BY_SIZE;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by type (directories before files), then by name.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByType(): static
+    {
+        $this-&gt;sort = SortableIterator::SORT_BY_TYPE;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by the last accessed time.
+     *
+     * This is the time that the file was last accessed, read or written to.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByAccessedTime(): static
+    {
+        $this-&gt;sort = SortableIterator::SORT_BY_ACCESSED_TIME;
+
+        return $this;
+    }
+
+    /**
+     * Reverses the sorting.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function reverseSorting(): static
+    {
+        $this-&gt;reverseSorting = true;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by the last inode changed time.
+     *
+     * This is the time that the inode information was last modified (permissions, owner, group or other metadata).
+     *
+     * On Windows, since inode is not available, changed time is actually the file creation time.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByChangedTime(): static
+    {
+        $this-&gt;sort = SortableIterator::SORT_BY_CHANGED_TIME;
+
+        return $this;
+    }
+
+    /**
+     * Sorts files and directories by the last modified time.
+     *
+     * This is the last time the actual contents of the file were last modified.
+     *
+     * This can be slow as all the matching files and directories must be retrieved for comparison.
+     *
+     * @return $this
+     *
+     * @see SortableIterator
+     */
+    <span style="background-color: red">p</span>ublic function sortByModifiedTime(): static
+    {
+        $this-&gt;sort = SortableIterator::SORT_BY_MODIFIED_TIME;
+
+        return $this;
+    }
+
+    /**
+     * Filters the iterator with an anonymous function.
+     *
+     * The anonymous function receives a \SplFileInfo and must return false
+     * to remove files.
+     *
+     * @param \Closure(SplFileInfo): bool $closure
+     * @param bool                        $prune   Whether to skip traversing directories further
+     *
+     * @return $this
+     *
+     * @see CustomFilterIterator
+     */
+    <span style="background-color: red">p</span>ublic function filter(\Closure $closure, bool $prune = false): static
+    {
+        $this-&gt;filters[] = $closure;
+
+        <span style="background-color: red">i</span>f ($prune) {
+            $this-&gt;pruneFilters[] = $closure;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Forces the following of symlinks.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function followLinks(): static
+    {
+        $this-&gt;followLinks = true;
+
+        return $this;
+    }
+
+    /**
+     * Tells finder to ignore unreadable directories.
+     *
+     * By default, scanning unreadable directories content throws an AccessDeniedException.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function ignoreUnreadableDirs(bool $ignore = true): static
+    {
+        $this-&gt;ignoreUnreadableDirs = $ignore;
+
+        return $this;
+    }
+
+    /**
+     * Searches files and directories which match defined rules.
+     *
+     * @param string|string[] $dirs A directory path or an array of directories
+     *
+     * @return $this
+     *
+     * @throws DirectoryNotFoundException if one of the directories does not exist
+     */
+    <span style="background-color: green">p</span>ublic function in(string|array $dirs): static
+    {
+        $resolvedDirs = [];
+
+        <span style="background-color: green">f</span>oreach ((array) $dirs as $dir) {
+            <span style="background-color: green">i</span>f (is_dir($dir)) {
+                $resolvedDirs[] = [$this-&gt;normalizeDir($dir)];
+            } <span style="background-color: red">e</span>lseif ($glob = glob($dir, (\defined(&#039;GLOB_BRACE&#039;) ? \GLOB_BRACE : <span style="background-color: red">0</span>) | \GLOB_ONLYDIR | \GLOB_NOSORT)) {
+                sort($glob);
+                $resolvedDirs[] = array_map($this-&gt;normalizeDir(...), $glob);
+            } <span style="background-color: red">e</span>lse {
+                throw new DirectoryNotFoundException(\sprintf(&#039;The &quot;%s&quot; directory does not exist.&#039;, $dir));
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        $this-&gt;dirs = array_merge($this-&gt;dirs, ...$resolvedDirs);
+
+        return $this;
+    }
+
+    /**
+     * Returns an Iterator for the current Finder configuration.
+     *
+     * This method implements the IteratorAggregate interface.
+     *
+     * @return \Iterator&lt;string, SplFileInfo&gt;
+     *
+     * @throws \LogicException if the in() method has not been called
+     */
+    <span style="background-color: green">p</span>ublic function getIterator(): \Iterator
+    {
+        <span style="background-color: red">i</span>f (0 === \count($this-&gt;dirs) &amp;&amp; <span style="background-color: red">0</span> === \count($this-&gt;iterators)) {
+            throw new \LogicException(&#039;You must call one of in() or append() methods before iterating over a Finder.&#039;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (1 === \count($this-&gt;dirs) &amp;&amp; <span style="background-color: green">0</span> === \count($this-&gt;iterators)) {
+            $iterator = $this-&gt;searchInDirectory($this-&gt;dirs[0]);
+
+            <span style="background-color: red">i</span>f ($this-&gt;sort || <span style="background-color: green">$</span>this-&gt;reverseSorting) {
+                $iterator = (new SortableIterator($iterator, $this-&gt;sort, $this-&gt;reverseSorting))-&gt;getIterator();
+            <span style="background-color: green">}</span>
+
+            return $iterator;
+        <span style="background-color: red">}</span>
+
+        $iterator = new \AppendIterator();
+        <span style="background-color: red">f</span>oreach ($this-&gt;dirs as $dir) {
+            $iterator-&gt;append(new \IteratorIterator(new LazyIterator(fn () =&gt; <span style="background-color: red">$</span>this-&gt;searchInDirectory($dir))));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;iterators as $it) {
+            $iterator-&gt;append($it);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;sort || <span style="background-color: red">$</span>this-&gt;reverseSorting) {
+            $iterator = (new SortableIterator($iterator, $this-&gt;sort, $this-&gt;reverseSorting))-&gt;getIterator();
+        <span style="background-color: red">}</span>
+
+        return $iterator;
+    }
+
+    /**
+     * Appends an existing set of files/directories to the finder.
+     *
+     * The set can be another Finder, an Iterator, an IteratorAggregate, or even a plain array.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function append(iterable $iterator): static
+    {
+        <span style="background-color: red">i</span>f ($iterator instanceof \IteratorAggregate) {
+            $this-&gt;iterators[] = $iterator-&gt;getIterator();
+        } <span style="background-color: red">e</span>lseif ($iterator instanceof \Iterator) {
+            $this-&gt;iterators[] = $iterator;
+        } <span style="background-color: red">e</span>lse {
+            $it = new \ArrayIterator();
+            <span style="background-color: red">f</span>oreach ($iterator as $file) {
+                $file = $file instanceof \SplFileInfo ? $file : <span style="background-color: red">n</span>ew \SplFileInfo($file);
+                $it[$file-&gt;getPathname()] = $file;
+            <span style="background-color: red">}</span>
+            $this-&gt;iterators[] = $it;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Check if any results were found.
+     */
+    <span style="background-color: red">p</span>ublic function hasResults(): bool
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;getIterator() as $_) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Counts all the results collected by the iterators.
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return iterator_count($this-&gt;getIterator());
+    }
+
+    <span style="background-color: green">p</span>rivate function searchInDirectory(string $dir): \Iterator
+    {
+        $exclude = $this-&gt;exclude;
+        $notPaths = $this-&gt;notPaths;
+
+        <span style="background-color: red">i</span>f ($this-&gt;pruneFilters) {
+            $exclude = array_merge($exclude, $this-&gt;pruneFilters);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (static::IGNORE_VCS_FILES === (static::IGNORE_VCS_FILES &amp; $this-&gt;ignore)) {
+            $exclude = array_merge($exclude, self::$vcsPatterns);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (static::IGNORE_DOT_FILES === (static::IGNORE_DOT_FILES &amp; $this-&gt;ignore)) {
+            $notPaths[] = &#039;#(^|/)\..+(/|$)#&#039;;
+        <span style="background-color: green">}</span>
+
+        $minDepth = 0;
+        $maxDepth = \PHP_INT_MAX;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;depths as $comparator) {
+            switch ($comparator-&gt;getOperator()) {
+                <span style="background-color: red">c</span>ase &#039;&gt;&#039;:
+                    $minDepth = $comparator-&gt;getTarget() + 1;
+                    break;
+                <span style="background-color: red">c</span>ase &#039;&gt;=&#039;:
+                    $minDepth = $comparator-&gt;getTarget();
+                    break;
+                <span style="background-color: red">c</span>ase &#039;&lt;&#039;:
+                    $maxDepth = $comparator-&gt;getTarget() - 1;
+                    break;
+                <span style="background-color: red">c</span>ase &#039;&lt;=&#039;:
+                    $maxDepth = $comparator-&gt;getTarget();
+                    break;
+                <span style="background-color: red">d</span>efault:
+                    $minDepth = $maxDepth = $comparator-&gt;getTarget();
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        $flags = \RecursiveDirectoryIterator::SKIP_DOTS;
+
+        <span style="background-color: red">i</span>f ($this-&gt;followLinks) {
+            $flags |= \RecursiveDirectoryIterator::FOLLOW_SYMLINKS;
+        <span style="background-color: green">}</span>
+
+        $iterator = new Iterator\RecursiveDirectoryIterator($dir, $flags, $this-&gt;ignoreUnreadableDirs);
+
+        <span style="background-color: green">i</span>f ($exclude) {
+            $iterator = new ExcludeDirectoryFilterIterator($iterator, $exclude);
+        <span style="background-color: green">}</span>
+
+        $iterator = new \RecursiveIteratorIterator($iterator, \RecursiveIteratorIterator::SELF_FIRST);
+
+        <span style="background-color: red">i</span>f ($minDepth &gt; 0 || <span style="background-color: green">$</span>maxDepth &lt; \PHP_INT_MAX) {
+            $iterator = new DepthRangeFilterIterator($iterator, $minDepth, $maxDepth);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;mode) {
+            $iterator = new Iterator\FileTypeFilterIterator($iterator, $this-&gt;mode);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;names || <span style="background-color: red">$</span>this-&gt;notNames) {
+            $iterator = new FilenameFilterIterator($iterator, $this-&gt;names, $this-&gt;notNames);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;contains || <span style="background-color: green">$</span>this-&gt;notContains) {
+            $iterator = new FilecontentFilterIterator($iterator, $this-&gt;contains, $this-&gt;notContains);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;sizes) {
+            $iterator = new SizeRangeFilterIterator($iterator, $this-&gt;sizes);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;dates) {
+            $iterator = new DateRangeFilterIterator($iterator, $this-&gt;dates);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;filters) {
+            $iterator = new CustomFilterIterator($iterator, $this-&gt;filters);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;paths || <span style="background-color: green">$</span>notPaths) {
+            $iterator = new Iterator\PathFilterIterator($iterator, $this-&gt;paths, $notPaths);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (static::IGNORE_VCS_IGNORED_FILES === (static::IGNORE_VCS_IGNORED_FILES &amp; $this-&gt;ignore)) {
+            $iterator = new Iterator\VcsIgnoredFilterIterator($iterator, $dir);
+        <span style="background-color: green">}</span>
+
+        return $iterator;
+    }
+
+    /**
+     * Normalizes given directory names by removing trailing slashes.
+     *
+     * Excluding: (s)ftp:// or ssh2.(s)ftp:// wrapper
+     */
+    <span style="background-color: green">p</span>rivate function normalizeDir(string $dir): string
+    {
+        <span style="background-color: red">i</span>f (&#039;/&#039; === $dir) {
+            return $dir;
+        <span style="background-color: green">}</span>
+
+        $dir = rtrim($dir, &#039;/&#039;.\DIRECTORY_SEPARATOR);
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;#^(ssh2\.)?s?ftp://#&#039;, $dir)) {
+            $dir .= &#039;/&#039;;
+        <span style="background-color: green">}</span>
+
+        return $dir;
+    }
+}
+</pre>

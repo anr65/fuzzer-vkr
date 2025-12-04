@@ -1,0 +1,84 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use Carbon\CarbonInterval;
+use DateInterval;
+use DateTimeInterface;
+
+trait InteractsWithTime
+{
+    /**
+     * Get the number of seconds until the given DateTime.
+     *
+     * @param  \DateTimeInterface|\DateInterval|int  $delay
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function secondsUntil($delay)
+    {
+        $delay = $this-&gt;parseDateInterval($delay);
+
+        return $delay instanceof DateTimeInterface
+            ? max(0, $delay-&gt;getTimestamp() - $this-&gt;currentTime())
+            : <span style="background-color: red">(</span>int) $delay;
+    }
+
+    /**
+     * Get the &quot;available at&quot; UNIX timestamp.
+     *
+     * @param  \DateTimeInterface|\DateInterval|int  $delay
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function availableAt($delay = 0)
+    {
+        $delay = $this-&gt;parseDateInterval($delay);
+
+        return $delay instanceof DateTimeInterface
+            ? $delay-&gt;getTimestamp()
+            : <span style="background-color: red">C</span>arbon::now()-&gt;addSeconds($delay)-&gt;getTimestamp();
+    }
+
+    /**
+     * If the given value is an interval, convert it to a DateTime instance.
+     *
+     * @param  \DateTimeInterface|\DateInterval|int  $delay
+     * @return \DateTimeInterface|int
+     */
+    <span style="background-color: red">p</span>rotected function parseDateInterval($delay)
+    {
+        <span style="background-color: red">i</span>f ($delay instanceof DateInterval) {
+            $delay = Carbon::now()-&gt;add($delay);
+        <span style="background-color: red">}</span>
+
+        return $delay;
+    }
+
+    /**
+     * Get the current system time as a UNIX timestamp.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function currentTime()
+    {
+        return Carbon::now()-&gt;getTimestamp();
+    }
+
+    /**
+     * Given a start time, format the total run time for human readability.
+     *
+     * @param  float  $startTime
+     * @param  float  $endTime
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function runTimeForHumans($startTime, $endTime = null)
+    {
+        $endTime ??= <span style="background-color: red">m</span>icrotime(true);
+
+        $runTime = ($endTime - $startTime) * 1000;
+
+        return $runTime &gt; 1000
+            ? CarbonInterval::milliseconds($runTime)-&gt;cascade()-&gt;forHumans(short: true)
+            : <span style="background-color: red">n</span>umber_format($runTime, 2).&#039;ms&#039;;
+    }
+}
+</pre>

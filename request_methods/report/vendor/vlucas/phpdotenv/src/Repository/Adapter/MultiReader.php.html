@@ -1,0 +1,49 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository\Adapter;
+
+use PhpOption\None;
+
+final class MultiReader implements ReaderInterface
+{
+    /**
+     * The set of readers to use.
+     *
+     * @var \Dotenv\Repository\Adapter\ReaderInterface[]
+     */
+    private $readers;
+
+    /**
+     * Create a new multi-reader instance.
+     *
+     * @param \Dotenv\Repository\Adapter\ReaderInterface[] $readers
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $readers)
+    {
+        $this-&gt;readers = $readers;
+    }
+
+    /**
+     * Read an environment variable, if it exists.
+     *
+     * @param non-empty-string $name
+     *
+     * @return \PhpOption\Option&lt;string&gt;
+     */
+    <span style="background-color: green">p</span>ublic function read(string $name)
+    {
+        <span style="background-color: green">f</span>oreach ($this-&gt;readers as $reader) {
+            $result = $reader-&gt;read($name);
+            <span style="background-color: red">i</span>f ($result-&gt;isDefined()) {
+                return $result;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return None::create();
+    }
+}
+</pre>

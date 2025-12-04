@@ -1,0 +1,111 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Bootstrap;
+
+use Dotenv\Dotenv;
+use Dotenv\Exception\InvalidFileException;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Env;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
+
+class LoadEnvironmentVariables
+{
+    /**
+     * Bootstrap the given application.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function bootstrap(Application $app)
+    {
+        <span style="background-color: red">i</span>f ($app-&gt;configurationIsCached()) {
+            return;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;checkForSpecificEnvironmentFile($app);
+
+        try {
+            $this-&gt;createDotenv($app)-&gt;safeLoad();
+        } <span style="background-color: red">c</span>atch (InvalidFileException $e) {
+            $this-&gt;writeErrorAndDie($e);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Detect if a custom environment file matching the APP_ENV exists.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function checkForSpecificEnvironmentFile($app)
+    {
+        <span style="background-color: red">i</span>f ($app-&gt;runningInConsole() &amp;&amp;
+            <span style="background-color: green">(</span>$input = new ArgvInput)-&gt;hasParameterOption(&#039;--env&#039;) &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;setEnvironmentFilePath($app, $app-&gt;environmentFile().&#039;.&#039;.$input-&gt;getParameterOption(&#039;--env&#039;))) {
+            return;
+        <span style="background-color: green">}</span>
+
+        $environment = Env::get(&#039;APP_ENV&#039;);
+
+        <span style="background-color: green">i</span>f (! $environment) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;setEnvironmentFilePath(
+            $app, $app-&gt;environmentFile().&#039;.&#039;.$environment
+        );
+    }
+
+    /**
+     * Load a custom environment file.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @param  string  $file
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function setEnvironmentFilePath($app, $file)
+    {
+        <span style="background-color: red">i</span>f (is_file($app-&gt;environmentPath().&#039;/&#039;.$file)) {
+            $app-&gt;loadEnvironmentFrom($file);
+
+            return true;
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Create a Dotenv instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: green">p</span>rotected function createDotenv($app)
+    {
+        return Dotenv::create(
+            Env::getRepository(),
+            $app-&gt;environmentPath(),
+            $app-&gt;environmentFile()
+        );
+    }
+
+    /**
+     * Write the error information to the screen and exit.
+     *
+     * @param  \Dotenv\Exception\InvalidFileException  $e
+     * @return never
+     */
+    <span style="background-color: red">p</span>rotected function writeErrorAndDie(InvalidFileException $e)
+    {
+        $output = (new ConsoleOutput)-&gt;getErrorOutput();
+
+        $output-&gt;writeln(&#039;The environment file is invalid!&#039;);
+        $output-&gt;writeln($e-&gt;getMessage());
+
+        http_response_code(500);
+
+        exit(1);
+    }
+}
+</pre>

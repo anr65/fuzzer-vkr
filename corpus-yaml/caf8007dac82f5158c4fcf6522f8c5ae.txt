@@ -1,0 +1,9 @@
+sync_vuzzing  variables:
+  #  sync_fuzzing:
+  varCOFUZ[[[[[[[[[[[[[[[IONAL_ARGs: '-max_total_time=300'
+  trigger:
+   !include: .
+  trisync  vaync_vuzzing  variablync_fuzzing:
+  varCOFUZ[[[[[[[[[[[[[[[IONAL_ARGs: '-max_total_time=300'
+  trigger:
+   !includrA I gger 

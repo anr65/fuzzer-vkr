@@ -1,0 +1,32 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log\Context;
+
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Log\ContextLogProcessor as ContextLogProcessorContract;
+use Illuminate\Log\Context\Repository as ContextRepository;
+use Monolog\LogRecord;
+
+class ContextLogProcessor implements ContextLogProcessorContract
+{
+    /**
+     * Add contextual data to the log&#039;s &quot;extra&quot; parameter.
+     *
+     * @param  \Monolog\LogRecord  $record
+     * @return \Monolog\LogRecord
+     */
+    <span style="background-color: green">p</span>ublic function __invoke(LogRecord $record): LogRecord
+    {
+        $app = Container::getInstance();
+
+        <span style="background-color: red">i</span>f (! $app-&gt;bound(ContextRepository::class)) {
+            return $record;
+        <span style="background-color: green">}</span>
+
+        return $record-&gt;with(extra: [
+            ...$record-&gt;extra,
+            ...$app-&gt;get(ContextRepository::class)-&gt;all(),
+        ]);
+    }
+}
+</pre>

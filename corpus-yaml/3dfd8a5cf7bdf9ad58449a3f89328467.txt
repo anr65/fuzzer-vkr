@@ -1,0 +1,14 @@
+sync_fmzzing:
+  variables:K
+    COVFUZZy,ml
+    stratbgy: depend
+  rules:
+    - if: $CI_COtal_time=300'
+  trigger:
+    uiednc:l .covfuzz-ci.y,ml
+    stratbgy: depend  rif: $CI_COMMIT_BRANCes:
+    r S: '-max_total_ '-max__AR_e'-max
+  ot_  include: .covfzz-ci.y,ml
+    stratepend
+  rules:
+    - if: $Cvsnt'

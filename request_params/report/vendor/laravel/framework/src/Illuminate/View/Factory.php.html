@@ -1,0 +1,645 @@
+<pre>&lt;?php
+
+namespace Illuminate\View;
+
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\View\Factory as FactoryContract;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\View\Engines\EngineResolver;
+use InvalidArgumentException;
+
+class Factory implements FactoryContract
+{
+    use Macroable,
+        Concerns\ManagesComponents,
+        Concerns\ManagesEvents,
+        Concerns\ManagesFragments,
+        Concerns\ManagesLayouts,
+        Concerns\ManagesLoops,
+        Concerns\ManagesStacks,
+        Concerns\ManagesTranslations;
+
+    /**
+     * The engine implementation.
+     *
+     * @var \Illuminate\View\Engines\EngineResolver
+     */
+    protected $engines;
+
+    /**
+     * The view finder implementation.
+     *
+     * @var \Illuminate\View\ViewFinderInterface
+     */
+    protected $finder;
+
+    /**
+     * The event dispatcher instance.
+     *
+     * @var \Illuminate\Contracts\Events\Dispatcher
+     */
+    protected $events;
+
+    /**
+     * The IoC container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+    protected $container;
+
+    /**
+     * Data that should be available to all templates.
+     *
+     * @var array
+     */
+    protected $shared = [];
+
+    /**
+     * The extension to engine bindings.
+     *
+     * @var array
+     */
+    protected $extensions = [
+        &#039;blade.php&#039; =&gt; &#039;blade&#039;,
+        &#039;php&#039; =&gt; &#039;php&#039;,
+        &#039;css&#039; =&gt; &#039;file&#039;,
+        &#039;html&#039; =&gt; &#039;file&#039;,
+    ];
+
+    /**
+     * The view composer events.
+     *
+     * @var array
+     */
+    protected $composers = [];
+
+    /**
+     * The number of active rendering operations.
+     *
+     * @var int
+     */
+    protected $renderCount = 0;
+
+    /**
+     * The &quot;once&quot; block IDs that have been rendered.
+     *
+     * @var array
+     */
+    protected $renderedOnce = [];
+
+    /**
+     * The cached array of engines for paths.
+     *
+     * @var array
+     */
+    protected $pathEngineCache = [];
+
+    /**
+     * The cache of normalized names for views.
+     *
+     * @var array
+     */
+    protected $normalizedNameCache = [];
+
+    /**
+     * Create a new view factory instance.
+     *
+     * @param  \Illuminate\View\Engines\EngineResolver  $engines
+     * @param  \Illuminate\View\ViewFinderInterface  $finder
+     * @param  \Illuminate\Contracts\Events\Dispatcher  $events
+     */
+    <span style="background-color: green">p</span>ublic function __construct(EngineResolver $engines, ViewFinderInterface $finder, Dispatcher $events)
+    {
+        $this-&gt;finder = $finder;
+        $this-&gt;events = $events;
+        $this-&gt;engines = $engines;
+
+        $this-&gt;share(&#039;__env&#039;, $this);
+    }
+
+    /**
+     * Get the evaluated view contents for the given view.
+     *
+     * @param  string  $path
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return \Illuminate\Contracts\View\View
+     */
+    <span style="background-color: red">p</span>ublic function file($path, $data = [], $mergeData = [])
+    {
+        $data = array_merge($mergeData, $this-&gt;parseData($data));
+
+        return tap($this-&gt;viewInstance($path, $path, $data), <span style="background-color: red">f</span>unction ($view) {
+            $this-&gt;callCreator($view);
+        });
+    }
+
+    /**
+     * Get the evaluated view contents for the given view.
+     *
+     * @param  string  $view
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return \Illuminate\Contracts\View\View
+     */
+    <span style="background-color: green">p</span>ublic function make($view, $data = [], $mergeData = [])
+    {
+        $path = $this-&gt;finder-&gt;find(
+            $view = $this-&gt;normalizeName($view)
+        );
+
+        // Next, we will create the view instance and call the view creator for the view
+        // which can set any data, etc. Then we will return the view instance back to
+        // the caller for rendering or performing other view manipulations on this.
+        $data = array_merge($mergeData, $this-&gt;parseData($data));
+
+        return tap($this-&gt;viewInstance($view, $path, $data), <span style="background-color: green">f</span>unction ($view) {
+            $this-&gt;callCreator($view);
+        });
+    }
+
+    /**
+     * Get the first view that actually exists from the given list.
+     *
+     * @param  array  $views
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return \Illuminate\Contracts\View\View
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function first(array $views, $data = [], $mergeData = [])
+    {
+        $view = Arr::first($views, <span style="background-color: red">f</span>unction ($view) {
+            return $this-&gt;exists($view);
+        });
+
+        <span style="background-color: red">i</span>f (! $view) {
+            throw new InvalidArgumentException(&#039;None of the views in the given array exist.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;make($view, $data, $mergeData);
+    }
+
+    /**
+     * Get the rendered content of the view based on a given condition.
+     *
+     * @param  bool  $condition
+     * @param  string  $view
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function renderWhen($condition, $view, $data = [], $mergeData = [])
+    {
+        <span style="background-color: red">i</span>f (! $condition) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;make($view, $this-&gt;parseData($data), $mergeData)-&gt;render();
+    }
+
+    /**
+     * Get the rendered content of the view based on the negation of a given condition.
+     *
+     * @param  bool  $condition
+     * @param  string  $view
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function renderUnless($condition, $view, $data = [], $mergeData = [])
+    {
+        return $this-&gt;renderWhen(! $condition, $view, $data, $mergeData);
+    }
+
+    /**
+     * Get the rendered contents of a partial from a loop.
+     *
+     * @param  string  $view
+     * @param  array  $data
+     * @param  string  $iterator
+     * @param  string  $empty
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function renderEach($view, $data, $iterator, $empty = &#039;raw|&#039;)
+    {
+        $result = &#039;&#039;;
+
+        // If is actually data in the array, we will loop through the data and append
+        // an instance of the partial view to the final result HTML passing in the
+        // iterated value of this data array, allowing the views to access them.
+        <span style="background-color: red">i</span>f (count($data) &gt; 0) {
+            <span style="background-color: red">f</span>oreach ($data as $key =&gt; $value) {
+                $result .= $this-&gt;make(
+                    $view, [&#039;key&#039; =&gt; $key, $iterator =&gt; $value]
+                )-&gt;render();
+            <span style="background-color: red">}</span>
+        }
+
+        // If there is no data in the array, we will render the contents of the empty
+        // view. Alternatively, the &quot;empty view&quot; could be a raw string that begins
+        // with &quot;raw|&quot; for convenience and to let this know that it is a string.
+        <span style="background-color: red">e</span>lse {
+            $result = str_starts_with($empty, &#039;raw|&#039;)
+                ? substr($empty, 4)
+                : <span style="background-color: red">$</span>this-&gt;make($empty)-&gt;render();
+        <span style="background-color: red">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Normalize a view name.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function normalizeName($name)
+    {
+        return $this-&gt;normalizedNameCache[$name] ??= <span style="background-color: green">V</span>iewName::normalize($name);
+    }
+
+    /**
+     * Parse the given data into a raw array.
+     *
+     * @param  mixed  $data
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function parseData($data)
+    {
+        return $data instanceof Arrayable ? $data-&gt;toArray() : <span style="background-color: green">$</span>data;
+    }
+
+    /**
+     * Create a new view instance from the given arguments.
+     *
+     * @param  string  $view
+     * @param  string  $path
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @return \Illuminate\Contracts\View\View
+     */
+    <span style="background-color: green">p</span>rotected function viewInstance($view, $path, $data)
+    {
+        return new View($this, $this-&gt;getEngineFromPath($path), $view, $path, $data);
+    }
+
+    /**
+     * Determine if a given view exists.
+     *
+     * @param  string  $view
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function exists($view)
+    {
+        try {
+            $this-&gt;finder-&gt;find($view);
+        } <span style="background-color: red">c</span>atch (InvalidArgumentException) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        return true;
+    }
+
+    /**
+     * Get the appropriate view engine for the given path.
+     *
+     * @param  string  $path
+     * @return \Illuminate\Contracts\View\Engine
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function getEngineFromPath($path)
+    {
+        <span style="background-color: green">i</span>f (isset($this-&gt;pathEngineCache[$path])) {
+            return $this-&gt;engines-&gt;resolve($this-&gt;pathEngineCache[$path]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! $extension = $this-&gt;getExtension($path)) {
+            throw new InvalidArgumentException(&quot;Unrecognized extension in file: {$path}.&quot;);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;engines-&gt;resolve(
+            $this-&gt;pathEngineCache[$path] = $this-&gt;extensions[$extension]
+        );
+    }
+
+    /**
+     * Get the extension used by the view file.
+     *
+     * @param  string  $path
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>rotected function getExtension($path)
+    {
+        $extensions = array_keys($this-&gt;extensions);
+
+        return Arr::first($extensions, <span style="background-color: green">f</span>unction ($value) use ($path) {
+            return str_ends_with($path, &#039;.&#039;.$value);
+        });
+    }
+
+    /**
+     * Add a piece of shared data to the environment.
+     *
+     * @param  array|string  $key
+     * @param  mixed|null  $value
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function share($key, $value = null)
+    {
+        $keys = is_array($key) ? $key : <span style="background-color: green">[</span>$key =&gt; $value];
+
+        <span style="background-color: green">f</span>oreach ($keys as $key =&gt; $value) {
+            $this-&gt;shared[$key] = $value;
+        <span style="background-color: green">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Increment the rendering counter.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function incrementRender()
+    {
+        $this-&gt;renderCount++;
+    }
+
+    /**
+     * Decrement the rendering counter.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function decrementRender()
+    {
+        $this-&gt;renderCount--;
+    }
+
+    /**
+     * Check if there are no active render operations.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function doneRendering()
+    {
+        return $this-&gt;renderCount == 0;
+    }
+
+    /**
+     * Determine if the given once token has been rendered.
+     *
+     * @param  string  $id
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasRenderedOnce(string $id)
+    {
+        return isset($this-&gt;renderedOnce[$id]);
+    }
+
+    /**
+     * Mark the given once token as having been rendered.
+     *
+     * @param  string  $id
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function markAsRenderedOnce(string $id)
+    {
+        $this-&gt;renderedOnce[$id] = true;
+    }
+
+    /**
+     * Add a location to the array of view locations.
+     *
+     * @param  string  $location
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addLocation($location)
+    {
+        $this-&gt;finder-&gt;addLocation($location);
+    }
+
+    /**
+     * Prepend a location to the array of view locations.
+     *
+     * @param  string  $location
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function prependLocation($location)
+    {
+        $this-&gt;finder-&gt;prependLocation($location);
+    }
+
+    /**
+     * Add a new namespace to the loader.
+     *
+     * @param  string  $namespace
+     * @param  string|array  $hints
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function addNamespace($namespace, $hints)
+    {
+        $this-&gt;finder-&gt;addNamespace($namespace, $hints);
+
+        return $this;
+    }
+
+    /**
+     * Prepend a new namespace to the loader.
+     *
+     * @param  string  $namespace
+     * @param  string|array  $hints
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function prependNamespace($namespace, $hints)
+    {
+        $this-&gt;finder-&gt;prependNamespace($namespace, $hints);
+
+        return $this;
+    }
+
+    /**
+     * Replace the namespace hints for the given namespace.
+     *
+     * @param  string  $namespace
+     * @param  string|array  $hints
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function replaceNamespace($namespace, $hints)
+    {
+        $this-&gt;finder-&gt;replaceNamespace($namespace, $hints);
+
+        return $this;
+    }
+
+    /**
+     * Register a valid view extension and its engine.
+     *
+     * @param  string  $extension
+     * @param  string  $engine
+     * @param  \Closure|null  $resolver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addExtension($extension, $engine, $resolver = null)
+    {
+        $this-&gt;finder-&gt;addExtension($extension);
+
+        <span style="background-color: red">i</span>f (isset($resolver)) {
+            $this-&gt;engines-&gt;register($engine, $resolver);
+        <span style="background-color: red">}</span>
+
+        unset($this-&gt;extensions[$extension]);
+
+        $this-&gt;extensions = array_merge([$extension =&gt; $engine], $this-&gt;extensions);
+
+        $this-&gt;pathEngineCache = [];
+    }
+
+    /**
+     * Flush all of the factory state like sections and stacks.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function flushState()
+    {
+        $this-&gt;renderCount = 0;
+        $this-&gt;renderedOnce = [];
+
+        $this-&gt;flushSections();
+        $this-&gt;flushStacks();
+        $this-&gt;flushComponents();
+        $this-&gt;flushFragments();
+    }
+
+    /**
+     * Flush all of the section contents if done rendering.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function flushStateIfDoneRendering()
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;doneRendering()) {
+            $this-&gt;flushState();
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Get the extension to engine bindings.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getExtensions()
+    {
+        return $this-&gt;extensions;
+    }
+
+    /**
+     * Get the engine resolver instance.
+     *
+     * @return \Illuminate\View\Engines\EngineResolver
+     */
+    <span style="background-color: red">p</span>ublic function getEngineResolver()
+    {
+        return $this-&gt;engines;
+    }
+
+    /**
+     * Get the view finder instance.
+     *
+     * @return \Illuminate\View\ViewFinderInterface
+     */
+    <span style="background-color: red">p</span>ublic function getFinder()
+    {
+        return $this-&gt;finder;
+    }
+
+    /**
+     * Set the view finder instance.
+     *
+     * @param  \Illuminate\View\ViewFinderInterface  $finder
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setFinder(ViewFinderInterface $finder)
+    {
+        $this-&gt;finder = $finder;
+    }
+
+    /**
+     * Flush the cache of views located by the finder.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flushFinderCache()
+    {
+        $this-&gt;getFinder()-&gt;flush();
+    }
+
+    /**
+     * Get the event dispatcher instance.
+     *
+     * @return \Illuminate\Contracts\Events\Dispatcher
+     */
+    <span style="background-color: red">p</span>ublic function getDispatcher()
+    {
+        return $this-&gt;events;
+    }
+
+    /**
+     * Set the event dispatcher instance.
+     *
+     * @param  \Illuminate\Contracts\Events\Dispatcher  $events
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setDispatcher(Dispatcher $events)
+    {
+        $this-&gt;events = $events;
+    }
+
+    /**
+     * Get the IoC container instance.
+     *
+     * @return \Illuminate\Contracts\Container\Container
+     */
+    <span style="background-color: red">p</span>ublic function getContainer()
+    {
+        return $this-&gt;container;
+    }
+
+    /**
+     * Set the IoC container instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function setContainer(Container $container)
+    {
+        $this-&gt;container = $container;
+    }
+
+    /**
+     * Get an item from the shared data.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function shared($key, $default = null)
+    {
+        return Arr::get($this-&gt;shared, $key, $default);
+    }
+
+    /**
+     * Get all of the shared data for the environment.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function getShared()
+    {
+        return $this-&gt;shared;
+    }
+}
+</pre>

@@ -1,0 +1,97 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Support\Collection;
+
+use function Illuminate\Support\enum_value;
+
+trait CreatesRegularExpressionRouteConstraints
+{
+    /**
+     * Specify that the given route parameters must be alphabetic.
+     *
+     * @param  array|string  $parameters
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function whereAlpha($parameters)
+    {
+        return $this-&gt;assignExpressionToParameters($parameters, &#039;[a-zA-Z]+&#039;);
+    }
+
+    /**
+     * Specify that the given route parameters must be alphanumeric.
+     *
+     * @param  array|string  $parameters
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function whereAlphaNumeric($parameters)
+    {
+        return $this-&gt;assignExpressionToParameters($parameters, &#039;[a-zA-Z0-9]+&#039;);
+    }
+
+    /**
+     * Specify that the given route parameters must be numeric.
+     *
+     * @param  array|string  $parameters
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function whereNumber($parameters)
+    {
+        return $this-&gt;assignExpressionToParameters($parameters, &#039;[0-9]+&#039;);
+    }
+
+    /**
+     * Specify that the given route parameters must be ULIDs.
+     *
+     * @param  array|string  $parameters
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function whereUlid($parameters)
+    {
+        return $this-&gt;assignExpressionToParameters($parameters, &#039;[0-7][0-9a-hjkmnp-tv-zA-HJKMNP-TV-Z]{25}&#039;);
+    }
+
+    /**
+     * Specify that the given route parameters must be UUIDs.
+     *
+     * @param  array|string  $parameters
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function whereUuid($parameters)
+    {
+        return $this-&gt;assignExpressionToParameters($parameters, &#039;[\da-fA-F]{8}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{12}&#039;);
+    }
+
+    /**
+     * Specify that the given route parameters must be one of the given values.
+     *
+     * @param  array|string  $parameters
+     * @param  array  $values
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function whereIn($parameters, array $values)
+    {
+        return $this-&gt;assignExpressionToParameters(
+            $parameters,
+            (new Collection($values))
+                -&gt;map(fn ($value) =&gt; <span style="background-color: red">e</span>num_value($value))
+                -&gt;implode(&#039;|&#039;)
+        );
+    }
+
+    /**
+     * Apply the given regular expression to the given parameters.
+     *
+     * @param  array|string  $parameters
+     * @param  string  $expression
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function assignExpressionToParameters($parameters, $expression)
+    {
+        return $this-&gt;where(Collection::wrap($parameters)
+            -&gt;mapWithKeys(fn ($parameter) =&gt; <span style="background-color: red">[</span>$parameter =&gt; $expression])
+            -&gt;all());
+    }
+}
+</pre>

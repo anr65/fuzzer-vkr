@@ -1,0 +1,74 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Traits;
+
+use Closure;
+use Illuminate\Support\HigherOrderWhenProxy;
+
+trait Conditionable
+{
+    /**
+     * Apply the callback if the given &quot;value&quot; is (or resolves to) truthy.
+     *
+     * @template TWhenParameter
+     * @template TWhenReturnType
+     *
+     * @param  (\Closure($this): TWhenParameter)|TWhenParameter|null  $value
+     * @param  (callable($this, TWhenParameter): TWhenReturnType)|null  $callback
+     * @param  (callable($this, TWhenParameter): TWhenReturnType)|null  $default
+     * @return $this|TWhenReturnType
+     */
+    <span style="background-color: green">p</span>ublic function when($value = null, ?callable $callback = null, ?callable $default = null)
+    {
+        $value = $value instanceof Closure ? $value($this) : <span style="background-color: green">$</span>value;
+
+        <span style="background-color: red">i</span>f (func_num_args() === 0) {
+            return new HigherOrderWhenProxy($this);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (func_num_args() === 1) {
+            return (new HigherOrderWhenProxy($this))-&gt;condition($value);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($value) {
+            return $callback($this, $value) ?? <span style="background-color: red">$</span>this;
+        } <span style="background-color: red">e</span>lseif ($default) {
+            return $default($this, $value) ?? <span style="background-color: red">$</span>this;
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Apply the callback if the given &quot;value&quot; is (or resolves to) falsy.
+     *
+     * @template TUnlessParameter
+     * @template TUnlessReturnType
+     *
+     * @param  (\Closure($this): TUnlessParameter)|TUnlessParameter|null  $value
+     * @param  (callable($this, TUnlessParameter): TUnlessReturnType)|null  $callback
+     * @param  (callable($this, TUnlessParameter): TUnlessReturnType)|null  $default
+     * @return $this|TUnlessReturnType
+     */
+    <span style="background-color: red">p</span>ublic function unless($value = null, ?callable $callback = null, ?callable $default = null)
+    {
+        $value = $value instanceof Closure ? $value($this) : <span style="background-color: red">$</span>value;
+
+        <span style="background-color: red">i</span>f (func_num_args() === 0) {
+            return (new HigherOrderWhenProxy($this))-&gt;negateConditionOnCapture();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (func_num_args() === 1) {
+            return (new HigherOrderWhenProxy($this))-&gt;condition(! $value);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $value) {
+            return $callback($this, $value) ?? <span style="background-color: red">$</span>this;
+        } <span style="background-color: red">e</span>lseif ($default) {
+            return $default($this, $value) ?? <span style="background-color: red">$</span>this;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+}
+</pre>

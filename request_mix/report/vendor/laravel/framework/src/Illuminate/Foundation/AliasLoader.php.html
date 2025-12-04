@@ -1,0 +1,243 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation;
+
+class AliasLoader
+{
+    /**
+     * The array of class aliases.
+     *
+     * @var array
+     */
+    protected $aliases;
+
+    /**
+     * Indicates if a loader has been registered.
+     *
+     * @var bool
+     */
+    protected $registered = false;
+
+    /**
+     * The namespace for all real-time facades.
+     *
+     * @var string
+     */
+    protected static $facadeNamespace = &#039;Facades\\&#039;;
+
+    /**
+     * The singleton instance of the loader.
+     *
+     * @var \Illuminate\Foundation\AliasLoader
+     */
+    protected static $instance;
+
+    /**
+     * Create a new AliasLoader instance.
+     *
+     * @param  array  $aliases
+     */
+    <span style="background-color: green">p</span>rivate function __construct($aliases)
+    {
+        $this-&gt;aliases = $aliases;
+    }
+
+    /**
+     * Get or create the singleton alias loader instance.
+     *
+     * @param  array  $aliases
+     * @return \Illuminate\Foundation\AliasLoader
+     */
+    <span style="background-color: green">p</span>ublic static function getInstance(array $aliases = [])
+    {
+        <span style="background-color: green">i</span>f (is_null(static::$instance)) {
+            return static::$instance = new static($aliases);
+        <span style="background-color: red">}</span>
+
+        $aliases = array_merge(static::$instance-&gt;getAliases(), $aliases);
+
+        static::$instance-&gt;setAliases($aliases);
+
+        return static::$instance;
+    }
+
+    /**
+     * Load a class alias if it is registered.
+     *
+     * @param  string  $alias
+     * @return bool|null
+     */
+    <span style="background-color: green">p</span>ublic function load($alias)
+    {
+        <span style="background-color: red">i</span>f (static::$facadeNamespace &amp;&amp; <span style="background-color: green">s</span>tr_starts_with($alias, static::$facadeNamespace)) {
+            $this-&gt;loadFacade($alias);
+
+            return true;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;aliases[$alias])) {
+            return class_alias($this-&gt;aliases[$alias], $alias);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Load a real-time facade for the given alias.
+     *
+     * @param  string  $alias
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadFacade($alias)
+    {
+        require $this-&gt;ensureFacadeExists($alias);
+    }
+
+    /**
+     * Ensure that the given alias has an existing real-time facade class.
+     *
+     * @param  string  $alias
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function ensureFacadeExists($alias)
+    {
+        <span style="background-color: red">i</span>f (is_file($path = storage_path(&#039;framework/cache/facade-&#039;.sha1($alias).&#039;.php&#039;))) {
+            return $path;
+        <span style="background-color: red">}</span>
+
+        file_put_contents($path, $this-&gt;formatFacadeStub(
+            $alias, file_get_contents(__DIR__.&#039;/stubs/facade.stub&#039;)
+        ));
+
+        return $path;
+    }
+
+    /**
+     * Format the facade stub with the proper namespace and class.
+     *
+     * @param  string  $alias
+     * @param  string  $stub
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function formatFacadeStub($alias, $stub)
+    {
+        $replacements = [
+            str_replace(&#039;/&#039;, &#039;\\&#039;, dirname(str_replace(&#039;\\&#039;, &#039;/&#039;, $alias))),
+            class_basename($alias),
+            substr($alias, strlen(static::$facadeNamespace)),
+        ];
+
+        return str_replace(
+            [&#039;DummyNamespace&#039;, &#039;DummyClass&#039;, &#039;DummyTarget&#039;], $replacements, $stub
+        );
+    }
+
+    /**
+     * Add an alias to the loader.
+     *
+     * @param  string  $alias
+     * @param  string  $class
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function alias($alias, $class)
+    {
+        $this-&gt;aliases[$alias] = $class;
+    }
+
+    /**
+     * Register the loader on the auto-loader stack.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        <span style="background-color: green">i</span>f (! $this-&gt;registered) {
+            $this-&gt;prependToLoaderStack();
+
+            $this-&gt;registered = true;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Prepend the load method to the auto-loader stack.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function prependToLoaderStack()
+    {
+        spl_autoload_register($this-&gt;load(...), true, true);
+    }
+
+    /**
+     * Get the registered aliases.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getAliases()
+    {
+        return $this-&gt;aliases;
+    }
+
+    /**
+     * Set the registered aliases.
+     *
+     * @param  array  $aliases
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setAliases(array $aliases)
+    {
+        $this-&gt;aliases = $aliases;
+    }
+
+    /**
+     * Indicates if the loader has been registered.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isRegistered()
+    {
+        return $this-&gt;registered;
+    }
+
+    /**
+     * Set the &quot;registered&quot; state of the loader.
+     *
+     * @param  bool  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setRegistered($value)
+    {
+        $this-&gt;registered = $value;
+    }
+
+    /**
+     * Set the real-time facade namespace.
+     *
+     * @param  string  $namespace
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setFacadeNamespace($namespace)
+    {
+        static::$facadeNamespace = rtrim($namespace, &#039;\\&#039;).&#039;\\&#039;;
+    }
+
+    /**
+     * Set the value of the singleton alias loader.
+     *
+     * @param  \Illuminate\Foundation\AliasLoader  $loader
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setInstance($loader)
+    {
+        static::$instance = $loader;
+    }
+
+    /**
+     * Clone method.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate function __clone()
+    {
+        //
+    }
+}
+</pre>

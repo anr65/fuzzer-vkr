@@ -1,0 +1,112 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Middleware;
+
+use Closure;
+use Fruitcake\Cors\CorsService;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Http\Request;
+
+class HandleCors
+{
+    /**
+     * The container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+    protected $container;
+
+    /**
+     * The CORS service instance.
+     *
+     * @var \Fruitcake\Cors\CorsService
+     */
+    protected $cors;
+
+    /**
+     * Create a new middleware instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @param  \Fruitcake\Cors\CorsService  $cors
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Container $container, CorsService $cors)
+    {
+        $this-&gt;container = $container;
+        $this-&gt;cors = $cors;
+    }
+
+    /**
+     * Handle the incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return \Illuminate\Http\Response
+     */
+    <span style="background-color: green">p</span>ublic function handle($request, Closure $next)
+    {
+        <span style="background-color: green">i</span>f (! $this-&gt;hasMatchingPath($request)) {
+            return $next($request);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;cors-&gt;setOptions($this-&gt;container[&#039;config&#039;]-&gt;get(&#039;cors&#039;, []));
+
+        <span style="background-color: red">i</span>f ($this-&gt;cors-&gt;isPreflightRequest($request)) {
+            $response = $this-&gt;cors-&gt;handlePreflightRequest($request);
+
+            $this-&gt;cors-&gt;varyHeader($response, &#039;Access-Control-Request-Method&#039;);
+
+            return $response;
+        <span style="background-color: red">}</span>
+
+        $response = $next($request);
+
+        <span style="background-color: red">i</span>f ($request-&gt;getMethod() === &#039;OPTIONS&#039;) {
+            $this-&gt;cors-&gt;varyHeader($response, &#039;Access-Control-Request-Method&#039;);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;cors-&gt;addActualRequestHeaders($response, $request);
+    }
+
+    /**
+     * Get the path from the configuration to determine if the CORS service should run.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function hasMatchingPath(Request $request): bool
+    {
+        $paths = $this-&gt;getPathsByHost($request-&gt;getHost());
+
+        <span style="background-color: green">f</span>oreach ($paths as $path) {
+            <span style="background-color: green">i</span>f ($path !== &#039;/&#039;) {
+                $path = trim($path, &#039;/&#039;);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($request-&gt;fullUrlIs($path) || <span style="background-color: green">$</span>request-&gt;is($path)) {
+                return true;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Get the CORS paths for the given host.
+     *
+     * @param  string  $host
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function getPathsByHost(string $host)
+    {
+        $paths = $this-&gt;container[&#039;config&#039;]-&gt;get(&#039;cors.paths&#039;, []);
+
+        <span style="background-color: red">i</span>f (isset($paths[$host])) {
+            return $paths[$host];
+        <span style="background-color: green">}</span>
+
+        return array_filter($paths, <span style="background-color: green">f</span>unction ($path) {
+            return is_string($path);
+        });
+    }
+}
+</pre>

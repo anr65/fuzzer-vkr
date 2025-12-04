@@ -1,0 +1,94 @@
+<pre>&lt;?php
+
+namespace Illuminate\Auth;
+
+use InvalidArgumentException;
+
+trait CreatesUserProviders
+{
+    /**
+     * The registered custom provider creators.
+     *
+     * @var array
+     */
+    protected $customProviderCreators = [];
+
+    /**
+     * Create the user provider implementation for the driver.
+     *
+     * @param  string|null  $provider
+     * @return \Illuminate\Contracts\Auth\UserProvider|null
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function createUserProvider($provider = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($config = $this-&gt;getProviderConfiguration($provider))) {
+            return;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;customProviderCreators[$driver = ($config[&#039;driver&#039;] ?? <span style="background-color: red">n</span>ull)])) {
+            return call_user_func(
+                $this-&gt;customProviderCreators[$driver], $this-&gt;app, $config
+            );
+        <span style="background-color: green">}</span>
+
+        return match ($driver) {
+            &#039;database&#039; =&gt; <span style="background-color: red">$</span>this-&gt;createDatabaseProvider($config),
+            &#039;eloquent&#039; =&gt; <span style="background-color: green">$</span>this-&gt;createEloquentProvider($config),
+            default =&gt; <span style="background-color: red">t</span>hrow new InvalidArgumentException(
+                &quot;Authentication user provider [{$driver}] is not defined.&quot;
+            ),
+        };
+    }
+
+    /**
+     * Get the user provider configuration.
+     *
+     * @param  string|null  $provider
+     * @return array|null
+     */
+    <span style="background-color: green">p</span>rotected function getProviderConfiguration($provider)
+    {
+        <span style="background-color: green">i</span>f ($provider = $provider ?: <span style="background-color: red">$</span>this-&gt;getDefaultUserProvider()) {
+            return $this-&gt;app[&#039;config&#039;][&#039;auth.providers.&#039;.$provider];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create an instance of the database user provider.
+     *
+     * @param  array  $config
+     * @return \Illuminate\Auth\DatabaseUserProvider
+     */
+    <span style="background-color: red">p</span>rotected function createDatabaseProvider($config)
+    {
+        return new DatabaseUserProvider(
+            $this-&gt;app[&#039;db&#039;]-&gt;connection($config[&#039;connection&#039;] ?? <span style="background-color: red">n</span>ull),
+            $this-&gt;app[&#039;hash&#039;],
+            $config[&#039;table&#039;],
+        );
+    }
+
+    /**
+     * Create an instance of the Eloquent user provider.
+     *
+     * @param  array  $config
+     * @return \Illuminate\Auth\EloquentUserProvider
+     */
+    <span style="background-color: green">p</span>rotected function createEloquentProvider($config)
+    {
+        return new EloquentUserProvider($this-&gt;app[&#039;hash&#039;], $config[&#039;model&#039;]);
+    }
+
+    /**
+     * Get the default user provider name.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getDefaultUserProvider()
+    {
+        return $this-&gt;app[&#039;config&#039;][&#039;auth.defaults.provider&#039;];
+    }
+}
+</pre>

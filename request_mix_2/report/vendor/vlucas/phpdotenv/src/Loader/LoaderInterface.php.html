@@ -1,0 +1,21 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Loader;
+
+use Dotenv\Repository\RepositoryInterface;
+
+interface LoaderInterface
+{
+    /**
+     * Load the given entries into the repository.
+     *
+     * @param \Dotenv\Repository\RepositoryInterface $repository
+     * @param \Dotenv\Parser\Entry[]                 $entries
+     *
+     * @return array&lt;string,string|null&gt;
+     */
+    public function load(RepositoryInterface $repository, array $entries);
+}
+</pre>

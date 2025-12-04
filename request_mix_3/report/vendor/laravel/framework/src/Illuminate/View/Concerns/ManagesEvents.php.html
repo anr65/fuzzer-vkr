@@ -1,0 +1,195 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Concerns;
+
+use Closure;
+use Illuminate\Contracts\View\View as ViewContract;
+use Illuminate\Support\Str;
+
+trait ManagesEvents
+{
+    /**
+     * Register a view creator event.
+     *
+     * @param  array|string  $views
+     * @param  \Closure|string  $callback
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function creator($views, $callback)
+    {
+        $creators = [];
+
+        <span style="background-color: red">f</span>oreach ((array) $views as $view) {
+            $creators[] = $this-&gt;addViewEvent($view, $callback, &#039;creating: &#039;);
+        <span style="background-color: red">}</span>
+
+        return $creators;
+    }
+
+    /**
+     * Register multiple view composers via an array.
+     *
+     * @param  array  $composers
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function composers(array $composers)
+    {
+        $registered = [];
+
+        <span style="background-color: red">f</span>oreach ($composers as $callback =&gt; $views) {
+            $registered = array_merge($registered, $this-&gt;composer($views, $callback));
+        <span style="background-color: red">}</span>
+
+        return $registered;
+    }
+
+    /**
+     * Register a view composer event.
+     *
+     * @param  array|string  $views
+     * @param  \Closure|string  $callback
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function composer($views, $callback)
+    {
+        $composers = [];
+
+        <span style="background-color: red">f</span>oreach ((array) $views as $view) {
+            $composers[] = $this-&gt;addViewEvent($view, $callback);
+        <span style="background-color: red">}</span>
+
+        return $composers;
+    }
+
+    /**
+     * Add an event for a given view.
+     *
+     * @param  string  $view
+     * @param  \Closure|string  $callback
+     * @param  string  $prefix
+     * @return \Closure|null
+     */
+    <span style="background-color: red">p</span>rotected function addViewEvent($view, $callback, $prefix = &#039;composing: &#039;)
+    {
+        $view = $this-&gt;normalizeName($view);
+
+        <span style="background-color: red">i</span>f ($callback instanceof Closure) {
+            $this-&gt;addEventListener($prefix.$view, $callback);
+
+            return $callback;
+        } <span style="background-color: red">e</span>lseif (is_string($callback)) {
+            return $this-&gt;addClassEvent($view, $callback, $prefix);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Register a class based view composer.
+     *
+     * @param  string  $view
+     * @param  string  $class
+     * @param  string  $prefix
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function addClassEvent($view, $class, $prefix)
+    {
+        $name = $prefix.$view;
+
+        // When registering a class based view &quot;composer&quot;, we will simply resolve the
+        // classes from the application IoC container then call the compose method
+        // on the instance. This allows for convenient, testable view composers.
+        $callback = $this-&gt;buildClassEventCallback(
+            $class, $prefix
+        );
+
+        $this-&gt;addEventListener($name, $callback);
+
+        return $callback;
+    }
+
+    /**
+     * Build a class based container callback Closure.
+     *
+     * @param  string  $class
+     * @param  string  $prefix
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function buildClassEventCallback($class, $prefix)
+    {
+        [$class, $method] = $this-&gt;parseClassEvent($class, $prefix);
+
+        // Once we have the class and method name, we can build the Closure to resolve
+        // the instance out of the IoC container and call the method on it with the
+        // given arguments that are passed to the Closure as the composer&#039;s data.
+        return <span style="background-color: red">f</span>unction () use ($class, $method) {
+            return $this-&gt;container-&gt;make($class)-&gt;{$method}(...func_get_args());
+        };
+    }
+
+    /**
+     * Parse a class based composer name.
+     *
+     * @param  string  $class
+     * @param  string  $prefix
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function parseClassEvent($class, $prefix)
+    {
+        return Str::parseCallback($class, $this-&gt;classEventMethodForPrefix($prefix));
+    }
+
+    /**
+     * Determine the class event method based on the given prefix.
+     *
+     * @param  string  $prefix
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function classEventMethodForPrefix($prefix)
+    {
+        return str_contains($prefix, &#039;composing&#039;) ? &#039;compose&#039; : <span style="background-color: red">'</span>create&#039;;
+    }
+
+    /**
+     * Add a listener to the event dispatcher.
+     *
+     * @param  string  $name
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function addEventListener($name, $callback)
+    {
+        <span style="background-color: red">i</span>f (str_contains($name, &#039;*&#039;)) {
+            $callback = <span style="background-color: red">f</span>unction ($name, array $data) use ($callback) {
+                return $callback($data[0]);
+            };
+        <span style="background-color: red">}</span>
+
+        $this-&gt;events-&gt;listen($name, $callback);
+    }
+
+    /**
+     * Call the composer for a given view.
+     *
+     * @param  \Illuminate\Contracts\View\View  $view
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function callComposer(ViewContract $view)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;events-&gt;hasListeners($event = &#039;composing: &#039;.$view-&gt;name())) {
+            $this-&gt;events-&gt;dispatch($event, [$view]);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Call the creator for a given view.
+     *
+     * @param  \Illuminate\Contracts\View\View  $view
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function callCreator(ViewContract $view)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;events-&gt;hasListeners($event = &#039;creating: &#039;.$view-&gt;name())) {
+            $this-&gt;events-&gt;dispatch($event, [$view]);
+        <span style="background-color: green">}</span>
+    }
+}
+</pre>

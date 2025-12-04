@@ -1,0 +1,106 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Support\Arr;
+
+class RouteGroup
+{
+    /**
+     * Merge route groups into a new array.
+     *
+     * @param  array  $new
+     * @param  array  $old
+     * @param  bool  $prependExistingPrefix
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function merge($new, $old, $prependExistingPrefix = true)
+    {
+        <span style="background-color: red">i</span>f (isset($new[&#039;domain&#039;])) {
+            unset($old[&#039;domain&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($new[&#039;controller&#039;])) {
+            unset($old[&#039;controller&#039;]);
+        <span style="background-color: green">}</span>
+
+        $new = array_merge(static::formatAs($new, $old), [
+            &#039;namespace&#039; =&gt; static::formatNamespace($new, $old),
+            &#039;prefix&#039; =&gt; static::formatPrefix($new, $old, $prependExistingPrefix),
+            &#039;where&#039; =&gt; static::formatWhere($new, $old),
+        ]);
+
+        return array_merge_recursive(Arr::except(
+            $old, [&#039;namespace&#039;, &#039;prefix&#039;, &#039;where&#039;, &#039;as&#039;]
+        ), $new);
+    }
+
+    /**
+     * Format the namespace for the new group attributes.
+     *
+     * @param  array  $new
+     * @param  array  $old
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>rotected static function formatNamespace($new, $old)
+    {
+        <span style="background-color: red">i</span>f (isset($new[&#039;namespace&#039;])) {
+            return isset($old[&#039;namespace&#039;]) &amp;&amp; <span style="background-color: red">!</span> str_starts_with($new[&#039;namespace&#039;], &#039;\\&#039;)
+                ? trim($old[&#039;namespace&#039;], &#039;\\&#039;).&#039;\\&#039;.trim($new[&#039;namespace&#039;], &#039;\\&#039;)
+                : <span style="background-color: red">t</span>rim($new[&#039;namespace&#039;], &#039;\\&#039;);
+        <span style="background-color: green">}</span>
+
+        return $old[&#039;namespace&#039;] ?? <span style="background-color: green">n</span>ull;
+    }
+
+    /**
+     * Format the prefix for the new group attributes.
+     *
+     * @param  array  $new
+     * @param  array  $old
+     * @param  bool  $prependExistingPrefix
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>rotected static function formatPrefix($new, $old, $prependExistingPrefix = true)
+    {
+        $old = $old[&#039;prefix&#039;] ?? <span style="background-color: green">'</span>&#039;;
+
+        <span style="background-color: red">i</span>f ($prependExistingPrefix) {
+            return isset($new[&#039;prefix&#039;]) ? trim($old, &#039;/&#039;).&#039;/&#039;.trim($new[&#039;prefix&#039;], &#039;/&#039;) : <span style="background-color: red">$</span>old;
+        <span style="background-color: green">}</span>
+
+        return isset($new[&#039;prefix&#039;]) ? trim($new[&#039;prefix&#039;], &#039;/&#039;).&#039;/&#039;.trim($old, &#039;/&#039;) : <span style="background-color: green">$</span>old;
+    }
+
+    /**
+     * Format the &quot;wheres&quot; for the new group attributes.
+     *
+     * @param  array  $new
+     * @param  array  $old
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected static function formatWhere($new, $old)
+    {
+        return array_merge(
+            $old[&#039;where&#039;] ?? <span style="background-color: green">[</span>],
+            $new[&#039;where&#039;] ?? <span style="background-color: green">[</span>]
+        );
+    }
+
+    /**
+     * Format the &quot;as&quot; clause of the new group attributes.
+     *
+     * @param  array  $new
+     * @param  array  $old
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected static function formatAs($new, $old)
+    {
+        <span style="background-color: red">i</span>f (isset($old[&#039;as&#039;])) {
+            $new[&#039;as&#039;] = $old[&#039;as&#039;].($new[&#039;as&#039;] ?? <span style="background-color: red">'</span>&#039;);
+        <span style="background-color: green">}</span>
+
+        return $new;
+    }
+}
+</pre>

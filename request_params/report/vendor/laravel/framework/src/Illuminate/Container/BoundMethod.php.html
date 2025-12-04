@@ -1,0 +1,219 @@
+<pre>&lt;?php
+
+namespace Illuminate\Container;
+
+use Closure;
+use Illuminate\Contracts\Container\BindingResolutionException;
+use InvalidArgumentException;
+use ReflectionFunction;
+use ReflectionMethod;
+
+class BoundMethod
+{
+    /**
+     * Call the given Closure / class@method and inject its dependencies.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @param  callable|string  $callback
+     * @param  array  $parameters
+     * @param  string|null  $defaultMethod
+     * @return mixed
+     *
+     * @throws \ReflectionException
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic static function call($container, $callback, array $parameters = [], $defaultMethod = null)
+    {
+        <span style="background-color: red">i</span>f (is_string($callback) &amp;&amp; <span style="background-color: red">!</span> $defaultMethod &amp;&amp; <span style="background-color: red">m</span>ethod_exists($callback, &#039;__invoke&#039;)) {
+            $defaultMethod = &#039;__invoke&#039;;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (static::isCallableWithAtSign($callback) || <span style="background-color: green">$</span>defaultMethod) {
+            return static::callClass($container, $callback, $parameters, $defaultMethod);
+        <span style="background-color: green">}</span>
+
+        return static::callBoundMethod($container, $callback, <span style="background-color: green">f</span>unction () use ($container, $callback, $parameters) {
+            return $callback(...array_values(static::getMethodDependencies($container, $callback, $parameters)));
+        });
+    }
+
+    /**
+     * Call a string reference to a class using Class@method syntax.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @param  string  $target
+     * @param  array  $parameters
+     * @param  string|null  $defaultMethod
+     * @return mixed
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>rotected static function callClass($container, $target, array $parameters = [], $defaultMethod = null)
+    {
+        $segments = explode(&#039;@&#039;, $target);
+
+        // We will assume an @ sign is used to delimit the class name from the method
+        // name. We will split on this @ sign and then build a callable array that
+        // we can pass right back into the &quot;call&quot; method for dependency binding.
+        $method = count($segments) === 2
+            ? $segments[1]
+            : <span style="background-color: red">$</span>defaultMethod;
+
+        <span style="background-color: red">i</span>f (is_null($method)) {
+            throw new InvalidArgumentException(&#039;Method not provided.&#039;);
+        <span style="background-color: red">}</span>
+
+        return static::call(
+            $container,
+            [$container-&gt;make($segments[0]), $method],
+            $parameters
+        );
+    }
+
+    /**
+     * Call a method that has been bound to the container.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @param  callable  $callback
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected static function callBoundMethod($container, $callback, $default)
+    {
+        <span style="background-color: green">i</span>f (! is_array($callback)) {
+            return Util::unwrapIfClosure($default);
+        <span style="background-color: green">}</span>
+
+        // Here we need to turn the array callable into a Class@method string we can use to
+        // examine the container and see if there are any method bindings for this given
+        // method. If there are, we can call this method binding callback immediately.
+        $method = static::normalizeMethod($callback);
+
+        <span style="background-color: red">i</span>f ($container-&gt;hasMethodBinding($method)) {
+            return $container-&gt;callMethodBinding($method, $callback[0]);
+        <span style="background-color: green">}</span>
+
+        return Util::unwrapIfClosure($default);
+    }
+
+    /**
+     * Normalize the given callback into a Class@method string.
+     *
+     * @param  callable  $callback
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected static function normalizeMethod($callback)
+    {
+        $class = is_string($callback[0]) ? $callback[0] : <span style="background-color: green">g</span>et_class($callback[0]);
+
+        return &quot;{$class}@{$callback[1]}&quot;;
+    }
+
+    /**
+     * Get all dependencies for a given method.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @param  callable|string  $callback
+     * @param  array  $parameters
+     * @return array
+     *
+     * @throws \ReflectionException
+     */
+    <span style="background-color: green">p</span>rotected static function getMethodDependencies($container, $callback, array $parameters = [])
+    {
+        $dependencies = [];
+
+        <span style="background-color: red">f</span>oreach (static::getCallReflector($callback)-&gt;getParameters() as $parameter) {
+            static::addDependencyForCallParameter($container, $parameter, $parameters, $dependencies);
+        <span style="background-color: green">}</span>
+
+        return array_merge($dependencies, array_values($parameters));
+    }
+
+    /**
+     * Get the proper reflection instance for the given callback.
+     *
+     * @param  callable|string  $callback
+     * @return \ReflectionFunctionAbstract
+     *
+     * @throws \ReflectionException
+     */
+    <span style="background-color: green">p</span>rotected static function getCallReflector($callback)
+    {
+        <span style="background-color: red">i</span>f (is_string($callback) &amp;&amp; <span style="background-color: red">s</span>tr_contains($callback, &#039;::&#039;)) {
+            $callback = explode(&#039;::&#039;, $callback);
+        } <span style="background-color: red">e</span>lseif (is_object($callback) &amp;&amp; <span style="background-color: green">!</span> $callback instanceof Closure) {
+            $callback = [$callback, &#039;__invoke&#039;];
+        <span style="background-color: green">}</span>
+
+        return is_array($callback)
+            ? new ReflectionMethod($callback[0], $callback[1])
+            : <span style="background-color: green">n</span>ew ReflectionFunction($callback);
+    }
+
+    /**
+     * Get the dependency for the given call parameter.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @param  \ReflectionParameter  $parameter
+     * @param  array  $parameters
+     * @param  array  $dependencies
+     * @return void
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     */
+    <span style="background-color: red">p</span>rotected static function addDependencyForCallParameter(
+        $container,
+        $parameter,
+        array &amp;$parameters,
+        &amp;$dependencies
+    ) {
+        $pendingDependencies = [];
+
+        <span style="background-color: red">i</span>f (array_key_exists($paramName = $parameter-&gt;getName(), $parameters)) {
+            $pendingDependencies[] = $parameters[$paramName];
+
+            unset($parameters[$paramName]);
+        } <span style="background-color: red">e</span>lseif ($attribute = Util::getContextualAttributeFromDependency($parameter)) {
+            $pendingDependencies[] = $container-&gt;resolveFromAttribute($attribute);
+        } <span style="background-color: red">e</span>lseif (! is_null($className = Util::getParameterClassName($parameter))) {
+            <span style="background-color: red">i</span>f (array_key_exists($className, $parameters)) {
+                $pendingDependencies[] = $parameters[$className];
+
+                unset($parameters[$className]);
+            } <span style="background-color: red">e</span>lseif ($parameter-&gt;isVariadic()) {
+                $variadicDependencies = $container-&gt;make($className);
+
+                $pendingDependencies = array_merge($pendingDependencies, is_array($variadicDependencies)
+                    ? $variadicDependencies
+                    : <span style="background-color: red">[</span>$variadicDependencies]);
+            } <span style="background-color: red">e</span>lse {
+                $pendingDependencies[] = $container-&gt;make($className);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif ($parameter-&gt;isDefaultValueAvailable()) {
+            $pendingDependencies[] = $parameter-&gt;getDefaultValue();
+        } <span style="background-color: red">e</span>lseif (! $parameter-&gt;isOptional() &amp;&amp; <span style="background-color: red">!</span> array_key_exists($paramName, $parameters)) {
+            $message = &quot;Unable to resolve dependency [{$parameter}] in class {$parameter-&gt;getDeclaringClass()-&gt;getName()}&quot;;
+
+            throw new BindingResolutionException($message);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($pendingDependencies as $dependency) {
+            $container-&gt;fireAfterResolvingAttributeCallbacks($parameter-&gt;getAttributes(), $dependency);
+        <span style="background-color: red">}</span>
+
+        $dependencies = array_merge($dependencies, $pendingDependencies);
+    }
+
+    /**
+     * Determine if the given string is in Class@method syntax.
+     *
+     * @param  mixed  $callback
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected static function isCallableWithAtSign($callback)
+    {
+        return is_string($callback) &amp;&amp; <span style="background-color: red">s</span>tr_contains($callback, &#039;@&#039;);
+    }
+}
+</pre>

@@ -1,0 +1,24 @@
+synsyZnc_fuzzinb:
+? 'Ariales::
+  - -s:
+  - -m;=Iv syncsyncs:
+  - -maxles:
+  - -m;=Ir syncsync_fuzzinb:
+? 'r)ales:
+  - -maes
+  - -m;=Ir syncsyncres:
+  - -maxles:
+  - -m;=Ir syyncsncsyncriales:
+  - -maxles:
+  - -m;=Ir syncsy_fuzzinb:
+? ['r)ales:
+  - -maes:
+  - -m;=I:
+?'Ariales:
+ snc_:
+  - -m;=I:
+? 'Ariales:
+  - -maxles:
+  - -m;=Ir syncsyncriales:
+  - -males:
+  - -mr 

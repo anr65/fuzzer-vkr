@@ -1,0 +1,192 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use InvalidArgumentException;
+
+class ConfigurationUrlParser
+{
+    /**
+     * The drivers aliases map.
+     *
+     * @var array
+     */
+    protected static $driverAliases = [
+        &#039;mssql&#039; =&gt; &#039;sqlsrv&#039;,
+        &#039;mysql2&#039; =&gt; &#039;mysql&#039;, // RDS
+        &#039;postgres&#039; =&gt; &#039;pgsql&#039;,
+        &#039;postgresql&#039; =&gt; &#039;pgsql&#039;,
+        &#039;sqlite3&#039; =&gt; &#039;sqlite&#039;,
+        &#039;redis&#039; =&gt; &#039;tcp&#039;,
+        &#039;rediss&#039; =&gt; &#039;tls&#039;,
+    ];
+
+    /**
+     * Parse the database configuration, hydrating options using a database configuration URL if possible.
+     *
+     * @param  array|string  $config
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function parseConfiguration($config)
+    {
+        <span style="background-color: red">i</span>f (is_string($config)) {
+            $config = [&#039;url&#039; =&gt; $config];
+        <span style="background-color: green">}</span>
+
+        $url = Arr::pull($config, &#039;url&#039;);
+
+        <span style="background-color: green">i</span>f (! $url) {
+            return $config;
+        <span style="background-color: red">}</span>
+
+        $rawComponents = $this-&gt;parseUrl($url);
+
+        $decodedComponents = $this-&gt;parseStringsToNativeTypes(
+            array_map(rawurldecode(...), $rawComponents)
+        );
+
+        return array_merge(
+            $config,
+            $this-&gt;getPrimaryOptions($decodedComponents),
+            $this-&gt;getQueryOptions($rawComponents)
+        );
+    }
+
+    /**
+     * Get the primary database connection options.
+     *
+     * @param  array  $url
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getPrimaryOptions($url)
+    {
+        return array_filter([
+            &#039;driver&#039; =&gt; $this-&gt;getDriver($url),
+            &#039;database&#039; =&gt; $this-&gt;getDatabase($url),
+            &#039;host&#039; =&gt; $url[&#039;host&#039;] ?? <span style="background-color: red">n</span>ull,
+            &#039;port&#039; =&gt; $url[&#039;port&#039;] ?? <span style="background-color: red">n</span>ull,
+            &#039;username&#039; =&gt; $url[&#039;user&#039;] ?? <span style="background-color: red">n</span>ull,
+            &#039;password&#039; =&gt; $url[&#039;pass&#039;] ?? <span style="background-color: red">n</span>ull,
+        ], fn ($value) =&gt; <span style="background-color: red">!</span> is_null($value));
+    }
+
+    /**
+     * Get the database driver from the URL.
+     *
+     * @param  array  $url
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function getDriver($url)
+    {
+        $alias = $url[&#039;scheme&#039;] ?? <span style="background-color: red">n</span>ull;
+
+        <span style="background-color: red">i</span>f (! $alias) {
+            return;
+        <span style="background-color: red">}</span>
+
+        return static::$driverAliases[$alias] ?? <span style="background-color: red">$</span>alias;
+    }
+
+    /**
+     * Get the database name from the URL.
+     *
+     * @param  array  $url
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function getDatabase($url)
+    {
+        $path = $url[&#039;path&#039;] ?? <span style="background-color: red">n</span>ull;
+
+        return $path &amp;&amp; <span style="background-color: red">$</span>path !== &#039;/&#039; ? substr($path, 1) : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get all of the additional database options from the query string.
+     *
+     * @param  array  $url
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getQueryOptions($url)
+    {
+        $queryString = $url[&#039;query&#039;] ?? <span style="background-color: red">n</span>ull;
+
+        <span style="background-color: red">i</span>f (! $queryString) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        $query = [];
+
+        parse_str($queryString, $query);
+
+        return $this-&gt;parseStringsToNativeTypes($query);
+    }
+
+    /**
+     * Parse the string URL to an array of components.
+     *
+     * @param  string  $url
+     * @return array
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>rotected function parseUrl($url)
+    {
+        $url = preg_replace(&#039;#^(sqlite3?):///#&#039;, &#039;$1://null/&#039;, $url);
+
+        $parsedUrl = parse_url($url);
+
+        <span style="background-color: red">i</span>f ($parsedUrl === false) {
+            throw new InvalidArgumentException(&#039;The database configuration URL is malformed.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $parsedUrl;
+    }
+
+    /**
+     * Convert string casted values to their native types.
+     *
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function parseStringsToNativeTypes($value)
+    {
+        <span style="background-color: red">i</span>f (is_array($value)) {
+            return array_map($this-&gt;parseStringsToNativeTypes(...), $value);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! is_string($value)) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        $parsedValue = json_decode($value, true);
+
+        <span style="background-color: red">i</span>f (json_last_error() === JSON_ERROR_NONE) {
+            return $parsedValue;
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get all of the current drivers&#039; aliases.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function getDriverAliases()
+    {
+        return static::$driverAliases;
+    }
+
+    /**
+     * Add the given driver alias to the driver aliases array.
+     *
+     * @param  string  $alias
+     * @param  string  $driver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function addDriverAlias($alias, $driver)
+    {
+        static::$driverAliases[$alias] = $driver;
+    }
+}
+</pre>

@@ -1,0 +1,184 @@
+<pre>&lt;?php
+
+use Illuminate\Http\UploadedFile;
+use PhpFuzzer\Config;
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
+use Fruitcake\Cors\CorsService;
+
+// Подключаем автозагрузчик
+require __DIR__ . &#039;/../vendor/autoload.php&#039;;
+
+// Создаем Laravel приложение
+$app = require __DIR__ . &#039;/../vendor/laravel/laravel/bootstrap/app.php&#039;;
+$kernel = $app-&gt;make(Kernel::class);
+/** @var \PhpFuzzer\Config $config*/
+
+<span style="background-color: green">f</span>unction generateFuzzedRequest(string $input): Request
+{
+    // HTTP-метод
+    $methods = [&#039;GET&#039;,&#039;POST&#039;,&#039;PUT&#039;,&#039;PATCH&#039;,&#039;DELETE&#039;,&#039;OPTIONS&#039;];
+    $method  = $methods[random_int(0, count($methods)-1)];
+
+    // URI: несколько сегментов + разные кодировки
+    $segs = array_map(&#039;rawurlencode&#039;, str_split($input, 4));
+    $path = &#039;/&#039; . implode(&#039;/&#039;, array_slice($segs, 0, 3));
+    <span style="background-color: green">i</span>f (random_int(0,1)) {
+        $path .= &#039;?q=&#039; . rawurlencode($input);
+    <span style="background-color: green">}</span>
+
+    // Заголовки + CORS
+    $headers = [
+        &#039;CONTENT_TYPE&#039;           =&gt; [&#039;application/json&#039;,&#039;text/plain&#039;,&#039;multipart/form-data&#039;][random_int(0,2)],
+        &#039;HTTP_ACCEPT&#039;            =&gt; [&#039;*/*&#039;,&#039;application/json&#039;,&#039;text/html&#039;][random_int(0,2)],
+        &#039;HTTP_USER_AGENT&#039;        =&gt; &#039;FuzzerBot/&#039;.random_int(1,100),
+        &#039;HTTP_ORIGIN&#039;            =&gt; [&#039;https://evil.com&#039;,&#039;https://api.local&#039;][random_int(0,1)],
+        &#039;HTTP_ACCEPT_ENCODING&#039;   =&gt; [&#039;gzip, deflate&#039;,&#039;br&#039;,&#039;&#039;][random_int(0,2)],
+        &#039;HTTP_X_FORWARDED_FOR&#039;   =&gt; &#039;192.168.0.&#039;.random_int(1,254),
+        &#039;SERVER_PROTOCOL&#039;        =&gt; [&#039;HTTP/1.0&#039;,&#039;HTTP/1.1&#039;,&#039;HTTP/2&#039;][random_int(0,2)],
+    ];
+
+    // Серверные переменные
+    $server = [
+        &#039;SERVER_NAME&#039; =&gt; [&#039;app.local&#039;,&#039;api.test&#039;][random_int(0,1)],
+        &#039;REMOTE_ADDR&#039; =&gt; &#039;127.0.0.&#039;.random_int(1,254),
+    ];
+
+    // Тело запроса
+    $body = &#039;&#039;;
+    <span style="background-color: green">i</span>f (in_array($method, [&#039;POST&#039;,&#039;PUT&#039;,&#039;PATCH&#039;], true)) {
+        <span style="background-color: green">i</span>f ($headers[&#039;CONTENT_TYPE&#039;] === &#039;application/json&#039;) {
+            $body = json_encode([&#039;data&#039;=&gt;$input], JSON_THROW_ON_ERROR);
+        } <span style="background-color: green">e</span>lseif ($headers[&#039;CONTENT_TYPE&#039;] === &#039;multipart/form-data&#039;) {
+            $boundary = &#039;----FUZ&#039;.random_int(1,9999);
+            $headers[&#039;CONTENT_TYPE&#039;] .= &quot;; boundary={$boundary}&quot;;
+            $body = &quot;--{$boundary}\r\n&quot;
+                . &quot;Content-Disposition: form-data; name=\&quot;payload\&quot;\r\n\r\n&quot;
+                . $input . &quot;\r\n&quot;
+                . &quot;--{$boundary}--&quot;;
+        } <span style="background-color: green">e</span>lse {
+            $body = &#039;payload=&#039;.rawurlencode($input);
+        <span style="background-color: green">}</span>
+        // Вариация Content-Length
+        $headers[&#039;CONTENT_LENGTH&#039;] = strlen($body) . random_int(0,5) . &#039;&#039;;
+    <span style="background-color: green">}</span>
+
+    // Куки и сессия
+    $cookies = [&#039;fuzz_session&#039;=&gt;sha1($input)];
+    $files   = [];
+    <span style="background-color: green">i</span>f (random_int(0,4) === 0) {
+        $tmp = tempnam(sys_get_temp_dir(), &#039;fz&#039;);
+        file_put_contents($tmp, $input);
+        $files[&#039;upload&#039;] = new UploadedFile($tmp, &#039;fuzz.bin&#039;, &#039;application/octet-stream&#039;, null, true);
+    <span style="background-color: green">}</span>
+
+    // Сборка самого Request
+    $req = Request::create(
+        $path,
+        $method,
+        [],      // query
+        $cookies,
+        $files,
+        array_merge($server, $headers),
+        $body
+    );
+
+    // Привязываем «фазз-сессию»
+    $req-&gt;setLaravelSession(
+        new \Illuminate\Session\Store(&#039;fuzz&#039;, new \Illuminate\Session\ArraySessionHandler(1))
+    );
+    $req-&gt;session()-&gt;put(&#039;locale&#039;, [&#039;en&#039;,&#039;ru&#039;,&#039;de&#039;][random_int(0,2)]);
+
+    return $req;
+}
+
+
+// Настройка цели фаззинга
+$config-&gt;setTarget(<span style="background-color: green">f</span>unction (string $input) use ($kernel) {
+    try {
+        $request = generateFuzzedRequest($input);
+
+        // — случайно включаем PJAX
+        <span style="background-color: green">i</span>f (random_int(0,1)) {
+            $request-&gt;headers-&gt;set(&#039;X-PJAX&#039;, &#039;true&#039;);
+        <span style="background-color: green">}</span>
+
+        // — случайно префетч
+        switch (random_int(0,3)) {
+            <span style="background-color: green">c</span>ase 1: $request-&gt;server-&gt;set(&#039;HTTP_X_MOZ&#039;,&#039;prefetch&#039;); break;
+            <span style="background-color: green">c</span>ase 2: $request-&gt;headers-&gt;set(&#039;Purpose&#039;,&#039;prefetch&#039;); break;
+            <span style="background-color: green">c</span>ase 3: $request-&gt;headers-&gt;set(&#039;Sec-Purpose&#039;,&#039;prefetch&#039;); break;
+        <span style="background-color: green">}</span>
+
+        // — случайно HTTPS
+        <span style="background-color: green">i</span>f (random_int(0,1)) {
+            $request-&gt;server-&gt;set(&#039;HTTPS&#039;,&#039;on&#039;);
+        <span style="background-color: green">}</span>
+
+        $request-&gt;ajax();
+        $request-&gt;pjax();
+        $request-&gt;prefetch();
+        $request-&gt;secure();
+
+        // Пропускаем через CORS
+        $corsService = new CorsService();
+        $corsService-&gt;handlePreflightRequest($request, <span style="background-color: red">f</span>unction ($req){
+            return new \Symfony\Component\HttpFoundation\Response(&#039;&#039;, 200);
+        });
+
+        // Пропускаем через стандартный Kernel
+        $response = $kernel-&gt;handle($request);
+
+//        // Дополнительно дергаем методы Request,
+//        // чтобы повысить покрытие Illuminate\Http\Request
+//        $request-&gt;ip();
+//        $request-&gt;path();
+//        $request-&gt;url();
+//        $request-&gt;fullUrl();
+//        $request-&gt;fullUrlWithQuery($request-&gt;query());
+//        $request-&gt;root();
+//        $request-&gt;segments();
+//        $request-&gt;isMethod($request-&gt;method());
+//        $request-&gt;wantsJson();
+//        $request-&gt;expectsJson();
+//        $request-&gt;header(&#039;Accept&#039;);
+//        $request-&gt;all();
+//        $request-&gt;query();
+//        $request-&gt;post();
+//        $request-&gt;cookie(&#039;fuzz_session&#039;);
+//        $request-&gt;has(&#039;payload&#039;);
+//        if ($request-&gt;isJson()) {
+//            $request-&gt;json()-&gt;all();
+//        }
+//
+//        // IPs, UA
+//        $request-&gt;ips();
+//        $request-&gt;userAgent();
+//
+//        // merge / mergeIfMissing / replace
+//        $request-&gt;merge([&#039;alpha&#039; =&gt; &#039;β&#039;]);
+//        $request-&gt;mergeIfMissing([&#039;gamma&#039; =&gt; &#039;δ&#039;]);
+//        $request-&gt;replace([&#039;x&#039;=&gt;1,&#039;y&#039;=&gt;2]);
+//
+//        // Symfony-специфичный get()
+//        $request-&gt;get(&#039;nosuch&#039;,&#039;def&#039;);
+//
+//        // duplicate
+//        $dup = $request-&gt;duplicate();
+//        $dup-&gt;getMethod();
+
+        // Завершение middleware
+        $kernel-&gt;terminate($request, $response);
+    } <span style="background-color: green">c</span>atch (Throwable $e) {
+        file_put_contents(
+            &#039;./log.txt&#039;,
+            &quot;Exception: &quot; . $e-&gt;getMessage() . &quot;\n&quot; .
+            &quot;File: &quot; . $e-&gt;getFile() . &quot;:&quot; . $e-&gt;getLine() . &quot;\n&quot; .
+            &quot;Trace:\n&quot; . $e-&gt;getTraceAsString() . &quot;\n&quot;,
+            FILE_APPEND
+        );
+        throw $e;
+    <span style="background-color: green">}</span>
+});
+
+</pre>

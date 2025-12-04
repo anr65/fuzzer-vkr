@@ -1,0 +1,110 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\FactoryImmutable;
+
+/**
+ * Trait Macros.
+ *
+ * Allows users to register macros within the Carbon class.
+ */
+trait Macro
+{
+    use Mixin;
+
+    /**
+     * Register a custom macro.
+     *
+     * Pass null macro to remove it.
+     *
+     * @example
+     * ```
+     * $userSettings = [
+     *   &#039;locale&#039; =&gt; &#039;pt&#039;,
+     *   &#039;timezone&#039; =&gt; &#039;America/Sao_Paulo&#039;,
+     * ];
+     * Carbon::macro(&#039;userFormat&#039;, function () use ($userSettings) {
+     *   return $this-&gt;copy()-&gt;locale($userSettings[&#039;locale&#039;])-&gt;tz($userSettings[&#039;timezone&#039;])-&gt;calendar();
+     * });
+     * echo Carbon::yesterday()-&gt;hours(11)-&gt;userFormat();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic static function macro(string $name, ?callable $macro): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;macro($name, $macro);
+    }
+
+    /**
+     * Remove all macros and generic macros.
+     */
+    <span style="background-color: red">p</span>ublic static function resetMacros(): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;resetMacros();
+    }
+
+    /**
+     * Register a custom macro.
+     *
+     * @param callable $macro
+     * @param int      $priority marco with higher priority is tried first
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function genericMacro(callable $macro, int $priority = 0): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;genericMacro($macro, $priority);
+    }
+
+    /**
+     * Checks if macro is registered globally.
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function hasMacro(string $name): bool
+    {
+        return FactoryImmutable::getInstance()-&gt;hasMacro($name);
+    }
+
+    /**
+     * Get the raw callable macro registered globally for a given name.
+     */
+    <span style="background-color: red">p</span>ublic static function getMacro(string $name): ?callable
+    {
+        return FactoryImmutable::getInstance()-&gt;getMacro($name);
+    }
+
+    /**
+     * Checks if macro is registered globally or locally.
+     */
+    <span style="background-color: red">p</span>ublic function hasLocalMacro(string $name): bool
+    {
+        return ($this-&gt;localMacros &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;localMacros[$name])) || <span style="background-color: red">$</span>this-&gt;transmitFactory(
+            static fn () =&gt; <span style="background-color: red">s</span>tatic::hasMacro($name),
+        );
+    }
+
+    /**
+     * Get the raw callable macro registered globally or locally for a given name.
+     */
+    <span style="background-color: red">p</span>ublic function getLocalMacro(string $name): ?callable
+    {
+        return ($this-&gt;localMacros ?? <span style="background-color: red">[</span>])[$name] ?? <span style="background-color: red">$</span>this-&gt;transmitFactory(
+            static fn () =&gt; <span style="background-color: red">s</span>tatic::getMacro($name),
+        );
+    }
+}
+</pre>

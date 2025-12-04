@@ -1,0 +1,131 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use ArrayAccess;
+use ArrayObject;
+use Illuminate\Support\Traits\Macroable;
+
+class Optional implements ArrayAccess
+{
+    use Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * The underlying object.
+     *
+     * @var mixed
+     */
+    protected $value;
+
+    /**
+     * Create a new optional instance.
+     *
+     * @param  mixed  $value
+     */
+    <span style="background-color: green">p</span>ublic function __construct($value)
+    {
+        $this-&gt;value = $value;
+    }
+
+    /**
+     * Dynamically access a property on the underlying object.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function __get($key)
+    {
+        <span style="background-color: red">i</span>f (is_object($this-&gt;value)) {
+            return $this-&gt;value-&gt;{$key} ?? <span style="background-color: red">n</span>ull;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Dynamically check a property exists on the underlying object.
+     *
+     * @param  mixed  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function __isset($name)
+    {
+        <span style="background-color: red">i</span>f (is_object($this-&gt;value)) {
+            return isset($this-&gt;value-&gt;{$name});
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_array($this-&gt;value) || <span style="background-color: red">$</span>this-&gt;value instanceof ArrayObject) {
+            return isset($this-&gt;value[$name]);
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Determine if an item exists at an offset.
+     *
+     * @param  mixed  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function offsetExists($key): bool
+    {
+        return Arr::accessible($this-&gt;value) &amp;&amp; <span style="background-color: red">A</span>rr::exists($this-&gt;value, $key);
+    }
+
+    /**
+     * Get an item at a given offset.
+     *
+     * @param  mixed  $key
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function offsetGet($key): mixed
+    {
+        return Arr::get($this-&gt;value, $key);
+    }
+
+    /**
+     * Set the item at a given offset.
+     *
+     * @param  mixed  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet($key, $value): void
+    {
+        <span style="background-color: red">i</span>f (Arr::accessible($this-&gt;value)) {
+            $this-&gt;value[$key] = $value;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Unset the item at a given offset.
+     *
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset($key): void
+    {
+        <span style="background-color: red">i</span>f (Arr::accessible($this-&gt;value)) {
+            unset($this-&gt;value[$key]);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Dynamically pass a method to the underlying object.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (static::hasMacro($method)) {
+            return $this-&gt;macroCall($method, $parameters);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_object($this-&gt;value)) {
+            return $this-&gt;value-&gt;{$method}(...$parameters);
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

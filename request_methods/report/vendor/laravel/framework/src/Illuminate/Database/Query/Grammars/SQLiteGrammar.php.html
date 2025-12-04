@@ -1,0 +1,465 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Query\Grammars;
+
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+
+class SQLiteGrammar extends Grammar
+{
+    /**
+     * All of the available clause operators.
+     *
+     * @var string[]
+     */
+    protected $operators = [
+        &#039;=&#039;, &#039;&lt;&#039;, &#039;&gt;&#039;, &#039;&lt;=&#039;, &#039;&gt;=&#039;, &#039;&lt;&gt;&#039;, &#039;!=&#039;,
+        &#039;like&#039;, &#039;not like&#039;, &#039;ilike&#039;,
+        &#039;&amp;&#039;, &#039;|&#039;, &#039;&lt;&lt;&#039;, &#039;&gt;&gt;&#039;,
+    ];
+
+    /**
+     * Compile the lock into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  bool|string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileLock(Builder $query, $value)
+    {
+        return &#039;&#039;;
+    }
+
+    /**
+     * Wrap a union subquery in parentheses.
+     *
+     * @param  string  $sql
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapUnion($sql)
+    {
+        return &#039;select * from (&#039;.$sql.&#039;)&#039;;
+    }
+
+    /**
+     * Compile a &quot;where like&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereLike(Builder $query, $where)
+    {
+        <span style="background-color: red">i</span>f ($where[&#039;caseSensitive&#039;] == false) {
+            return parent::whereLike($query, $where);
+        <span style="background-color: red">}</span>
+        $where[&#039;operator&#039;] = $where[&#039;not&#039;] ? &#039;not glob&#039; : <span style="background-color: red">'</span>glob&#039;;
+
+        return $this-&gt;whereBasic($query, $where);
+    }
+
+    /**
+     * Convert a LIKE pattern to a GLOB pattern using simple string replacement.
+     *
+     * @param  string  $value
+     * @param  bool  $caseSensitive
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function prepareWhereLikeBinding($value, $caseSensitive)
+    {
+        return $caseSensitive === false ? $value : <span style="background-color: red">s</span>tr_replace(
+            [&#039;*&#039;, &#039;?&#039;, &#039;%&#039;, &#039;_&#039;],
+            [&#039;[*]&#039;, &#039;[?]&#039;, &#039;*&#039;, &#039;?&#039;],
+            $value
+        );
+    }
+
+    /**
+     * Compile a &quot;where date&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereDate(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;%Y-%m-%d&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where day&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereDay(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;%d&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where month&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereMonth(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;%m&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where year&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereYear(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;%Y&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a &quot;where time&quot; clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function whereTime(Builder $query, $where)
+    {
+        return $this-&gt;dateBasedWhere(&#039;%H:%M:%S&#039;, $query, $where);
+    }
+
+    /**
+     * Compile a date based where clause.
+     *
+     * @param  string  $type
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function dateBasedWhere($type, Builder $query, $where)
+    {
+        $value = $this-&gt;parameter($where[&#039;value&#039;]);
+
+        return &quot;strftime(&#039;{$type}&#039;, {$this-&gt;wrap($where[&#039;column&#039;])}) {$where[&#039;operator&#039;]} cast({$value} as text)&quot;;
+    }
+
+    /**
+     * Compile the index hints for the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  \Illuminate\Database\Query\IndexHint  $indexHint
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIndexHint(Builder $query, $indexHint)
+    {
+        return $indexHint-&gt;type === &#039;force&#039;
+            ? &quot;indexed by {$indexHint-&gt;index}&quot;
+            : <span style="background-color: red">'</span>&#039;;
+    }
+
+    /**
+     * Compile a &quot;JSON length&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonLength($column, $operator, $value)
+    {
+        [$field, $path] = $this-&gt;wrapJsonFieldAndPath($column);
+
+        return &#039;json_array_length(&#039;.$field.$path.&#039;) &#039;.$operator.&#039; &#039;.$value;
+    }
+
+    /**
+     * Compile a &quot;JSON contains&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @param  mixed  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonContains($column, $value)
+    {
+        [$field, $path] = $this-&gt;wrapJsonFieldAndPath($column);
+
+        return &#039;exists (select 1 from json_each(&#039;.$field.$path.&#039;) where &#039;.$this-&gt;wrap(&#039;json_each.value&#039;).&#039; is &#039;.$value.&#039;)&#039;;
+    }
+
+    /**
+     * Prepare the binding for a &quot;JSON contains&quot; statement.
+     *
+     * @param  mixed  $binding
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function prepareBindingForJsonContains($binding)
+    {
+        return $binding;
+    }
+
+    /**
+     * Compile a &quot;JSON contains key&quot; statement into SQL.
+     *
+     * @param  string  $column
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonContainsKey($column)
+    {
+        [$field, $path] = $this-&gt;wrapJsonFieldAndPath($column);
+
+        return &#039;json_type(&#039;.$field.$path.&#039;) is not null&#039;;
+    }
+
+    /**
+     * Compile a group limit clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileGroupLimit(Builder $query)
+    {
+        $version = $query-&gt;getConnection()-&gt;getServerVersion();
+
+        <span style="background-color: red">i</span>f (version_compare($version, &#039;3.25.0&#039;) &gt;= 0) {
+            return parent::compileGroupLimit($query);
+        <span style="background-color: red">}</span>
+
+        $query-&gt;groupLimit = null;
+
+        return $this-&gt;compileSelect($query);
+    }
+
+    /**
+     * Compile an update statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileUpdate(Builder $query, array $values)
+    {
+        <span style="background-color: red">i</span>f (isset($query-&gt;joins) || <span style="background-color: red">i</span>sset($query-&gt;limit)) {
+            return $this-&gt;compileUpdateWithJoinsOrLimit($query, $values);
+        <span style="background-color: red">}</span>
+
+        return parent::compileUpdate($query, $values);
+    }
+
+    /**
+     * Compile an insert ignore statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileInsertOrIgnore(Builder $query, array $values)
+    {
+        return Str::replaceFirst(&#039;insert&#039;, &#039;insert or ignore&#039;, $this-&gt;compileInsert($query, $values));
+    }
+
+    /**
+     * Compile an insert ignore statement using a subquery into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $columns
+     * @param  string  $sql
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileInsertOrIgnoreUsing(Builder $query, array $columns, string $sql)
+    {
+        return Str::replaceFirst(&#039;insert&#039;, &#039;insert or ignore&#039;, $this-&gt;compileInsertUsing($query, $columns, $sql));
+    }
+
+    /**
+     * Compile the columns for an update statement.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUpdateColumns(Builder $query, array $values)
+    {
+        $jsonGroups = $this-&gt;groupJsonColumnsForUpdate($values);
+
+        return (new Collection($values))-&gt;reject(<span style="background-color: red">f</span>unction ($value, $key) {
+            return $this-&gt;isJsonSelector($key);
+        })-&gt;merge($jsonGroups)-&gt;map(<span style="background-color: red">f</span>unction ($value, $key) use ($jsonGroups) {
+            $column = last(explode(&#039;.&#039;, $key));
+
+            $value = isset($jsonGroups[$key]) ? $this-&gt;compileJsonPatch($column, $value) : <span style="background-color: red">$</span>this-&gt;parameter($value);
+
+            return $this-&gt;wrap($column).&#039; = &#039;.$value;
+        })-&gt;implode(&#039;, &#039;);
+    }
+
+    /**
+     * Compile an &quot;upsert&quot; statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @param  array  $uniqueBy
+     * @param  array  $update
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileUpsert(Builder $query, array $values, array $uniqueBy, array $update)
+    {
+        $sql = $this-&gt;compileInsert($query, $values);
+
+        $sql .= &#039; on conflict (&#039;.$this-&gt;columnize($uniqueBy).&#039;) do update set &#039;;
+
+        $columns = (new Collection($update))-&gt;map(<span style="background-color: red">f</span>unction ($value, $key) {
+            return is_numeric($key)
+                ? $this-&gt;wrap($value).&#039; = &#039;.$this-&gt;wrapValue(&#039;excluded&#039;).&#039;.&#039;.$this-&gt;wrap($value)
+                : <span style="background-color: red">$</span>this-&gt;wrap($key).&#039; = &#039;.$this-&gt;parameter($value);
+        })-&gt;implode(&#039;, &#039;);
+
+        return $sql.$columns;
+    }
+
+    /**
+     * Group the nested JSON columns.
+     *
+     * @param  array  $values
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function groupJsonColumnsForUpdate(array $values)
+    {
+        $groups = [];
+
+        <span style="background-color: red">f</span>oreach ($values as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f ($this-&gt;isJsonSelector($key)) {
+                Arr::set($groups, str_replace(&#039;-&gt;&#039;, &#039;.&#039;, Str::after($key, &#039;.&#039;)), $value);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $groups;
+    }
+
+    /**
+     * Compile a &quot;JSON&quot; patch statement into SQL.
+     *
+     * @param  string  $column
+     * @param  mixed  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileJsonPatch($column, $value)
+    {
+        return &quot;json_patch(ifnull({$this-&gt;wrap($column)}, json(&#039;{}&#039;)), json({$this-&gt;parameter($value)}))&quot;;
+    }
+
+    /**
+     * Compile an update statement with joins or limit into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUpdateWithJoinsOrLimit(Builder $query, array $values)
+    {
+        $table = $this-&gt;wrapTable($query-&gt;from);
+
+        $columns = $this-&gt;compileUpdateColumns($query, $values);
+
+        $alias = last(preg_split(&#039;/\s+as\s+/i&#039;, $query-&gt;from));
+
+        $selectSql = $this-&gt;compileSelect($query-&gt;select($alias.&#039;.rowid&#039;));
+
+        return &quot;update {$table} set {$columns} where {$this-&gt;wrap(&#039;rowid&#039;)} in ({$selectSql})&quot;;
+    }
+
+    /**
+     * Prepare the bindings for an update statement.
+     *
+     * @param  array  $bindings
+     * @param  array  $values
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function prepareBindingsForUpdate(array $bindings, array $values)
+    {
+        $groups = $this-&gt;groupJsonColumnsForUpdate($values);
+
+        $values = (new Collection($values))
+            -&gt;reject(fn ($value, $key) =&gt; <span style="background-color: red">$</span>this-&gt;isJsonSelector($key))
+            -&gt;merge($groups)
+            -&gt;map(fn ($value) =&gt; <span style="background-color: red">i</span>s_array($value) ? json_encode($value) : <span style="background-color: red">$</span>value)
+            -&gt;all();
+
+        $cleanBindings = Arr::except($bindings, &#039;select&#039;);
+
+        return array_values(
+            array_merge($values, Arr::flatten($cleanBindings))
+        );
+    }
+
+    /**
+     * Compile a delete statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileDelete(Builder $query)
+    {
+        <span style="background-color: red">i</span>f (isset($query-&gt;joins) || <span style="background-color: red">i</span>sset($query-&gt;limit)) {
+            return $this-&gt;compileDeleteWithJoinsOrLimit($query);
+        <span style="background-color: red">}</span>
+
+        return parent::compileDelete($query);
+    }
+
+    /**
+     * Compile a delete statement with joins or limit into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDeleteWithJoinsOrLimit(Builder $query)
+    {
+        $table = $this-&gt;wrapTable($query-&gt;from);
+
+        $alias = last(preg_split(&#039;/\s+as\s+/i&#039;, $query-&gt;from));
+
+        $selectSql = $this-&gt;compileSelect($query-&gt;select($alias.&#039;.rowid&#039;));
+
+        return &quot;delete from {$table} where {$this-&gt;wrap(&#039;rowid&#039;)} in ({$selectSql})&quot;;
+    }
+
+    /**
+     * Compile a truncate table statement into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function compileTruncate(Builder $query)
+    {
+        [$schema, $table] = $query-&gt;getConnection()-&gt;getSchemaBuilder()-&gt;parseSchemaAndTable($query-&gt;from);
+
+        $schema = $schema ? $this-&gt;wrapValue($schema).&#039;.&#039; : <span style="background-color: red">'</span>&#039;;
+
+        return [
+            &#039;delete from &#039;.$schema.&#039;sqlite_sequence where name = ?&#039; =&gt; [$query-&gt;getConnection()-&gt;getTablePrefix().$table],
+            &#039;delete from &#039;.$this-&gt;wrapTable($query-&gt;from) =&gt; [],
+        ];
+    }
+
+    /**
+     * Wrap the given JSON selector.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapJsonSelector($value)
+    {
+        [$field, $path] = $this-&gt;wrapJsonFieldAndPath($value);
+
+        return &#039;json_extract(&#039;.$field.$path.&#039;)&#039;;
+    }
+}
+</pre>

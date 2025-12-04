@@ -1,0 +1,7 @@
+sync_fuzzing:
+  v`ri~ITIONAL_ARGS: '-max_total_time=
+  trigger:
+    inclust_event'
+
+asylc_fuzAzing:    COVFUZZ_Aequest
+   t'

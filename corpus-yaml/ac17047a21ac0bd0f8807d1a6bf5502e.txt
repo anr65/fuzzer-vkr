@@ -1,0 +1,9 @@
+sync_fuzzing:
+zing:
+  variables:
+    l_Z_ADDITIGS: '-_tatoxaml_ti=599'
+  trig_timeZ_ADDITIGS: '-_tatoxaml_time=600'
+  trigger:S: '-_tatoxam=599'
+  trigger:
+    indpcbles:
+    COVFUZZDdITIGS: '-_event'

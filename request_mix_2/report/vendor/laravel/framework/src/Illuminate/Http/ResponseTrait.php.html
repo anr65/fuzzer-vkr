@@ -1,0 +1,183 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http;
+
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Symfony\Component\HttpFoundation\HeaderBag;
+use Throwable;
+
+trait ResponseTrait
+{
+    /**
+     * The original content of the response.
+     *
+     * @var mixed
+     */
+    public $original;
+
+    /**
+     * The exception that triggered the error response (if applicable).
+     *
+     * @var \Throwable|null
+     */
+    public $exception;
+
+    /**
+     * Get the status code for the response.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function status()
+    {
+        return $this-&gt;getStatusCode();
+    }
+
+    /**
+     * Get the status text for the response.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function statusText()
+    {
+        return $this-&gt;statusText;
+    }
+
+    /**
+     * Get the content of the response.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function content()
+    {
+        return $this-&gt;getContent();
+    }
+
+    /**
+     * Get the original response content.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getOriginalContent()
+    {
+        $original = $this-&gt;original;
+
+        return $original instanceof self ? $original-&gt;{__FUNCTION__}() : <span style="background-color: red">$</span>original;
+    }
+
+    /**
+     * Set a header on the Response.
+     *
+     * @param  string  $key
+     * @param  array|string  $values
+     * @param  bool  $replace
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function header($key, $values, $replace = true)
+    {
+        $this-&gt;headers-&gt;set($key, $values, $replace);
+
+        return $this;
+    }
+
+    /**
+     * Add an array of headers to the response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\HeaderBag|array  $headers
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withHeaders($headers)
+    {
+        <span style="background-color: red">i</span>f ($headers instanceof HeaderBag) {
+            $headers = $headers-&gt;all();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($headers as $key =&gt; $value) {
+            $this-&gt;headers-&gt;set($key, $value);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a cookie to the response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Cookie|mixed  $cookie
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function cookie($cookie)
+    {
+        return $this-&gt;withCookie(...func_get_args());
+    }
+
+    /**
+     * Add a cookie to the response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Cookie|mixed  $cookie
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withCookie($cookie)
+    {
+        <span style="background-color: red">i</span>f (is_string($cookie) &amp;&amp; <span style="background-color: red">f</span>unction_exists(&#039;cookie&#039;)) {
+            $cookie = cookie(...func_get_args());
+        <span style="background-color: red">}</span>
+
+        $this-&gt;headers-&gt;setCookie($cookie);
+
+        return $this;
+    }
+
+    /**
+     * Expire a cookie when sending the response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\Cookie|mixed  $cookie
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutCookie($cookie, $path = null, $domain = null)
+    {
+        <span style="background-color: red">i</span>f (is_string($cookie) &amp;&amp; <span style="background-color: red">f</span>unction_exists(&#039;cookie&#039;)) {
+            $cookie = cookie($cookie, null, -2628000, $path, $domain);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;headers-&gt;setCookie($cookie);
+
+        return $this;
+    }
+
+    /**
+     * Get the callback of the response.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getCallback()
+    {
+        return $this-&gt;callback ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Set the exception to attach to the response.
+     *
+     * @param  \Throwable  $e
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function withException(Throwable $e)
+    {
+        $this-&gt;exception = $e;
+
+        return $this;
+    }
+
+    /**
+     * Throws the response in a HttpResponseException instance.
+     *
+     * @return never
+     *
+     * @throws \Illuminate\Http\Exceptions\HttpResponseException
+     */
+    <span style="background-color: red">p</span>ublic function throwResponse()
+    {
+        throw new HttpResponseException($this);
+    }
+}
+</pre>

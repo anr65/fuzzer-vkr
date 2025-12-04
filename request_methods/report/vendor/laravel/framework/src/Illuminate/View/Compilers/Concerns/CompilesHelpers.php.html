@@ -1,0 +1,79 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Illuminate\Foundation\Vite;
+
+trait CompilesHelpers
+{
+    /**
+     * Compile the CSRF statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileCsrf()
+    {
+        return &#039;&lt;?php echo csrf_field(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the &quot;dd&quot; statements into valid PHP.
+     *
+     * @param  string  $arguments
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDd($arguments)
+    {
+        return &quot;&lt;?php dd{$arguments}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the &quot;dump&quot; statements into valid PHP.
+     *
+     * @param  string  $arguments
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDump($arguments)
+    {
+        return &quot;&lt;?php dump{$arguments}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the method statements into valid PHP.
+     *
+     * @param  string  $method
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileMethod($method)
+    {
+        return &quot;&lt;?php echo method_field{$method}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the &quot;vite&quot; statements into valid PHP.
+     *
+     * @param  string|null  $arguments
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileVite($arguments)
+    {
+        $arguments ??= <span style="background-color: red">'</span>()&#039;;
+
+        $class = Vite::class;
+
+        return &quot;&lt;?php echo app(&#039;$class&#039;){$arguments}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the &quot;viteReactRefresh&quot; statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileViteReactRefresh()
+    {
+        $class = Vite::class;
+
+        return &quot;&lt;?php echo app(&#039;$class&#039;)-&gt;reactRefresh(); ?&gt;&quot;;
+    }
+}
+</pre>

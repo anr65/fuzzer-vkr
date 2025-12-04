@@ -1,0 +1,797 @@
+<pre>&lt;?php
+
+namespace Illuminate\Filesystem;
+
+use ErrorException;
+use FilesystemIterator;
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
+use Illuminate\Support\LazyCollection;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
+use RuntimeException;
+use SplFileObject;
+use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
+use Symfony\Component\Finder\Finder;
+use Symfony\Component\Mime\MimeTypes;
+
+class Filesystem
+{
+    use Conditionable, Macroable;
+
+    /**
+     * Determine if a file or directory exists.
+     *
+     * @param  string  $path
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function exists($path)
+    {
+        return file_exists($path);
+    }
+
+    /**
+     * Determine if a file or directory is missing.
+     *
+     * @param  string  $path
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function missing($path)
+    {
+        return ! $this-&gt;exists($path);
+    }
+
+    /**
+     * Get the contents of a file.
+     *
+     * @param  string  $path
+     * @param  bool  $lock
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function get($path, $lock = false)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isFile($path)) {
+            return $lock ? $this-&gt;sharedGet($path) : <span style="background-color: red">f</span>ile_get_contents($path);
+        <span style="background-color: red">}</span>
+
+        throw new FileNotFoundException(&quot;File does not exist at path {$path}.&quot;);
+    }
+
+    /**
+     * Get the contents of a file as decoded JSON.
+     *
+     * @param  string  $path
+     * @param  int  $flags
+     * @param  bool  $lock
+     * @return array
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function json($path, $flags = 0, $lock = false)
+    {
+        return json_decode($this-&gt;get($path, $lock), true, 512, $flags);
+    }
+
+    /**
+     * Get contents of a file with shared access.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function sharedGet($path)
+    {
+        $contents = &#039;&#039;;
+
+        $handle = fopen($path, &#039;rb&#039;);
+
+        <span style="background-color: red">i</span>f ($handle) {
+            try {
+                <span style="background-color: red">i</span>f (flock($handle, LOCK_SH)) {
+                    clearstatcache(true, $path);
+
+                    $contents = fread($handle, $this-&gt;size($path) ?: <span style="background-color: red">1</span>);
+
+                    flock($handle, LOCK_UN);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">f</span>inally {
+                fclose($handle);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $contents;
+    }
+
+    /**
+     * Get the returned value of a file.
+     *
+     * @param  string  $path
+     * @param  array  $data
+     * @return mixed
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    <span style="background-color: green">p</span>ublic function getRequire($path, array $data = [])
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;isFile($path)) {
+            $__path = $path;
+            $__data = $data;
+
+            return (<span style="background-color: green">s</span>tatic function () use ($__path, $__data) {
+                extract($__data, EXTR_SKIP);
+
+                return require $__path;
+            })();
+        <span style="background-color: red">}</span>
+
+        throw new FileNotFoundException(&quot;File does not exist at path {$path}.&quot;);
+    }
+
+    /**
+     * Require the given file once.
+     *
+     * @param  string  $path
+     * @param  array  $data
+     * @return mixed
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function requireOnce($path, array $data = [])
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isFile($path)) {
+            $__path = $path;
+            $__data = $data;
+
+            return (<span style="background-color: red">s</span>tatic function () use ($__path, $__data) {
+                extract($__data, EXTR_SKIP);
+
+                return require_once $__path;
+            })();
+        <span style="background-color: red">}</span>
+
+        throw new FileNotFoundException(&quot;File does not exist at path {$path}.&quot;);
+    }
+
+    /**
+     * Get the contents of a file one line at a time.
+     *
+     * @param  string  $path
+     * @return \Illuminate\Support\LazyCollection
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function lines($path)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isFile($path)) {
+            throw new FileNotFoundException(
+                &quot;File does not exist at path {$path}.&quot;
+            );
+        <span style="background-color: red">}</span>
+
+        return new LazyCollection(<span style="background-color: red">f</span>unction () use ($path) {
+            $file = new SplFileObject($path);
+
+            $file-&gt;setFlags(SplFileObject::DROP_NEW_LINE);
+
+            <span style="background-color: red">w</span>hile (! $file-&gt;eof()) {
+                <span style="background-color: red">y</span>ield $file-&gt;fgets();
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Get the hash of the file at the given path.
+     *
+     * @param  string  $path
+     * @param  string  $algorithm
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function hash($path, $algorithm = &#039;md5&#039;)
+    {
+        return hash_file($algorithm, $path);
+    }
+
+    /**
+     * Write the contents of a file.
+     *
+     * @param  string  $path
+     * @param  string  $contents
+     * @param  bool  $lock
+     * @return int|bool
+     */
+    <span style="background-color: red">p</span>ublic function put($path, $contents, $lock = false)
+    {
+        return file_put_contents($path, $contents, $lock ? LOCK_EX : <span style="background-color: red">0</span>);
+    }
+
+    /**
+     * Write the contents of a file, replacing it atomically if it already exists.
+     *
+     * @param  string  $path
+     * @param  string  $content
+     * @param  int|null  $mode
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function replace($path, $content, $mode = null)
+    {
+        // If the path already exists and is a symlink, get the real path...
+        clearstatcache(true, $path);
+
+        $path = realpath($path) ?: <span style="background-color: red">$</span>path;
+
+        $tempPath = tempnam(dirname($path), basename($path));
+
+        // Fix permissions of tempPath because `tempnam()` creates it with permissions set to 0600...
+        <span style="background-color: red">i</span>f (! is_null($mode)) {
+            chmod($tempPath, $mode);
+        } <span style="background-color: red">e</span>lse {
+            chmod($tempPath, 0777 - umask());
+        <span style="background-color: red">}</span>
+
+        file_put_contents($tempPath, $content);
+
+        rename($tempPath, $path);
+    }
+
+    /**
+     * Replace a given string within a given file.
+     *
+     * @param  array|string  $search
+     * @param  array|string  $replace
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function replaceInFile($search, $replace, $path)
+    {
+        file_put_contents($path, str_replace($search, $replace, file_get_contents($path)));
+    }
+
+    /**
+     * Prepend to a file.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function prepend($path, $data)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;exists($path)) {
+            return $this-&gt;put($path, $data.$this-&gt;get($path));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;put($path, $data);
+    }
+
+    /**
+     * Append to a file.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @param  bool  $lock
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function append($path, $data, $lock = false)
+    {
+        return file_put_contents($path, $data, FILE_APPEND | ($lock ? LOCK_EX : <span style="background-color: red">0</span>));
+    }
+
+    /**
+     * Get or set UNIX mode of a file or directory.
+     *
+     * @param  string  $path
+     * @param  int|null  $mode
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function chmod($path, $mode = null)
+    {
+        <span style="background-color: red">i</span>f ($mode) {
+            return chmod($path, $mode);
+        <span style="background-color: red">}</span>
+
+        return substr(sprintf(&#039;%o&#039;, fileperms($path)), -4);
+    }
+
+    /**
+     * Delete the file at a given path.
+     *
+     * @param  string|array  $paths
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function delete($paths)
+    {
+        $paths = is_array($paths) ? $paths : <span style="background-color: red">f</span>unc_get_args();
+
+        $success = true;
+
+        <span style="background-color: red">f</span>oreach ($paths as $path) {
+            try {
+                <span style="background-color: red">i</span>f (@unlink($path)) {
+                    clearstatcache(false, $path);
+                } <span style="background-color: red">e</span>lse {
+                    $success = false;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">c</span>atch (ErrorException) {
+                $success = false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $success;
+    }
+
+    /**
+     * Move a file to a new location.
+     *
+     * @param  string  $path
+     * @param  string  $target
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function move($path, $target)
+    {
+        return rename($path, $target);
+    }
+
+    /**
+     * Copy a file to a new location.
+     *
+     * @param  string  $path
+     * @param  string  $target
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function copy($path, $target)
+    {
+        return copy($path, $target);
+    }
+
+    /**
+     * Create a symlink to the target file or directory. On Windows, a hard link is created if the target is a file.
+     *
+     * @param  string  $target
+     * @param  string  $link
+     * @return bool|null
+     */
+    <span style="background-color: red">p</span>ublic function link($target, $link)
+    {
+        <span style="background-color: red">i</span>f (! windows_os()) {
+            <span style="background-color: red">i</span>f (function_exists(&#039;symlink&#039;)) {
+                return symlink($target, $link);
+            } <span style="background-color: red">e</span>lse {
+                return exec(&#039;ln -s &#039;.escapeshellarg($target).&#039; &#039;.escapeshellarg($link)) !== false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $mode = $this-&gt;isDirectory($target) ? &#039;J&#039; : <span style="background-color: red">'</span>H&#039;;
+
+        exec(&quot;mklink /{$mode} &quot;.escapeshellarg($link).&#039; &#039;.escapeshellarg($target));
+    }
+
+    /**
+     * Create a relative symlink to the target file or directory.
+     *
+     * @param  string  $target
+     * @param  string  $link
+     * @return void
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function relativeLink($target, $link)
+    {
+        <span style="background-color: red">i</span>f (! class_exists(SymfonyFilesystem::class)) {
+            throw new RuntimeException(
+                &#039;To enable support for relative links, please install the symfony/filesystem package.&#039;
+            );
+        <span style="background-color: red">}</span>
+
+        $relativeTarget = (new SymfonyFilesystem)-&gt;makePathRelative($target, dirname($link));
+
+        $this-&gt;link($this-&gt;isFile($target) ? rtrim($relativeTarget, &#039;/&#039;) : <span style="background-color: red">$</span>relativeTarget, $link);
+    }
+
+    /**
+     * Extract the file name from a file path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function name($path)
+    {
+        return pathinfo($path, PATHINFO_FILENAME);
+    }
+
+    /**
+     * Extract the trailing name component from a file path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function basename($path)
+    {
+        return pathinfo($path, PATHINFO_BASENAME);
+    }
+
+    /**
+     * Extract the parent directory from a file path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function dirname($path)
+    {
+        return pathinfo($path, PATHINFO_DIRNAME);
+    }
+
+    /**
+     * Extract the file extension from a file path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function extension($path)
+    {
+        return pathinfo($path, PATHINFO_EXTENSION);
+    }
+
+    /**
+     * Guess the file extension from the mime-type of a given file.
+     *
+     * @param  string  $path
+     * @return string|null
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function guessExtension($path)
+    {
+        <span style="background-color: red">i</span>f (! class_exists(MimeTypes::class)) {
+            throw new RuntimeException(
+                &#039;To enable support for guessing extensions, please install the symfony/mime package.&#039;
+            );
+        <span style="background-color: red">}</span>
+
+        return (new MimeTypes)-&gt;getExtensions($this-&gt;mimeType($path))[0] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get the file type of a given file.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function type($path)
+    {
+        return filetype($path);
+    }
+
+    /**
+     * Get the mime-type of a given file.
+     *
+     * @param  string  $path
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function mimeType($path)
+    {
+        return finfo_file(finfo_open(FILEINFO_MIME_TYPE), $path);
+    }
+
+    /**
+     * Get the file size of a given file.
+     *
+     * @param  string  $path
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function size($path)
+    {
+        return filesize($path);
+    }
+
+    /**
+     * Get the file&#039;s last modification time.
+     *
+     * @param  string  $path
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function lastModified($path)
+    {
+        return filemtime($path);
+    }
+
+    /**
+     * Determine if the given path is a directory.
+     *
+     * @param  string  $directory
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isDirectory($directory)
+    {
+        return is_dir($directory);
+    }
+
+    /**
+     * Determine if the given path is a directory that does not contain any other files or directories.
+     *
+     * @param  string  $directory
+     * @param  bool  $ignoreDotFiles
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isEmptyDirectory($directory, $ignoreDotFiles = false)
+    {
+        return ! Finder::create()-&gt;ignoreDotFiles($ignoreDotFiles)-&gt;in($directory)-&gt;depth(0)-&gt;hasResults();
+    }
+
+    /**
+     * Determine if the given path is readable.
+     *
+     * @param  string  $path
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isReadable($path)
+    {
+        return is_readable($path);
+    }
+
+    /**
+     * Determine if the given path is writable.
+     *
+     * @param  string  $path
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isWritable($path)
+    {
+        return is_writable($path);
+    }
+
+    /**
+     * Determine if two files are the same by comparing their hashes.
+     *
+     * @param  string  $firstFile
+     * @param  string  $secondFile
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasSameHash($firstFile, $secondFile)
+    {
+        $hash = @hash_file(&#039;xxh128&#039;, $firstFile);
+
+        return $hash &amp;&amp; <span style="background-color: red">h</span>ash_equals($hash, (string) @hash_file(&#039;xxh128&#039;, $secondFile));
+    }
+
+    /**
+     * Determine if the given path is a file.
+     *
+     * @param  string  $file
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function isFile($file)
+    {
+        return is_file($file);
+    }
+
+    /**
+     * Find path names matching a given pattern.
+     *
+     * @param  string  $pattern
+     * @param  int  $flags
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function glob($pattern, $flags = 0)
+    {
+        return glob($pattern, $flags);
+    }
+
+    /**
+     * Get an array of all files in a directory.
+     *
+     * @param  string  $directory
+     * @param  bool  $hidden
+     * @return \Symfony\Component\Finder\SplFileInfo[]
+     */
+    <span style="background-color: red">p</span>ublic function files($directory, $hidden = false)
+    {
+        return iterator_to_array(
+            Finder::create()-&gt;files()-&gt;ignoreDotFiles(! $hidden)-&gt;in($directory)-&gt;depth(0)-&gt;sortByName(),
+            false
+        );
+    }
+
+    /**
+     * Get all of the files from the given directory (recursive).
+     *
+     * @param  string  $directory
+     * @param  bool  $hidden
+     * @return \Symfony\Component\Finder\SplFileInfo[]
+     */
+    <span style="background-color: red">p</span>ublic function allFiles($directory, $hidden = false)
+    {
+        return iterator_to_array(
+            Finder::create()-&gt;files()-&gt;ignoreDotFiles(! $hidden)-&gt;in($directory)-&gt;sortByName(),
+            false
+        );
+    }
+
+    /**
+     * Get all of the directories within a given directory.
+     *
+     * @param  string  $directory
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function directories($directory)
+    {
+        $directories = [];
+
+        <span style="background-color: red">f</span>oreach (Finder::create()-&gt;in($directory)-&gt;directories()-&gt;depth(0)-&gt;sortByName() as $dir) {
+            $directories[] = $dir-&gt;getPathname();
+        <span style="background-color: red">}</span>
+
+        return $directories;
+    }
+
+    /**
+     * Ensure a directory exists.
+     *
+     * @param  string  $path
+     * @param  int  $mode
+     * @param  bool  $recursive
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function ensureDirectoryExists($path, $mode = 0755, $recursive = true)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isDirectory($path)) {
+            $this-&gt;makeDirectory($path, $mode, $recursive);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a directory.
+     *
+     * @param  string  $path
+     * @param  int  $mode
+     * @param  bool  $recursive
+     * @param  bool  $force
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function makeDirectory($path, $mode = 0755, $recursive = false, $force = false)
+    {
+        <span style="background-color: red">i</span>f ($force) {
+            return @mkdir($path, $mode, $recursive);
+        <span style="background-color: red">}</span>
+
+        return mkdir($path, $mode, $recursive);
+    }
+
+    /**
+     * Move a directory.
+     *
+     * @param  string  $from
+     * @param  string  $to
+     * @param  bool  $overwrite
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function moveDirectory($from, $to, $overwrite = false)
+    {
+        <span style="background-color: red">i</span>f ($overwrite &amp;&amp; <span style="background-color: red">$</span>this-&gt;isDirectory($to) &amp;&amp; <span style="background-color: red">!</span> $this-&gt;deleteDirectory($to)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return @rename($from, $to) === true;
+    }
+
+    /**
+     * Copy a directory from one location to another.
+     *
+     * @param  string  $directory
+     * @param  string  $destination
+     * @param  int|null  $options
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function copyDirectory($directory, $destination, $options = null)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isDirectory($directory)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $options = $options ?: <span style="background-color: red">F</span>ilesystemIterator::SKIP_DOTS;
+
+        // If the destination directory does not actually exist, we will go ahead and
+        // create it recursively, which just gets the destination prepared to copy
+        // the files over. Once we make the directory we&#039;ll proceed the copying.
+        $this-&gt;ensureDirectoryExists($destination, 0777);
+
+        $items = new FilesystemIterator($directory, $options);
+
+        <span style="background-color: red">f</span>oreach ($items as $item) {
+            // As we spin through items, we will check to see if the current file is actually
+            // a directory or a file. When it is actually a directory we will need to call
+            // back into this function recursively to keep copying these nested folders.
+            $target = $destination.&#039;/&#039;.$item-&gt;getBasename();
+
+            <span style="background-color: red">i</span>f ($item-&gt;isDir()) {
+                $path = $item-&gt;getPathname();
+
+                <span style="background-color: red">i</span>f (! $this-&gt;copyDirectory($path, $target, $options)) {
+                    return false;
+                <span style="background-color: red">}</span>
+            }
+
+            // If the current items is just a regular file, we will just copy this to the new
+            // location and keep looping. If for some reason the copy fails we&#039;ll bail out
+            // and return false, so the developer is aware that the copy process failed.
+            <span style="background-color: red">e</span>lseif (! $this-&gt;copy($item-&gt;getPathname(), $target)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Recursively delete a directory.
+     *
+     * The directory itself may be optionally preserved.
+     *
+     * @param  string  $directory
+     * @param  bool  $preserve
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function deleteDirectory($directory, $preserve = false)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isDirectory($directory)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $items = new FilesystemIterator($directory);
+
+        <span style="background-color: red">f</span>oreach ($items as $item) {
+            // If the item is a directory, we can just recurse into the function and
+            // delete that sub-directory otherwise we&#039;ll just delete the file and
+            // keep iterating through each file until the directory is cleaned.
+            <span style="background-color: red">i</span>f ($item-&gt;isDir() &amp;&amp; <span style="background-color: red">!</span> $item-&gt;isLink()) {
+                $this-&gt;deleteDirectory($item-&gt;getPathname());
+            }
+
+            // If the item is just a file, we can go ahead and delete it since we&#039;re
+            // just looping through and waxing all of the files in this directory
+            // and calling directories recursively, so we delete the real path.
+            <span style="background-color: red">e</span>lse {
+                $this-&gt;delete($item-&gt;getPathname());
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        unset($items);
+
+        <span style="background-color: red">i</span>f (! $preserve) {
+            @rmdir($directory);
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Remove all of the directories within a given directory.
+     *
+     * @param  string  $directory
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function deleteDirectories($directory)
+    {
+        $allDirectories = $this-&gt;directories($directory);
+
+        <span style="background-color: red">i</span>f (! empty($allDirectories)) {
+            <span style="background-color: red">f</span>oreach ($allDirectories as $directoryName) {
+                $this-&gt;deleteDirectory($directoryName);
+            <span style="background-color: red">}</span>
+
+            return true;
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Empty the specified directory of all files and folders.
+     *
+     * @param  string  $directory
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function cleanDirectory($directory)
+    {
+        return $this-&gt;deleteDirectory($directory, true);
+    }
+}
+</pre>

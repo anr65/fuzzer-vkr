@@ -1,0 +1,137 @@
+<pre>&lt;?php
+
+/*
+ * Copyright 2012 Johannes M. Schmitt &lt;schmittjoh@gmail.com&gt;
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+namespace PhpOption;
+
+use EmptyIterator;
+
+/**
+ * @extends Option&lt;mixed&gt;
+ */
+final class None extends Option
+{
+    /** @var None|null */
+    private static $instance;
+
+    /**
+     * @return None
+     */
+    <span style="background-color: green">p</span>ublic static function create(): self
+    {
+        <span style="background-color: green">i</span>f (null === self::$instance) {
+            self::$instance = new self();
+        <span style="background-color: green">}</span>
+
+        return self::$instance;
+    }
+
+    <span style="background-color: red">p</span>ublic function get()
+    {
+        throw new \RuntimeException(&#039;None has no value.&#039;);
+    }
+
+    <span style="background-color: green">p</span>ublic function getOrCall($callable)
+    {
+        return $callable();
+    }
+
+    <span style="background-color: green">p</span>ublic function getOrElse($default)
+    {
+        return $default;
+    }
+
+    <span style="background-color: red">p</span>ublic function getOrThrow(\Exception $ex)
+    {
+        throw $ex;
+    }
+
+    <span style="background-color: red">p</span>ublic function isEmpty(): bool
+    {
+        return true;
+    }
+
+    <span style="background-color: green">p</span>ublic function isDefined(): bool
+    {
+        return false;
+    }
+
+    <span style="background-color: red">p</span>ublic function orElse(Option $else)
+    {
+        return $else;
+    }
+
+    <span style="background-color: red">p</span>ublic function ifDefined($callable)
+    {
+        // Just do nothing in that case.
+    }
+
+    <span style="background-color: red">p</span>ublic function forAll($callable)
+    {
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function map($callable)
+    {
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function flatMap($callable)
+    {
+        return $this;
+    }
+
+    <span style="background-color: green">p</span>ublic function filter($callable)
+    {
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function filterNot($callable)
+    {
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function select($value)
+    {
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function reject($value)
+    {
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getIterator(): EmptyIterator
+    {
+        return new EmptyIterator();
+    }
+
+    <span style="background-color: red">p</span>ublic function foldLeft($initialValue, $callable)
+    {
+        return $initialValue;
+    }
+
+    <span style="background-color: red">p</span>ublic function foldRight($initialValue, $callable)
+    {
+        return $initialValue;
+    }
+
+    <span style="background-color: green">p</span>rivate function __construct()
+    {
+    }
+}
+</pre>

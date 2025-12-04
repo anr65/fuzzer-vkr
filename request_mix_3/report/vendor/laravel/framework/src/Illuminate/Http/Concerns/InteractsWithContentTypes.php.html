@@ -1,0 +1,180 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Concerns;
+
+use Illuminate\Support\Str;
+
+trait InteractsWithContentTypes
+{
+    /**
+     * Determine if the request is sending JSON.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function isJson()
+    {
+        return Str::contains($this-&gt;header(&#039;CONTENT_TYPE&#039;) ?? <span style="background-color: red">'</span>&#039;, [&#039;/json&#039;, &#039;+json&#039;]);
+    }
+
+    /**
+     * Determine if the current request probably expects a JSON response.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function expectsJson()
+    {
+        return ($this-&gt;ajax() &amp;&amp; <span style="background-color: red">!</span> $this-&gt;pjax() &amp;&amp; <span style="background-color: red">$</span>this-&gt;acceptsAnyContentType()) || <span style="background-color: green">$</span>this-&gt;wantsJson();
+    }
+
+    /**
+     * Determine if the current request is asking for JSON.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function wantsJson()
+    {
+        $acceptable = $this-&gt;getAcceptableContentTypes();
+
+        return isset($acceptable[0]) &amp;&amp; <span style="background-color: green">S</span>tr::contains(strtolower($acceptable[0]), [&#039;/json&#039;, &#039;+json&#039;]);
+    }
+
+    /**
+     * Determines whether the current requests accepts a given content type.
+     *
+     * @param  string|array  $contentTypes
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function accepts($contentTypes)
+    {
+        $accepts = $this-&gt;getAcceptableContentTypes();
+
+        <span style="background-color: red">i</span>f (count($accepts) === 0) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        $types = (array) $contentTypes;
+
+        <span style="background-color: red">f</span>oreach ($accepts as $accept) {
+            <span style="background-color: red">i</span>f ($accept === &#039;*/*&#039; || <span style="background-color: red">$</span>accept === &#039;*&#039;) {
+                return true;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ($types as $type) {
+                $accept = strtolower($accept);
+
+                $type = strtolower($type);
+
+                <span style="background-color: red">i</span>f ($this-&gt;matchesType($accept, $type) || <span style="background-color: red">$</span>accept === strtok($type, &#039;/&#039;).&#039;/*&#039;) {
+                    return true;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Return the most suitable content type from the given array based on content negotiation.
+     *
+     * @param  string|array  $contentTypes
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function prefers($contentTypes)
+    {
+        $accepts = $this-&gt;getAcceptableContentTypes();
+
+        $contentTypes = (array) $contentTypes;
+
+        <span style="background-color: red">f</span>oreach ($accepts as $accept) {
+            <span style="background-color: red">i</span>f (in_array($accept, [&#039;*/*&#039;, &#039;*&#039;])) {
+                return $contentTypes[0];
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ($contentTypes as $contentType) {
+                $type = $contentType;
+
+                <span style="background-color: red">i</span>f (! is_null($mimeType = $this-&gt;getMimeType($contentType))) {
+                    $type = $mimeType;
+                <span style="background-color: red">}</span>
+
+                $accept = strtolower($accept);
+
+                $type = strtolower($type);
+
+                <span style="background-color: red">i</span>f ($this-&gt;matchesType($type, $accept) || <span style="background-color: red">$</span>accept === strtok($type, &#039;/&#039;).&#039;/*&#039;) {
+                    return $contentType;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the current request accepts any content type.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function acceptsAnyContentType()
+    {
+        $acceptable = $this-&gt;getAcceptableContentTypes();
+
+        return count($acceptable) === 0 || (
+            <span style="background-color: red">i</span>sset($acceptable[0]) &amp;&amp; (<span style="background-color: red">$</span>acceptable[0] === &#039;*/*&#039; || <span style="background-color: red">$</span>acceptable[0] === &#039;*&#039;)
+        );
+    }
+
+    /**
+     * Determines whether a request accepts JSON.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function acceptsJson()
+    {
+        return $this-&gt;accepts(&#039;application/json&#039;);
+    }
+
+    /**
+     * Determines whether a request accepts HTML.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function acceptsHtml()
+    {
+        return $this-&gt;accepts(&#039;text/html&#039;);
+    }
+
+    /**
+     * Determine if the given content types match.
+     *
+     * @param  string  $actual
+     * @param  string  $type
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function matchesType($actual, $type)
+    {
+        <span style="background-color: red">i</span>f ($actual === $type) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        $split = explode(&#039;/&#039;, $actual);
+
+        return isset($split[1]) &amp;&amp; <span style="background-color: red">p</span>reg_match(&#039;#&#039;.preg_quote($split[0], &#039;#&#039;).&#039;/.+\+&#039;.preg_quote($split[1], &#039;#&#039;).&#039;#&#039;, $type);
+    }
+
+    /**
+     * Get the data format expected in the response.
+     *
+     * @param  string  $default
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function format($default = &#039;html&#039;)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;getAcceptableContentTypes() as $type) {
+            <span style="background-color: red">i</span>f ($format = $this-&gt;getFormat($type)) {
+                return $format;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+}
+</pre>

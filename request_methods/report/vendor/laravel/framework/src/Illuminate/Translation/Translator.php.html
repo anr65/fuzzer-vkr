@@ -1,0 +1,592 @@
+<pre>&lt;?php
+
+namespace Illuminate\Translation;
+
+use Closure;
+use Illuminate\Contracts\Translation\Loader;
+use Illuminate\Contracts\Translation\Translator as TranslatorContract;
+use Illuminate\Support\Arr;
+use Illuminate\Support\NamespacedItemResolver;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\ReflectsClosures;
+use InvalidArgumentException;
+
+class Translator extends NamespacedItemResolver implements TranslatorContract
+{
+    use Macroable, ReflectsClosures;
+
+    /**
+     * The loader implementation.
+     *
+     * @var \Illuminate\Contracts\Translation\Loader
+     */
+    protected $loader;
+
+    /**
+     * The default locale being used by the translator.
+     *
+     * @var string
+     */
+    protected $locale;
+
+    /**
+     * The fallback locale used by the translator.
+     *
+     * @var string
+     */
+    protected $fallback;
+
+    /**
+     * The array of loaded translation groups.
+     *
+     * @var array
+     */
+    protected $loaded = [];
+
+    /**
+     * The message selector.
+     *
+     * @var \Illuminate\Translation\MessageSelector
+     */
+    protected $selector;
+
+    /**
+     * The callable that should be invoked to determine applicable locales.
+     *
+     * @var callable
+     */
+    protected $determineLocalesUsing;
+
+    /**
+     * The custom rendering callbacks for stringable objects.
+     *
+     * @var array
+     */
+    protected $stringableHandlers = [];
+
+    /**
+     * The callback that is responsible for handling missing translation keys.
+     *
+     * @var callable|null
+     */
+    protected $missingTranslationKeyCallback;
+
+    /**
+     * Indicates whether missing translation keys should be handled.
+     *
+     * @var bool
+     */
+    protected $handleMissingTranslationKeys = true;
+
+    /**
+     * Create a new translator instance.
+     *
+     * @param  \Illuminate\Contracts\Translation\Loader  $loader
+     * @param  string  $locale
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Loader $loader, $locale)
+    {
+        $this-&gt;loader = $loader;
+
+        $this-&gt;setLocale($locale);
+    }
+
+    /**
+     * Determine if a translation exists for a given locale.
+     *
+     * @param  string  $key
+     * @param  string|null  $locale
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasForLocale($key, $locale = null)
+    {
+        return $this-&gt;has($key, $locale, false);
+    }
+
+    /**
+     * Determine if a translation exists.
+     *
+     * @param  string  $key
+     * @param  string|null  $locale
+     * @param  bool  $fallback
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function has($key, $locale = null, $fallback = true)
+    {
+        $locale = $locale ?: <span style="background-color: red">$</span>this-&gt;locale;
+
+        // We should temporarily disable the handling of missing translation keys
+        // while performing the existence check. After the check, we will turn
+        // the missing translation keys handling back to its original value.
+        $handleMissingTranslationKeys = $this-&gt;handleMissingTranslationKeys;
+
+        $this-&gt;handleMissingTranslationKeys = false;
+
+        $line = $this-&gt;get($key, [], $locale, $fallback);
+
+        $this-&gt;handleMissingTranslationKeys = $handleMissingTranslationKeys;
+
+        // For JSON translations, the loaded files will contain the correct line.
+        // Otherwise, we must assume we are handling typical translation file
+        // and check if the returned line is not the same as the given key.
+        <span style="background-color: red">i</span>f (! is_null($this-&gt;loaded[&#039;*&#039;][&#039;*&#039;][$locale][$key] ?? <span style="background-color: red">n</span>ull)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return $line !== $key;
+    }
+
+    /**
+     * Get the translation for the given key.
+     *
+     * @param  string  $key
+     * @param  array  $replace
+     * @param  string|null  $locale
+     * @param  bool  $fallback
+     * @return string|array
+     */
+    <span style="background-color: green">p</span>ublic function get($key, array $replace = [], $locale = null, $fallback = true)
+    {
+        $locale = $locale ?: <span style="background-color: green">$</span>this-&gt;locale;
+
+        // For JSON translations, there is only one file per locale, so we will simply load
+        // that file and then we will be ready to check the array for the key. These are
+        // only one level deep so we do not need to do any fancy searching through it.
+        $this-&gt;load(&#039;*&#039;, &#039;*&#039;, $locale);
+
+        $line = $this-&gt;loaded[&#039;*&#039;][&#039;*&#039;][$locale][$key] ?? <span style="background-color: green">n</span>ull;
+
+        // If we can&#039;t find a translation for the JSON key, we will attempt to translate it
+        // using the typical translation file. This way developers can always just use a
+        // helper such as __ instead of having to pick between trans or __ with views.
+        <span style="background-color: green">i</span>f (! isset($line)) {
+            [$namespace, $group, $item] = $this-&gt;parseKey($key);
+
+            // Here we will get the locale that should be used for the language line. If one
+            // was not passed, we will use the default locales which was given to us when
+            // the translator was instantiated. Then, we can load the lines and return.
+            $locales = $fallback ? $this-&gt;localeArray($locale) : <span style="background-color: red">[</span>$locale];
+
+            <span style="background-color: green">f</span>oreach ($locales as $languageLineLocale) {
+                <span style="background-color: red">i</span>f (! is_null($line = $this-&gt;getLine(
+                    $namespace, $group, $languageLineLocale, $item, $replace
+                ))) {
+                    return $line;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            $key = $this-&gt;handleMissingTranslationKey(
+                $key, $replace, $locale, $fallback
+            );
+        <span style="background-color: green">}</span>
+
+        // If the line doesn&#039;t exist, we will return back the key which was requested as
+        // that will be quick to spot in the UI if language keys are wrong or missing
+        // from the application&#039;s language files. Otherwise we can return the line.
+        return $this-&gt;makeReplacements($line ?: <span style="background-color: green">$</span>key, $replace);
+    }
+
+    /**
+     * Get a translation according to an integer value.
+     *
+     * @param  string  $key
+     * @param  \Countable|int|float|array  $number
+     * @param  array  $replace
+     * @param  string|null  $locale
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function choice($key, $number, array $replace = [], $locale = null)
+    {
+        $line = $this-&gt;get(
+            $key, [], $locale = $this-&gt;localeForChoice($key, $locale)
+        );
+
+        // If the given &quot;number&quot; is actually an array or countable we will simply count the
+        // number of elements in an instance. This allows developers to pass an array of
+        // items without having to count it on their end first which gives bad syntax.
+        <span style="background-color: red">i</span>f (is_countable($number)) {
+            $number = count($number);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($replace[&#039;count&#039;])) {
+            $replace[&#039;count&#039;] = $number;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;makeReplacements(
+            $this-&gt;getSelector()-&gt;choose($line, $number, $locale), $replace
+        );
+    }
+
+    /**
+     * Get the proper locale for a choice operation.
+     *
+     * @param  string  $key
+     * @param  string|null  $locale
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function localeForChoice($key, $locale)
+    {
+        $locale = $locale ?: <span style="background-color: red">$</span>this-&gt;locale;
+
+        return $this-&gt;hasForLocale($key, $locale) ? $locale : <span style="background-color: red">$</span>this-&gt;fallback;
+    }
+
+    /**
+     * Retrieve a language line out the loaded array.
+     *
+     * @param  string  $namespace
+     * @param  string  $group
+     * @param  string  $locale
+     * @param  string  $item
+     * @param  array  $replace
+     * @return string|array|null
+     */
+    <span style="background-color: green">p</span>rotected function getLine($namespace, $group, $locale, $item, array $replace)
+    {
+        $this-&gt;load($namespace, $group, $locale);
+
+        $line = Arr::get($this-&gt;loaded[$namespace][$group][$locale], $item);
+
+        <span style="background-color: red">i</span>f (is_string($line)) {
+            return $this-&gt;makeReplacements($line, $replace);
+        } <span style="background-color: red">e</span>lseif (is_array($line) &amp;&amp; <span style="background-color: green">c</span>ount($line) &gt; 0) {
+            array_walk_recursive($line, <span style="background-color: red">f</span>unction (&amp;$value, $key) use ($replace) {
+                $value = $this-&gt;makeReplacements($value, $replace);
+            });
+
+            return $line;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Make the place-holder replacements on a line.
+     *
+     * @param  string  $line
+     * @param  array  $replace
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function makeReplacements($line, array $replace)
+    {
+        <span style="background-color: green">i</span>f (empty($replace)) {
+            return $line;
+        <span style="background-color: red">}</span>
+
+        $shouldReplace = [];
+
+        <span style="background-color: red">f</span>oreach ($replace as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f ($value instanceof Closure) {
+                $line = preg_replace_callback(
+                    &#039;/&lt;&#039;.$key.&#039;&gt;(.*?)&lt;\/&#039;.$key.&#039;&gt;/&#039;,
+                    fn ($args) =&gt; <span style="background-color: red">$</span>value($args[1]),
+                    $line
+                );
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (is_object($value) &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;stringableHandlers[get_class($value)])) {
+                $value = call_user_func($this-&gt;stringableHandlers[get_class($value)], $value);
+            <span style="background-color: red">}</span>
+
+            $shouldReplace[&#039;:&#039;.Str::ucfirst($key)] = Str::ucfirst($value ?? <span style="background-color: red">'</span>&#039;);
+            $shouldReplace[&#039;:&#039;.Str::upper($key)] = Str::upper($value ?? <span style="background-color: red">'</span>&#039;);
+            $shouldReplace[&#039;:&#039;.$key] = $value;
+        <span style="background-color: red">}</span>
+
+        return strtr($line, $shouldReplace);
+    }
+
+    /**
+     * Add translation lines to the given locale.
+     *
+     * @param  array  $lines
+     * @param  string  $locale
+     * @param  string  $namespace
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addLines(array $lines, $locale, $namespace = &#039;*&#039;)
+    {
+        <span style="background-color: red">f</span>oreach ($lines as $key =&gt; $value) {
+            [$group, $item] = explode(&#039;.&#039;, $key, 2);
+
+            Arr::set($this-&gt;loaded, &quot;$namespace.$group.$locale.$item&quot;, $value);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Load the specified language group.
+     *
+     * @param  string  $namespace
+     * @param  string  $group
+     * @param  string  $locale
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function load($namespace, $group, $locale)
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;isLoaded($namespace, $group, $locale)) {
+            return;
+        <span style="background-color: green">}</span>
+
+        // The loader is responsible for returning the array of language lines for the
+        // given namespace, group, and locale. We&#039;ll set the lines in this array of
+        // lines that have already been loaded so that we can easily access them.
+        $lines = $this-&gt;loader-&gt;load($locale, $group, $namespace);
+
+        $this-&gt;loaded[$namespace][$group][$locale] = $lines;
+    }
+
+    /**
+     * Determine if the given group has been loaded.
+     *
+     * @param  string  $namespace
+     * @param  string  $group
+     * @param  string  $locale
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function isLoaded($namespace, $group, $locale)
+    {
+        return isset($this-&gt;loaded[$namespace][$group][$locale]);
+    }
+
+    /**
+     * Handle a missing translation key.
+     *
+     * @param  string  $key
+     * @param  array  $replace
+     * @param  string|null  $locale
+     * @param  bool  $fallback
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function handleMissingTranslationKey($key, $replace, $locale, $fallback)
+    {
+        <span style="background-color: green">i</span>f (! $this-&gt;handleMissingTranslationKeys ||
+            <span style="background-color: green">!</span> isset($this-&gt;missingTranslationKeyCallback)) {
+            return $key;
+        <span style="background-color: red">}</span>
+
+        // Prevent infinite loops...
+        $this-&gt;handleMissingTranslationKeys = false;
+
+        $key = call_user_func(
+            $this-&gt;missingTranslationKeyCallback,
+            $key, $replace, $locale, $fallback
+        ) ?? <span style="background-color: red">$</span>key;
+
+        $this-&gt;handleMissingTranslationKeys = true;
+
+        return $key;
+    }
+
+    /**
+     * Register a callback that is responsible for handling missing translation keys.
+     *
+     * @param  callable|null  $callback
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function handleMissingKeysUsing(?callable $callback)
+    {
+        $this-&gt;missingTranslationKeyCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Add a new namespace to the loader.
+     *
+     * @param  string  $namespace
+     * @param  string  $hint
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addNamespace($namespace, $hint)
+    {
+        $this-&gt;loader-&gt;addNamespace($namespace, $hint);
+    }
+
+    /**
+     * Add a new path to the loader.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addPath($path)
+    {
+        $this-&gt;loader-&gt;addPath($path);
+    }
+
+    /**
+     * Add a new JSON path to the loader.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addJsonPath($path)
+    {
+        $this-&gt;loader-&gt;addJsonPath($path);
+    }
+
+    /**
+     * Parse a key into namespace, group, and item.
+     *
+     * @param  string  $key
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function parseKey($key)
+    {
+        $segments = parent::parseKey($key);
+
+        <span style="background-color: green">i</span>f (is_null($segments[0])) {
+            $segments[0] = &#039;*&#039;;
+        <span style="background-color: green">}</span>
+
+        return $segments;
+    }
+
+    /**
+     * Get the array of locales to be checked.
+     *
+     * @param  string|null  $locale
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function localeArray($locale)
+    {
+        $locales = array_filter([$locale ?: <span style="background-color: red">$</span>this-&gt;locale, $this-&gt;fallback]);
+
+        return call_user_func($this-&gt;determineLocalesUsing ?: <span style="background-color: green">f</span>n () =&gt; <span style="background-color: green">$</span>locales, $locales);
+    }
+
+    /**
+     * Specify a callback that should be invoked to determined the applicable locale array.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function determineLocalesUsing($callback)
+    {
+        $this-&gt;determineLocalesUsing = $callback;
+    }
+
+    /**
+     * Get the message selector instance.
+     *
+     * @return \Illuminate\Translation\MessageSelector
+     */
+    <span style="background-color: red">p</span>ublic function getSelector()
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;selector)) {
+            $this-&gt;selector = new MessageSelector;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;selector;
+    }
+
+    /**
+     * Set the message selector instance.
+     *
+     * @param  \Illuminate\Translation\MessageSelector  $selector
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setSelector(MessageSelector $selector)
+    {
+        $this-&gt;selector = $selector;
+    }
+
+    /**
+     * Get the language line loader implementation.
+     *
+     * @return \Illuminate\Contracts\Translation\Loader
+     */
+    <span style="background-color: red">p</span>ublic function getLoader()
+    {
+        return $this-&gt;loader;
+    }
+
+    /**
+     * Get the default locale being used.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function locale()
+    {
+        return $this-&gt;getLocale();
+    }
+
+    /**
+     * Get the default locale being used.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getLocale()
+    {
+        return $this-&gt;locale;
+    }
+
+    /**
+     * Set the default locale.
+     *
+     * @param  string  $locale
+     * @return void
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function setLocale($locale)
+    {
+        <span style="background-color: red">i</span>f (Str::contains($locale, [&#039;/&#039;, &#039;\\&#039;])) {
+            throw new InvalidArgumentException(&#039;Invalid characters present in locale.&#039;);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;locale = $locale;
+    }
+
+    /**
+     * Get the fallback locale being used.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getFallback()
+    {
+        return $this-&gt;fallback;
+    }
+
+    /**
+     * Set the fallback locale being used.
+     *
+     * @param  string  $fallback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function setFallback($fallback)
+    {
+        $this-&gt;fallback = $fallback;
+    }
+
+    /**
+     * Set the loaded translation groups.
+     *
+     * @param  array  $loaded
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setLoaded(array $loaded)
+    {
+        $this-&gt;loaded = $loaded;
+    }
+
+    /**
+     * Add a handler to be executed in order to format a given class to a string during translation replacements.
+     *
+     * @param  callable|string  $class
+     * @param  callable|null  $handler
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function stringable($class, $handler = null)
+    {
+        <span style="background-color: red">i</span>f ($class instanceof Closure) {
+            [$class, $handler] = [
+                $this-&gt;firstClosureParameterType($class),
+                $class,
+            ];
+        <span style="background-color: red">}</span>
+
+        $this-&gt;stringableHandlers[$class] = $handler;
+    }
+}
+</pre>

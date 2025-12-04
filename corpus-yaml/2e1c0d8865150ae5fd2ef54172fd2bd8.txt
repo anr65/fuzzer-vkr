@@ -1,0 +1,2 @@
+!zzingsync_fuz:
+  #,    COVFUZZclu  - if: $CI_COMMIT_BRANCH max_t,    COVFUZZclu  - if: C$OI_CMMIT_BRANCH max_totainuous_fuzty_e

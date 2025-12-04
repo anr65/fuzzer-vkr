@@ -1,0 +1,195 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+
+class TrustProxies
+{
+    /**
+     * The trusted proxies for the application.
+     *
+     * @var array&lt;int, string&gt;|string|null
+     */
+    protected $proxies;
+
+    /**
+     * The trusted proxies headers for the application.
+     *
+     * @var int
+     */
+    protected $headers = Request::HEADER_X_FORWARDED_FOR |
+        Request::HEADER_X_FORWARDED_HOST |
+        Request::HEADER_X_FORWARDED_PORT |
+        Request::HEADER_X_FORWARDED_PROTO |
+        Request::HEADER_X_FORWARDED_PREFIX |
+        Request::HEADER_X_FORWARDED_AWS_ELB;
+
+    /**
+     * The proxies that have been configured to always be trusted.
+     *
+     * @var array&lt;int, string&gt;|string|null
+     */
+    protected static $alwaysTrustProxies;
+
+    /**
+     * The proxies headers that have been configured to always be trusted.
+     *
+     * @var int|null
+     */
+    protected static $alwaysTrustHeaders;
+
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+     */
+    <span style="background-color: green">p</span>ublic function handle(Request $request, Closure $next)
+    {
+        $request::setTrustedProxies([], $this-&gt;getTrustedHeaderNames());
+
+        $this-&gt;setTrustedProxyIpAddresses($request);
+
+        return $next($request);
+    }
+
+    /**
+     * Sets the trusted proxies on the request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function setTrustedProxyIpAddresses(Request $request)
+    {
+        $trustedIps = $this-&gt;proxies() ?: <span style="background-color: green">c</span>onfig(&#039;trustedproxy.proxies&#039;);
+
+        <span style="background-color: red">i</span>f (is_null($trustedIps) &amp;&amp; <span style="background-color: green">l</span>aravel_cloud()) {
+            $trustedIps = &#039;*&#039;;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($trustedIps === &#039;*&#039; || <span style="background-color: green">$</span>trustedIps === &#039;**&#039;) {
+            return $this-&gt;setTrustedProxyIpAddressesToTheCallingIp($request);
+        <span style="background-color: green">}</span>
+
+        $trustedIps = is_string($trustedIps)
+            ? array_map(trim(...), explode(&#039;,&#039;, $trustedIps))
+            : <span style="background-color: green">$</span>trustedIps;
+
+        <span style="background-color: red">i</span>f (is_array($trustedIps)) {
+            return $this-&gt;setTrustedProxyIpAddressesToSpecificIps($request, $trustedIps);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Specify the IP addresses to trust explicitly.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $trustedIps
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function setTrustedProxyIpAddressesToSpecificIps(Request $request, array $trustedIps)
+    {
+        $request-&gt;setTrustedProxies(array_reduce($trustedIps, <span style="background-color: red">f</span>unction ($ips, $trustedIp) use ($request) {
+            $ips[] = $trustedIp === &#039;REMOTE_ADDR&#039;
+                ? $request-&gt;server-&gt;get(&#039;REMOTE_ADDR&#039;)
+                : <span style="background-color: red">$</span>trustedIp;
+
+            return $ips;
+        }, []), $this-&gt;getTrustedHeaderNames());
+    }
+
+    /**
+     * Set the trusted proxy to be the IP address calling this servers.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function setTrustedProxyIpAddressesToTheCallingIp(Request $request)
+    {
+        $request-&gt;setTrustedProxies([$request-&gt;server-&gt;get(&#039;REMOTE_ADDR&#039;)], $this-&gt;getTrustedHeaderNames());
+    }
+
+    /**
+     * Retrieve trusted header name(s), falling back to defaults if config not set.
+     *
+     * @return int A bit field of Request::HEADER_*, to set which headers to trust from your proxies.
+     */
+    <span style="background-color: green">p</span>rotected function getTrustedHeaderNames()
+    {
+        $headers = $this-&gt;headers();
+
+        <span style="background-color: green">i</span>f (is_int($headers)) {
+            return $headers;
+        <span style="background-color: red">}</span>
+
+        return match ($headers) {
+            &#039;HEADER_X_FORWARDED_AWS_ELB&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_AWS_ELB,
+            &#039;HEADER_FORWARDED&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_FORWARDED,
+            &#039;HEADER_X_FORWARDED_FOR&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_FOR,
+            &#039;HEADER_X_FORWARDED_HOST&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_HOST,
+            &#039;HEADER_X_FORWARDED_PORT&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_PORT,
+            &#039;HEADER_X_FORWARDED_PROTO&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_PROTO,
+            &#039;HEADER_X_FORWARDED_PREFIX&#039; =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_PREFIX,
+            default =&gt; <span style="background-color: red">R</span>equest::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO | Request::HEADER_X_FORWARDED_PREFIX | Request::HEADER_X_FORWARDED_AWS_ELB,
+        };
+    }
+
+    /**
+     * Get the trusted headers.
+     *
+     * @return int
+     */
+    <span style="background-color: green">p</span>rotected function headers()
+    {
+        return static::$alwaysTrustHeaders ?: <span style="background-color: green">$</span>this-&gt;headers;
+    }
+
+    /**
+     * Get the trusted proxies.
+     *
+     * @return array|string|null
+     */
+    <span style="background-color: green">p</span>rotected function proxies()
+    {
+        return static::$alwaysTrustProxies ?: <span style="background-color: green">$</span>this-&gt;proxies;
+    }
+
+    /**
+     * Specify the IP addresses of proxies that should always be trusted.
+     *
+     * @param  array|string  $proxies
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function at(array|string $proxies)
+    {
+        static::$alwaysTrustProxies = $proxies;
+    }
+
+    /**
+     * Specify the proxy headers that should always be trusted.
+     *
+     * @param  int  $headers
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function withHeaders(int $headers)
+    {
+        static::$alwaysTrustHeaders = $headers;
+    }
+
+    /**
+     * Flush the state of the middleware.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushState()
+    {
+        static::$alwaysTrustHeaders = null;
+        static::$alwaysTrustProxies = null;
+    }
+}
+</pre>

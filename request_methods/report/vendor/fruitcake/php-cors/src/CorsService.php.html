@@ -1,0 +1,286 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of fruitcake/php-cors and was originally part of asm89/stack-cors
+ *
+ * (c) Alexander &lt;iam.asm89@gmail.com&gt;
+ * (c) Barryvdh &lt;barryvdh@gmail.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Fruitcake\Cors;
+
+use Fruitcake\Cors\Exceptions\InvalidOptionException;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+/**
+ * @phpstan-type CorsInputOptions array{
+ *  &#039;allowedOrigins&#039;?: string[],
+ *  &#039;allowedOriginsPatterns&#039;?: string[],
+ *  &#039;supportsCredentials&#039;?: bool,
+ *  &#039;allowedHeaders&#039;?: string[],
+ *  &#039;allowedMethods&#039;?: string[],
+ *  &#039;exposedHeaders&#039;?: string[]|false,
+ *  &#039;maxAge&#039;?: int|bool|null,
+ *  &#039;allowed_origins&#039;?: string[],
+ *  &#039;allowed_origins_patterns&#039;?: string[],
+ *  &#039;supports_credentials&#039;?: bool,
+ *  &#039;allowed_headers&#039;?: string[],
+ *  &#039;allowed_methods&#039;?: string[],
+ *  &#039;exposed_headers&#039;?: string[]|false,
+ *  &#039;max_age&#039;?: int|bool|null
+ * }
+ *
+ */
+class CorsService
+{
+    /** @var string[]  */
+    private array $allowedOrigins = [];
+    /** @var string[] */
+    private array $allowedOriginsPatterns = [];
+    /** @var string[] */
+    private array $allowedMethods = [];
+    /** @var string[] */
+    private array $allowedHeaders = [];
+    /** @var string[] */
+    private array $exposedHeaders = [];
+    private bool $supportsCredentials = false;
+    private ?int $maxAge = 0;
+
+    private bool $allowAllOrigins = false;
+    private bool $allowAllMethods = false;
+    private bool $allowAllHeaders = false;
+
+    /**
+     * @param CorsInputOptions $options
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $options = [])
+    {
+        <span style="background-color: red">i</span>f ($options) {
+            $this-&gt;setOptions($options);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * @param CorsInputOptions $options
+     */
+    <span style="background-color: red">p</span>ublic function setOptions(array $options): void
+    {
+        $this-&gt;allowedOrigins = $options[&#039;allowedOrigins&#039;] ?? <span style="background-color: red">$</span>options[&#039;allowed_origins&#039;] ?? <span style="background-color: red">$</span>this-&gt;allowedOrigins;
+        $this-&gt;allowedOriginsPatterns =
+            $options[&#039;allowedOriginsPatterns&#039;] ?? <span style="background-color: red">$</span>options[&#039;allowed_origins_patterns&#039;] ?? <span style="background-color: red">$</span>this-&gt;allowedOriginsPatterns;
+        $this-&gt;allowedMethods = $options[&#039;allowedMethods&#039;] ?? <span style="background-color: red">$</span>options[&#039;allowed_methods&#039;] ?? <span style="background-color: red">$</span>this-&gt;allowedMethods;
+        $this-&gt;allowedHeaders = $options[&#039;allowedHeaders&#039;] ?? <span style="background-color: red">$</span>options[&#039;allowed_headers&#039;] ?? <span style="background-color: red">$</span>this-&gt;allowedHeaders;
+        $this-&gt;supportsCredentials =
+            $options[&#039;supportsCredentials&#039;] ?? <span style="background-color: red">$</span>options[&#039;supports_credentials&#039;] ?? <span style="background-color: red">$</span>this-&gt;supportsCredentials;
+
+        $maxAge = $this-&gt;maxAge;
+        <span style="background-color: red">i</span>f (array_key_exists(&#039;maxAge&#039;, $options)) {
+            $maxAge = $options[&#039;maxAge&#039;];
+        } <span style="background-color: red">e</span>lseif (array_key_exists(&#039;max_age&#039;, $options)) {
+            $maxAge = $options[&#039;max_age&#039;];
+        <span style="background-color: red">}</span>
+        $this-&gt;maxAge = $maxAge === null ? null : <span style="background-color: red">(</span>int)$maxAge;
+
+        $exposedHeaders = $options[&#039;exposedHeaders&#039;] ?? <span style="background-color: red">$</span>options[&#039;exposed_headers&#039;] ?? <span style="background-color: red">$</span>this-&gt;exposedHeaders;
+        $this-&gt;exposedHeaders = $exposedHeaders === false ? [] : <span style="background-color: red">$</span>exposedHeaders;
+
+        $this-&gt;normalizeOptions();
+    }
+
+    <span style="background-color: red">p</span>rivate function normalizeOptions(): void
+    {
+        // Normalize case
+        $this-&gt;allowedHeaders = array_map(&#039;strtolower&#039;, $this-&gt;allowedHeaders);
+        $this-&gt;allowedMethods = array_map(&#039;strtoupper&#039;, $this-&gt;allowedMethods);
+
+        // Normalize [&#039;*&#039;] to true
+        $this-&gt;allowAllOrigins = in_array(&#039;*&#039;, $this-&gt;allowedOrigins);
+        $this-&gt;allowAllHeaders = in_array(&#039;*&#039;, $this-&gt;allowedHeaders);
+        $this-&gt;allowAllMethods = in_array(&#039;*&#039;, $this-&gt;allowedMethods);
+
+        // Transform wildcard pattern
+        <span style="background-color: red">i</span>f (!$this-&gt;allowAllOrigins) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;allowedOrigins as $origin) {
+                <span style="background-color: red">i</span>f (strpos($origin, &#039;*&#039;) !== false) {
+                    $this-&gt;allowedOriginsPatterns[] = $this-&gt;convertWildcardToPattern($origin);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a pattern for a wildcard, based on Str::is() from Laravel
+     *
+     * @see https://github.com/laravel/framework/blob/5.5/src/Illuminate/Support/Str.php
+     * @param string $pattern
+     * @return string
+     */
+    <span style="background-color: red">p</span>rivate function convertWildcardToPattern($pattern)
+    {
+        $pattern = preg_quote($pattern, &#039;#&#039;);
+
+        // Asterisks are translated into zero-or-more regular expression wildcards
+        // to make it convenient to check if the strings starts with the given
+        // pattern such as &quot;*.example.com&quot;, making any string check convenient.
+        $pattern = str_replace(&#039;\*&#039;, &#039;.*&#039;, $pattern);
+
+        return &#039;#^&#039; . $pattern . &#039;\z#u&#039;;
+    }
+
+    <span style="background-color: red">p</span>ublic function isCorsRequest(Request $request): bool
+    {
+        return $request-&gt;headers-&gt;has(&#039;Origin&#039;);
+    }
+
+    <span style="background-color: red">p</span>ublic function isPreflightRequest(Request $request): bool
+    {
+        return $request-&gt;getMethod() === &#039;OPTIONS&#039; &amp;&amp; <span style="background-color: red">$</span>request-&gt;headers-&gt;has(&#039;Access-Control-Request-Method&#039;);
+    }
+
+    <span style="background-color: red">p</span>ublic function handlePreflightRequest(Request $request): Response
+    {
+        $response = new Response();
+
+        $response-&gt;setStatusCode(204);
+
+        return $this-&gt;addPreflightRequestHeaders($response, $request);
+    }
+
+    <span style="background-color: red">p</span>ublic function addPreflightRequestHeaders(Response $response, Request $request): Response
+    {
+        $this-&gt;configureAllowedOrigin($response, $request);
+
+        <span style="background-color: red">i</span>f ($response-&gt;headers-&gt;has(&#039;Access-Control-Allow-Origin&#039;)) {
+            $this-&gt;configureAllowCredentials($response, $request);
+
+            $this-&gt;configureAllowedMethods($response, $request);
+
+            $this-&gt;configureAllowedHeaders($response, $request);
+
+            $this-&gt;configureMaxAge($response, $request);
+        <span style="background-color: red">}</span>
+
+        return $response;
+    }
+
+    <span style="background-color: red">p</span>ublic function isOriginAllowed(Request $request): bool
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;allowAllOrigins === true) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        $origin = (string) $request-&gt;headers-&gt;get(&#039;Origin&#039;);
+
+        <span style="background-color: red">i</span>f (in_array($origin, $this-&gt;allowedOrigins)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;allowedOriginsPatterns as $pattern) {
+            <span style="background-color: red">i</span>f (preg_match($pattern, $origin)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    <span style="background-color: red">p</span>ublic function addActualRequestHeaders(Response $response, Request $request): Response
+    {
+        $this-&gt;configureAllowedOrigin($response, $request);
+
+        <span style="background-color: red">i</span>f ($response-&gt;headers-&gt;has(&#039;Access-Control-Allow-Origin&#039;)) {
+            $this-&gt;configureAllowCredentials($response, $request);
+
+            $this-&gt;configureExposedHeaders($response, $request);
+        <span style="background-color: red">}</span>
+
+        return $response;
+    }
+
+    <span style="background-color: red">p</span>rivate function configureAllowedOrigin(Response $response, Request $request): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;allowAllOrigins === true &amp;&amp; <span style="background-color: red">!</span>$this-&gt;supportsCredentials) {
+            // Safe+cacheable, allow everything
+            $response-&gt;headers-&gt;set(&#039;Access-Control-Allow-Origin&#039;, &#039;*&#039;);
+        } <span style="background-color: red">e</span>lseif ($this-&gt;isSingleOriginAllowed()) {
+            // Single origins can be safely set
+            $response-&gt;headers-&gt;set(&#039;Access-Control-Allow-Origin&#039;, array_values($this-&gt;allowedOrigins)[0]);
+        } <span style="background-color: red">e</span>lse {
+            // For dynamic headers, set the requested Origin header when set and allowed
+            <span style="background-color: red">i</span>f ($this-&gt;isCorsRequest($request) &amp;&amp; <span style="background-color: red">$</span>this-&gt;isOriginAllowed($request)) {
+                $response-&gt;headers-&gt;set(&#039;Access-Control-Allow-Origin&#039;, (string) $request-&gt;headers-&gt;get(&#039;Origin&#039;));
+            <span style="background-color: red">}</span>
+
+            $this-&gt;varyHeader($response, &#039;Origin&#039;);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function isSingleOriginAllowed(): bool
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;allowAllOrigins === true || <span style="background-color: red">c</span>ount($this-&gt;allowedOriginsPatterns) &gt; 0) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return count($this-&gt;allowedOrigins) === 1;
+    }
+
+    <span style="background-color: red">p</span>rivate function configureAllowedMethods(Response $response, Request $request): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;allowAllMethods === true) {
+            $allowMethods = strtoupper((string) $request-&gt;headers-&gt;get(&#039;Access-Control-Request-Method&#039;));
+            $this-&gt;varyHeader($response, &#039;Access-Control-Request-Method&#039;);
+        } <span style="background-color: red">e</span>lse {
+            $allowMethods = implode(&#039;, &#039;, $this-&gt;allowedMethods);
+        <span style="background-color: red">}</span>
+
+        $response-&gt;headers-&gt;set(&#039;Access-Control-Allow-Methods&#039;, $allowMethods);
+    }
+
+    <span style="background-color: red">p</span>rivate function configureAllowedHeaders(Response $response, Request $request): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;allowAllHeaders === true) {
+            $allowHeaders = (string) $request-&gt;headers-&gt;get(&#039;Access-Control-Request-Headers&#039;);
+            $this-&gt;varyHeader($response, &#039;Access-Control-Request-Headers&#039;);
+        } <span style="background-color: red">e</span>lse {
+            $allowHeaders = implode(&#039;, &#039;, $this-&gt;allowedHeaders);
+        <span style="background-color: red">}</span>
+        $response-&gt;headers-&gt;set(&#039;Access-Control-Allow-Headers&#039;, $allowHeaders);
+    }
+
+    <span style="background-color: red">p</span>rivate function configureAllowCredentials(Response $response, Request $request): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;supportsCredentials) {
+            $response-&gt;headers-&gt;set(&#039;Access-Control-Allow-Credentials&#039;, &#039;true&#039;);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function configureExposedHeaders(Response $response, Request $request): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;exposedHeaders) {
+            $response-&gt;headers-&gt;set(&#039;Access-Control-Expose-Headers&#039;, implode(&#039;, &#039;, $this-&gt;exposedHeaders));
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function configureMaxAge(Response $response, Request $request): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;maxAge !== null) {
+            $response-&gt;headers-&gt;set(&#039;Access-Control-Max-Age&#039;, (string) $this-&gt;maxAge);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function varyHeader(Response $response, string $header): Response
+    {
+        <span style="background-color: red">i</span>f (!$response-&gt;headers-&gt;has(&#039;Vary&#039;)) {
+            $response-&gt;headers-&gt;set(&#039;Vary&#039;, $header);
+        } <span style="background-color: red">e</span>lseif (!in_array($header, explode(&#039;, &#039;, (string) $response-&gt;headers-&gt;get(&#039;Vary&#039;)))) {
+            $response-&gt;headers-&gt;set(&#039;Vary&#039;, ((string) $response-&gt;headers-&gt;get(&#039;Vary&#039;)) . &#039;, &#039; . $header);
+        <span style="background-color: red">}</span>
+
+        return $response;
+    }
+}
+</pre>

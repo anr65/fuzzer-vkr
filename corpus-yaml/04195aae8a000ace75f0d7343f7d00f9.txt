@@ -1,0 +1,6 @@
+sync_fuz:
+  vaiabler:
+    inuzz300'
+  trigger:
+   !include: [.
+  nt'

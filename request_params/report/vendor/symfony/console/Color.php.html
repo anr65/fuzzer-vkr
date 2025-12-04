@@ -1,0 +1,134 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console;
+
+use Symfony\Component\Console\Exception\InvalidArgumentException;
+
+/**
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+final class Color
+{
+    private const COLORS = [
+        &#039;black&#039; =&gt; 0,
+        &#039;red&#039; =&gt; 1,
+        &#039;green&#039; =&gt; 2,
+        &#039;yellow&#039; =&gt; 3,
+        &#039;blue&#039; =&gt; 4,
+        &#039;magenta&#039; =&gt; 5,
+        &#039;cyan&#039; =&gt; 6,
+        &#039;white&#039; =&gt; 7,
+        &#039;default&#039; =&gt; 9,
+    ];
+
+    private const BRIGHT_COLORS = [
+        &#039;gray&#039; =&gt; 0,
+        &#039;bright-red&#039; =&gt; 1,
+        &#039;bright-green&#039; =&gt; 2,
+        &#039;bright-yellow&#039; =&gt; 3,
+        &#039;bright-blue&#039; =&gt; 4,
+        &#039;bright-magenta&#039; =&gt; 5,
+        &#039;bright-cyan&#039; =&gt; 6,
+        &#039;bright-white&#039; =&gt; 7,
+    ];
+
+    private const AVAILABLE_OPTIONS = [
+        &#039;bold&#039; =&gt; [&#039;set&#039; =&gt; 1, &#039;unset&#039; =&gt; 22],
+        &#039;underscore&#039; =&gt; [&#039;set&#039; =&gt; 4, &#039;unset&#039; =&gt; 24],
+        &#039;blink&#039; =&gt; [&#039;set&#039; =&gt; 5, &#039;unset&#039; =&gt; 25],
+        &#039;reverse&#039; =&gt; [&#039;set&#039; =&gt; 7, &#039;unset&#039; =&gt; 27],
+        &#039;conceal&#039; =&gt; [&#039;set&#039; =&gt; 8, &#039;unset&#039; =&gt; 28],
+    ];
+
+    private string $foreground;
+    private string $background;
+    private array $options = [];
+
+    <span style="background-color: green">p</span>ublic function __construct(string $foreground = &#039;&#039;, string $background = &#039;&#039;, array $options = [])
+    {
+        $this-&gt;foreground = $this-&gt;parseColor($foreground);
+        $this-&gt;background = $this-&gt;parseColor($background, true);
+
+        <span style="background-color: red">f</span>oreach ($options as $option) {
+            <span style="background-color: red">i</span>f (!isset(self::AVAILABLE_OPTIONS[$option])) {
+                throw new InvalidArgumentException(\sprintf(&#039;Invalid option specified: &quot;%s&quot;. Expected one of (%s).&#039;, $option, implode(&#039;, &#039;, array_keys(self::AVAILABLE_OPTIONS))));
+            <span style="background-color: red">}</span>
+
+            $this-&gt;options[$option] = self::AVAILABLE_OPTIONS[$option];
+        <span style="background-color: green">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function apply(string $text): string
+    {
+        return $this-&gt;set().$text.$this-&gt;unset();
+    }
+
+    <span style="background-color: red">p</span>ublic function set(): string
+    {
+        $setCodes = [];
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $this-&gt;foreground) {
+            $setCodes[] = $this-&gt;foreground;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $this-&gt;background) {
+            $setCodes[] = $this-&gt;background;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">f</span>oreach ($this-&gt;options as $option) {
+            $setCodes[] = $option[&#039;set&#039;];
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (0 === \count($setCodes)) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        return \sprintf(&quot;\033[%sm&quot;, implode(&#039;;&#039;, $setCodes));
+    }
+
+    <span style="background-color: red">p</span>ublic function unset(): string
+    {
+        $unsetCodes = [];
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $this-&gt;foreground) {
+            $unsetCodes[] = 39;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $this-&gt;background) {
+            $unsetCodes[] = 49;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">f</span>oreach ($this-&gt;options as $option) {
+            $unsetCodes[] = $option[&#039;unset&#039;];
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (0 === \count($unsetCodes)) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        return \sprintf(&quot;\033[%sm&quot;, implode(&#039;;&#039;, $unsetCodes));
+    }
+
+    <span style="background-color: green">p</span>rivate function parseColor(string $color, bool $background = false): string
+    {
+        <span style="background-color: green">i</span>f (&#039;&#039; === $color) {
+            return &#039;&#039;;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;#&#039; === $color[0]) {
+            return ($background ? &#039;4&#039; : <span style="background-color: red">'</span>3&#039;).Terminal::getColorMode()-&gt;convertFromHexToAnsiColorCode($color);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (isset(self::COLORS[$color])) {
+            return ($background ? &#039;4&#039; : <span style="background-color: green">'</span>3&#039;).self::COLORS[$color];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset(self::BRIGHT_COLORS[$color])) {
+            return ($background ? &#039;10&#039; : <span style="background-color: red">'</span>9&#039;).self::BRIGHT_COLORS[$color];
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(\sprintf(&#039;Invalid &quot;%s&quot; color; expected one of (%s).&#039;, $color, implode(&#039;, &#039;, array_merge(array_keys(self::COLORS), array_keys(self::BRIGHT_COLORS)))));
+    }
+}
+</pre>

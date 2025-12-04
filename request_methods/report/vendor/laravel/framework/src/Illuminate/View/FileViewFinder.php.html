@@ -1,0 +1,332 @@
+<pre>&lt;?php
+
+namespace Illuminate\View;
+
+use Illuminate\Filesystem\Filesystem;
+use InvalidArgumentException;
+
+class FileViewFinder implements ViewFinderInterface
+{
+    /**
+     * The filesystem instance.
+     *
+     * @var \Illuminate\Filesystem\Filesystem
+     */
+    protected $files;
+
+    /**
+     * The array of active view paths.
+     *
+     * @var string[]
+     */
+    protected $paths;
+
+    /**
+     * The array of views that have been located.
+     *
+     * @var array&lt;string, string&gt;
+     */
+    protected $views = [];
+
+    /**
+     * The namespace to file path hints.
+     *
+     * @var array&lt;string, array&gt;
+     */
+    protected $hints = [];
+
+    /**
+     * Register a view extension with the finder.
+     *
+     * @var string[]
+     */
+    protected $extensions = [&#039;blade.php&#039;, &#039;php&#039;, &#039;css&#039;, &#039;html&#039;];
+
+    /**
+     * Create a new file view loader instance.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem  $files
+     * @param  string[]  $paths
+     * @param  string[]|null  $extensions
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Filesystem $files, array $paths, ?array $extensions = null)
+    {
+        $this-&gt;files = $files;
+        $this-&gt;paths = array_map($this-&gt;resolvePath(...), $paths);
+
+        <span style="background-color: red">i</span>f (isset($extensions)) {
+            $this-&gt;extensions = $extensions;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Get the fully qualified location of the view.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function find($name)
+    {
+        <span style="background-color: green">i</span>f (isset($this-&gt;views[$name])) {
+            return $this-&gt;views[$name];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;hasHintInformation($name = trim($name))) {
+            return $this-&gt;views[$name] = $this-&gt;findNamespacedView($name);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;views[$name] = $this-&gt;findInPaths($name, $this-&gt;paths);
+    }
+
+    /**
+     * Get the path to a template with a named path.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function findNamespacedView($name)
+    {
+        [$namespace, $view] = $this-&gt;parseNamespaceSegments($name);
+
+        return $this-&gt;findInPaths($view, $this-&gt;hints[$namespace]);
+    }
+
+    /**
+     * Get the segments of a template with a named path.
+     *
+     * @param  string  $name
+     * @return string[]
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function parseNamespaceSegments($name)
+    {
+        $segments = explode(static::HINT_PATH_DELIMITER, $name);
+
+        <span style="background-color: red">i</span>f (count($segments) !== 2) {
+            throw new InvalidArgumentException(&quot;View [{$name}] has an invalid name.&quot;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($this-&gt;hints[$segments[0]])) {
+            throw new InvalidArgumentException(&quot;No hint path defined for [{$segments[0]}].&quot;);
+        <span style="background-color: green">}</span>
+
+        return $segments;
+    }
+
+    /**
+     * Find the given view in the list of paths.
+     *
+     * @param  string  $name
+     * @param  string|string[]  $paths
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function findInPaths($name, $paths)
+    {
+        <span style="background-color: green">f</span>oreach ((array) $paths as $path) {
+            <span style="background-color: green">f</span>oreach ($this-&gt;getPossibleViewFiles($name) as $file) {
+                $viewPath = $path.&#039;/&#039;.$file;
+
+                <span style="background-color: green">i</span>f (strlen($viewPath) &lt; (PHP_MAXPATHLEN - 1) &amp;&amp; <span style="background-color: green">$</span>this-&gt;files-&gt;exists($viewPath)) {
+                    return $viewPath;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        throw new InvalidArgumentException(&quot;View [{$name}] not found.&quot;);
+    }
+
+    /**
+     * Get an array of possible view files.
+     *
+     * @param  string  $name
+     * @return string[]
+     */
+    <span style="background-color: green">p</span>rotected function getPossibleViewFiles($name)
+    {
+        return array_map(fn ($extension) =&gt; <span style="background-color: green">s</span>tr_replace(&#039;.&#039;, &#039;/&#039;, $name).&#039;.&#039;.$extension, $this-&gt;extensions);
+    }
+
+    /**
+     * Add a location to the finder.
+     *
+     * @param  string  $location
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addLocation($location)
+    {
+        $this-&gt;paths[] = $this-&gt;resolvePath($location);
+    }
+
+    /**
+     * Prepend a location to the finder.
+     *
+     * @param  string  $location
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function prependLocation($location)
+    {
+        array_unshift($this-&gt;paths, $this-&gt;resolvePath($location));
+    }
+
+    /**
+     * Resolve the path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function resolvePath($path)
+    {
+        return realpath($path) ?: <span style="background-color: red">$</span>path;
+    }
+
+    /**
+     * Add a namespace hint to the finder.
+     *
+     * @param  string  $namespace
+     * @param  string|string[]  $hints
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function addNamespace($namespace, $hints)
+    {
+        $hints = (array) $hints;
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;hints[$namespace])) {
+            $hints = array_merge($this-&gt;hints[$namespace], $hints);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;hints[$namespace] = $hints;
+    }
+
+    /**
+     * Prepend a namespace hint to the finder.
+     *
+     * @param  string  $namespace
+     * @param  string|string[]  $hints
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function prependNamespace($namespace, $hints)
+    {
+        $hints = (array) $hints;
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;hints[$namespace])) {
+            $hints = array_merge($hints, $this-&gt;hints[$namespace]);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;hints[$namespace] = $hints;
+    }
+
+    /**
+     * Replace the namespace hints for the given namespace.
+     *
+     * @param  string  $namespace
+     * @param  string|string[]  $hints
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function replaceNamespace($namespace, $hints)
+    {
+        $this-&gt;hints[$namespace] = (array) $hints;
+    }
+
+    /**
+     * Register an extension with the view finder.
+     *
+     * @param  string  $extension
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addExtension($extension)
+    {
+        <span style="background-color: red">i</span>f (($index = array_search($extension, $this-&gt;extensions)) !== false) {
+            unset($this-&gt;extensions[$index]);
+        <span style="background-color: red">}</span>
+
+        array_unshift($this-&gt;extensions, $extension);
+    }
+
+    /**
+     * Returns whether or not the view name has any hint information.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function hasHintInformation($name)
+    {
+        return strpos($name, static::HINT_PATH_DELIMITER) &gt; 0;
+    }
+
+    /**
+     * Flush the cache of located views.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flush()
+    {
+        $this-&gt;views = [];
+    }
+
+    /**
+     * Get the filesystem instance.
+     *
+     * @return \Illuminate\Filesystem\Filesystem
+     */
+    <span style="background-color: red">p</span>ublic function getFilesystem()
+    {
+        return $this-&gt;files;
+    }
+
+    /**
+     * Set the active view paths.
+     *
+     * @param  string[]  $paths
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setPaths($paths)
+    {
+        $this-&gt;paths = $paths;
+
+        return $this;
+    }
+
+    /**
+     * Get the active view paths.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function getPaths()
+    {
+        return $this-&gt;paths;
+    }
+
+    /**
+     * Get the views that have been located.
+     *
+     * @return array&lt;string, string&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getViews()
+    {
+        return $this-&gt;views;
+    }
+
+    /**
+     * Get the namespace to file path hints.
+     *
+     * @return array&lt;string, array&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getHints()
+    {
+        return $this-&gt;hints;
+    }
+
+    /**
+     * Get registered extensions.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function getExtensions()
+    {
+        return $this-&gt;extensions;
+    }
+}
+</pre>

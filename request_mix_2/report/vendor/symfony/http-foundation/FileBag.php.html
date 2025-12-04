@@ -1,0 +1,128 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+use Symfony\Component\HttpFoundation\File\UploadedFile;
+
+/**
+ * FileBag is a container for uploaded files.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ * @author Bulat Shakirzyanov &lt;mallluhuct@gmail.com&gt;
+ */
+class FileBag extends ParameterBag
+{
+    private const FILE_KEYS = [&#039;error&#039;, &#039;full_path&#039;, &#039;name&#039;, &#039;size&#039;, &#039;tmp_name&#039;, &#039;type&#039;];
+
+    /**
+     * @param array|UploadedFile[] $parameters An array of HTTP files
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $parameters = [])
+    {
+        $this-&gt;replace($parameters);
+    }
+
+    <span style="background-color: green">p</span>ublic function replace(array $files = []): void
+    {
+        $this-&gt;parameters = [];
+        $this-&gt;add($files);
+    }
+
+    <span style="background-color: green">p</span>ublic function set(string $key, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (!\is_array($value) &amp;&amp; <span style="background-color: green">!</span>$value instanceof UploadedFile) {
+            throw new \InvalidArgumentException(&#039;An uploaded file must be an array or an instance of UploadedFile.&#039;);
+        <span style="background-color: green">}</span>
+
+        parent::set($key, $this-&gt;convertFileInformation($value));
+    }
+
+    <span style="background-color: green">p</span>ublic function add(array $files = []): void
+    {
+        <span style="background-color: green">f</span>oreach ($files as $key =&gt; $file) {
+            $this-&gt;set($key, $file);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Converts uploaded files to UploadedFile instances.
+     *
+     * @return UploadedFile[]|UploadedFile|null
+     */
+    <span style="background-color: green">p</span>rotected function convertFileInformation(array|UploadedFile $file): array|UploadedFile|null
+    {
+        <span style="background-color: green">i</span>f ($file instanceof UploadedFile) {
+            return $file;
+        <span style="background-color: red">}</span>
+
+        $file = $this-&gt;fixPhpFilesArray($file);
+        $keys = array_keys($file + [&#039;full_path&#039; =&gt; null]);
+        sort($keys);
+
+        <span style="background-color: red">i</span>f (self::FILE_KEYS === $keys) {
+            <span style="background-color: red">i</span>f (\UPLOAD_ERR_NO_FILE === $file[&#039;error&#039;]) {
+                $file = null;
+            } <span style="background-color: red">e</span>lse {
+                $file = new UploadedFile($file[&#039;tmp_name&#039;], $file[&#039;full_path&#039;] ?? <span style="background-color: red">$</span>file[&#039;name&#039;], $file[&#039;type&#039;], $file[&#039;error&#039;], false);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $file = array_map(fn ($v) =&gt; <span style="background-color: red">$</span>v instanceof UploadedFile || <span style="background-color: red">\</span>is_array($v) ? $this-&gt;convertFileInformation($v) : <span style="background-color: red">$</span>v, $file);
+            <span style="background-color: red">i</span>f (array_is_list($file)) {
+                $file = array_filter($file);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $file;
+    }
+
+    /**
+     * Fixes a malformed PHP $_FILES array.
+     *
+     * PHP has a bug that the format of the $_FILES array differs, depending on
+     * whether the uploaded file fields had normal field names or array-like
+     * field names (&quot;normal&quot; vs. &quot;parent[child]&quot;).
+     *
+     * This method fixes the array to look like the &quot;normal&quot; $_FILES array.
+     *
+     * It&#039;s safe to pass an already converted array, in which case this method
+     * just returns the original array unmodified.
+     */
+    <span style="background-color: red">p</span>rotected function fixPhpFilesArray(array $data): array
+    {
+        $keys = array_keys($data + [&#039;full_path&#039; =&gt; null]);
+        sort($keys);
+
+        <span style="background-color: red">i</span>f (self::FILE_KEYS !== $keys || <span style="background-color: red">!</span>isset($data[&#039;name&#039;]) || <span style="background-color: red">!</span>\is_array($data[&#039;name&#039;])) {
+            return $data;
+        <span style="background-color: red">}</span>
+
+        $files = $data;
+        <span style="background-color: red">f</span>oreach (self::FILE_KEYS as $k) {
+            unset($files[$k]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($data[&#039;name&#039;] as $key =&gt; $name) {
+            $files[$key] = $this-&gt;fixPhpFilesArray([
+                &#039;error&#039; =&gt; $data[&#039;error&#039;][$key],
+                &#039;name&#039; =&gt; $name,
+                &#039;type&#039; =&gt; $data[&#039;type&#039;][$key],
+                &#039;tmp_name&#039; =&gt; $data[&#039;tmp_name&#039;][$key],
+                &#039;size&#039; =&gt; $data[&#039;size&#039;][$key],
+            ] + (isset($data[&#039;full_path&#039;][$key]) ? [
+                &#039;full_path&#039; =&gt; $data[&#039;full_path&#039;][$key],
+            ] : <span style="background-color: red">[</span>]));
+        <span style="background-color: red">}</span>
+
+        return $files;
+    }
+}
+</pre>

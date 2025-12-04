@@ -1,0 +1,119 @@
+<pre>&lt;?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Mailer
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the default mailer that is used to send all email
+    | messages unless another mailer is explicitly specified when sending
+    | the message. All additional mailers can be configured within the
+    | &quot;mailers&quot; array. Examples of each type of mailer are provided.
+    |
+    */
+
+    &#039;default&#039; =&gt; env(&#039;MAIL_MAILER&#039;, &#039;log&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mailer Configurations
+    |--------------------------------------------------------------------------
+    |
+    | Here you may configure all of the mailers used by your application plus
+    | their respective settings. Several examples have been configured for
+    | you and you are free to add your own as your application requires.
+    |
+    | Laravel supports a variety of mail &quot;transport&quot; drivers that can be used
+    | when delivering an email. You may specify which one you&#039;re using for
+    | your mailers below. You may also add additional mailers if needed.
+    |
+    | Supported: &quot;smtp&quot;, &quot;sendmail&quot;, &quot;mailgun&quot;, &quot;ses&quot;, &quot;ses-v2&quot;,
+    |            &quot;postmark&quot;, &quot;resend&quot;, &quot;log&quot;, &quot;array&quot;,
+    |            &quot;failover&quot;, &quot;roundrobin&quot;
+    |
+    */
+
+    &#039;mailers&#039; =&gt; [
+
+        &#039;smtp&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;smtp&#039;,
+            &#039;scheme&#039; =&gt; env(&#039;MAIL_SCHEME&#039;),
+            &#039;url&#039; =&gt; env(&#039;MAIL_URL&#039;),
+            &#039;host&#039; =&gt; env(&#039;MAIL_HOST&#039;, &#039;127.0.0.1&#039;),
+            &#039;port&#039; =&gt; env(&#039;MAIL_PORT&#039;, 2525),
+            &#039;username&#039; =&gt; env(&#039;MAIL_USERNAME&#039;),
+            &#039;password&#039; =&gt; env(&#039;MAIL_PASSWORD&#039;),
+            &#039;timeout&#039; =&gt; null,
+            &#039;local_domain&#039; =&gt; env(&#039;MAIL_EHLO_DOMAIN&#039;, parse_url(env(&#039;APP_URL&#039;, &#039;http://localhost&#039;), PHP_URL_HOST)),
+        ],
+
+        &#039;ses&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;ses&#039;,
+        ],
+
+        &#039;postmark&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;postmark&#039;,
+            // &#039;message_stream_id&#039; =&gt; env(&#039;POSTMARK_MESSAGE_STREAM_ID&#039;),
+            // &#039;client&#039; =&gt; [
+            //     &#039;timeout&#039; =&gt; 5,
+            // ],
+        ],
+
+        &#039;resend&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;resend&#039;,
+        ],
+
+        &#039;sendmail&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;sendmail&#039;,
+            &#039;path&#039; =&gt; env(&#039;MAIL_SENDMAIL_PATH&#039;, &#039;/usr/sbin/sendmail -bs -i&#039;),
+        ],
+
+        &#039;log&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;log&#039;,
+            &#039;channel&#039; =&gt; env(&#039;MAIL_LOG_CHANNEL&#039;),
+        ],
+
+        &#039;array&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;array&#039;,
+        ],
+
+        &#039;failover&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;failover&#039;,
+            &#039;mailers&#039; =&gt; [
+                &#039;smtp&#039;,
+                &#039;log&#039;,
+            ],
+            &#039;retry_after&#039; =&gt; 60,
+        ],
+
+        &#039;roundrobin&#039; =&gt; [
+            &#039;transport&#039; =&gt; &#039;roundrobin&#039;,
+            &#039;mailers&#039; =&gt; [
+                &#039;ses&#039;,
+                &#039;postmark&#039;,
+            ],
+            &#039;retry_after&#039; =&gt; 60,
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Global &quot;From&quot; Address
+    |--------------------------------------------------------------------------
+    |
+    | You may wish for all emails sent by your application to be sent from
+    | the same address. Here you may specify a name and address that is
+    | used globally for all emails that are sent by your application.
+    |
+    */
+
+    &#039;from&#039; =&gt; [
+        &#039;address&#039; =&gt; env(&#039;MAIL_FROM_ADDRESS&#039;, &#039;hello@example.com&#039;),
+        &#039;name&#039; =&gt; env(&#039;MAIL_FROM_NAME&#039;, &#039;Example&#039;),
+    ],
+
+];
+</pre>

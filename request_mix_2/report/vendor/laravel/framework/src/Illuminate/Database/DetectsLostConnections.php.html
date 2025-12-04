@@ -1,0 +1,87 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database;
+
+use Illuminate\Support\Str;
+use Throwable;
+
+trait DetectsLostConnections
+{
+    /**
+     * Determine if the given exception was caused by a lost connection.
+     *
+     * @param  \Throwable  $e
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function causedByLostConnection(Throwable $e)
+    {
+        $message = $e-&gt;getMessage();
+
+        return Str::contains($message, [
+            &#039;server has gone away&#039;,
+            &#039;Server has gone away&#039;,
+            &#039;no connection to the server&#039;,
+            &#039;Lost connection&#039;,
+            &#039;is dead or not enabled&#039;,
+            &#039;Error while sending&#039;,
+            &#039;decryption failed or bad record mac&#039;,
+            &#039;server closed the connection unexpectedly&#039;,
+            &#039;SSL connection has been closed unexpectedly&#039;,
+            &#039;Error writing data to the connection&#039;,
+            &#039;Resource deadlock avoided&#039;,
+            &#039;Transaction() on null&#039;,
+            &#039;child connection forced to terminate due to client_idle_limit&#039;,
+            &#039;query_wait_timeout&#039;,
+            &#039;reset by peer&#039;,
+            &#039;Physical connection is not usable&#039;,
+            &#039;TCP Provider: Error code 0x68&#039;,
+            &#039;ORA-03114&#039;,
+            &#039;Packets out of order. Expected&#039;,
+            &#039;Adaptive Server connection failed&#039;,
+            &#039;Communication link failure&#039;,
+            &#039;connection is no longer usable&#039;,
+            &#039;Login timeout expired&#039;,
+            &#039;SQLSTATE[HY000] [2002] Connection refused&#039;,
+            &#039;running with the --read-only option so it cannot execute this statement&#039;,
+            &#039;The connection is broken and recovery is not possible. The connection is marked by the client driver as unrecoverable. No attempt was made to restore the connection.&#039;,
+            &#039;SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo failed: Try again&#039;,
+            &#039;SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo failed: Name or service not known&#039;,
+            &#039;SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for&#039;,
+            &#039;SQLSTATE[HY000]: General error: 7 SSL SYSCALL error: EOF detected&#039;,
+            &#039;SQLSTATE[HY000] [2002] Connection timed out&#039;,
+            &#039;SSL: Connection timed out&#039;,
+            &#039;SQLSTATE[HY000]: General error: 1105 The last transaction was aborted due to Seamless Scaling. Please retry.&#039;,
+            &#039;Temporary failure in name resolution&#039;,
+            &#039;SQLSTATE[08S01]: Communication link failure&#039;,
+            &#039;SQLSTATE[08006] [7] could not connect to server: Connection refused Is the server running on host&#039;,
+            &#039;SQLSTATE[HY000]: General error: 7 SSL SYSCALL error: No route to host&#039;,
+            &#039;The client was disconnected by the server because of inactivity. See wait_timeout and interactive_timeout for configuring this behavior.&#039;,
+            &#039;SQLSTATE[08006] [7] could not translate host name&#039;,
+            &#039;TCP Provider: Error code 0x274C&#039;,
+            &#039;SQLSTATE[HY000] [2002] No such file or directory&#039;,
+            &#039;SSL: Operation timed out&#039;,
+            &#039;Reason: Server is in script upgrade mode. Only administrator can connect at this time.&#039;,
+            &#039;Unknown $curl_error_code: 77&#039;,
+            &#039;SSL: Handshake timed out&#039;,
+            &#039;SSL error: sslv3 alert unexpected message&#039;,
+            &#039;unrecognized SSL error code:&#039;,
+            &#039;SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it&#039;,
+            &#039;SQLSTATE[HY000] [2002] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond&#039;,
+            &#039;SQLSTATE[HY000] [2002] Network is unreachable&#039;,
+            &#039;SQLSTATE[HY000] [2002] The requested address is not valid in its context&#039;,
+            &#039;SQLSTATE[HY000] [2002] A socket operation was attempted to an unreachable network&#039;,
+            &#039;SQLSTATE[HY000] [2002] Operation now in progress&#039;,
+            &#039;SQLSTATE[HY000] [2002] Operation in progress&#039;,
+            &#039;SQLSTATE[HY000]: General error: 3989&#039;,
+            &#039;went away&#039;,
+            &#039;No such file or directory&#039;,
+            &#039;server is shutting down&#039;,
+            &#039;failed to connect to&#039;,
+            &#039;Channel connection is closed&#039;,
+            &#039;Connection lost&#039;,
+            &#039;Broken pipe&#039;,
+            &#039;SQLSTATE[25006]: Read only sql transaction: 7&#039;,
+        ]);
+    }
+}
+</pre>

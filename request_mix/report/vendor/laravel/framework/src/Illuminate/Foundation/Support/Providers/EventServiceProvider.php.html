@@ -1,0 +1,232 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Support\Providers;
+
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
+use Illuminate\Foundation\Events\DiscoverEvents;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\ServiceProvider;
+
+class EventServiceProvider extends ServiceProvider
+{
+    /**
+     * The event handler mappings for the application.
+     *
+     * @var array&lt;string, array&lt;int, string&gt;&gt;
+     */
+    protected $listen = [];
+
+    /**
+     * The subscribers to register.
+     *
+     * @var array
+     */
+    protected $subscribe = [];
+
+    /**
+     * The model observers to register.
+     *
+     * @var array&lt;string, string|object|array&lt;int, string|object&gt;&gt;
+     */
+    protected $observers = [];
+
+    /**
+     * Indicates if events should be discovered.
+     *
+     * @var bool
+     */
+    protected static $shouldDiscoverEvents = true;
+
+    /**
+     * The configured event discovery paths.
+     *
+     * @var array|null
+     */
+    protected static $eventDiscoveryPaths;
+
+    /**
+     * Register the application&#039;s event listeners.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;booting(<span style="background-color: green">f</span>unction () {
+            $events = $this-&gt;getEvents();
+
+            <span style="background-color: red">f</span>oreach ($events as $event =&gt; $listeners) {
+                <span style="background-color: red">f</span>oreach (array_unique($listeners, SORT_REGULAR) as $listener) {
+                    Event::listen($event, $listener);
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">f</span>oreach ($this-&gt;subscribe as $subscriber) {
+                Event::subscribe($subscriber);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">f</span>oreach ($this-&gt;observers as $model =&gt; $observers) {
+                $model::observe($observers);
+            <span style="background-color: green">}</span>
+        });
+
+        $this-&gt;booted(<span style="background-color: green">f</span>unction () {
+            $this-&gt;configureEmailVerification();
+        });
+    }
+
+    /**
+     * Boot any application services.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function boot()
+    {
+        //
+    }
+
+    /**
+     * Get the events and handlers.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function listens()
+    {
+        return $this-&gt;listen;
+    }
+
+    /**
+     * Get the discovered events and listeners for the application.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function getEvents()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;app-&gt;eventsAreCached()) {
+            $cache = require $this-&gt;app-&gt;getCachedEventsPath();
+
+            return $cache[get_class($this)] ?? <span style="background-color: red">[</span>];
+        } <span style="background-color: green">e</span>lse {
+            return array_merge_recursive(
+                $this-&gt;discoveredEvents(),
+                $this-&gt;listens()
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the discovered events for the application.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function discoveredEvents()
+    {
+        return $this-&gt;shouldDiscoverEvents()
+            ? $this-&gt;discoverEvents()
+            : <span style="background-color: red">[</span>];
+    }
+
+    /**
+     * Determine if events and listeners should be automatically discovered.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function shouldDiscoverEvents()
+    {
+        return get_class($this) === __CLASS__ &amp;&amp; <span style="background-color: green">s</span>tatic::$shouldDiscoverEvents === true;
+    }
+
+    /**
+     * Discover the events and listeners for the application.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function discoverEvents()
+    {
+        return (new Collection($this-&gt;discoverEventsWithin()))
+            -&gt;flatMap(<span style="background-color: green">f</span>unction ($directory) {
+                return glob($directory, GLOB_ONLYDIR);
+            })
+            -&gt;reject(<span style="background-color: red">f</span>unction ($directory) {
+                return ! is_dir($directory);
+            })
+            -&gt;reduce(<span style="background-color: red">f</span>unction ($discovered, $directory) {
+                return array_merge_recursive(
+                    $discovered,
+                    DiscoverEvents::within($directory, $this-&gt;eventDiscoveryBasePath())
+                );
+            }, []);
+    }
+
+    /**
+     * Get the listener directories that should be used to discover events.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function discoverEventsWithin()
+    {
+        return static::$eventDiscoveryPaths ?: <span style="background-color: green">[</span>
+            $this-&gt;app-&gt;path(&#039;Listeners&#039;),
+        ];
+    }
+
+    /**
+     * Add the given event discovery paths to the application&#039;s event discovery paths.
+     *
+     * @param  string|array  $paths
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function addEventDiscoveryPaths(array|string $paths)
+    {
+        static::$eventDiscoveryPaths = array_values(array_unique(
+            array_merge(static::$eventDiscoveryPaths, Arr::wrap($paths))
+        ));
+    }
+
+    /**
+     * Set the globally configured event discovery paths.
+     *
+     * @param  array  $paths
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setEventDiscoveryPaths(array $paths)
+    {
+        static::$eventDiscoveryPaths = $paths;
+    }
+
+    /**
+     * Get the base path to be used during event discovery.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function eventDiscoveryBasePath()
+    {
+        return base_path();
+    }
+
+    /**
+     * Disable event discovery for the application.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function disableEventDiscovery()
+    {
+        static::$shouldDiscoverEvents = false;
+    }
+
+    /**
+     * Configure the proper event listeners for email verification.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function configureEmailVerification()
+    {
+        <span style="background-color: green">i</span>f (! isset($this-&gt;listen[Registered::class]) ||
+            <span style="background-color: red">!</span> in_array(SendEmailVerificationNotification::class, Arr::wrap($this-&gt;listen[Registered::class]))) {
+            Event::listen(Registered::class, SendEmailVerificationNotification::class);
+        <span style="background-color: green">}</span>
+    }
+}
+</pre>

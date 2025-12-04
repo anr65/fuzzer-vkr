@@ -1,0 +1,38 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Http\Middleware\Concerns;
+
+trait ExcludesPaths
+{
+    /**
+     * Determine if the request has a URI that should be excluded.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function inExceptArray($request)
+    {
+        <span style="background-color: green">f</span>oreach ($this-&gt;getExcludedPaths() as $except) {
+            <span style="background-color: green">i</span>f ($except !== &#039;/&#039;) {
+                $except = trim($except, &#039;/&#039;);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f ($request-&gt;fullUrlIs($except) || <span style="background-color: green">$</span>request-&gt;is($except)) {
+                return true;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Get the URIs that should be excluded.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getExcludedPaths()
+    {
+        return $this-&gt;except ?? <span style="background-color: red">[</span>];
+    }
+}
+</pre>

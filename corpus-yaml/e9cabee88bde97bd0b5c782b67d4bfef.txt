@@ -1,0 +1,4 @@
+sync_vuzzing  variables:
+  #  COFUZZ_ADMvuzzing  baleync_vuzzi=g  varia:s
+! bel#  COFUZZ_ADvuzzing  bales:
+   r    r 

@@ -1,0 +1,125 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Container\Util;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Reflector;
+use ReflectionClass;
+use ReflectionFunctionAbstract;
+use ReflectionMethod;
+use ReflectionParameter;
+use stdClass;
+
+trait ResolvesRouteDependencies
+{
+    /**
+     * Resolve the object method&#039;s type-hinted dependencies.
+     *
+     * @param  array  $parameters
+     * @param  object  $instance
+     * @param  string  $method
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function resolveClassMethodDependencies(array $parameters, $instance, $method)
+    {
+        <span style="background-color: red">i</span>f (! method_exists($instance, $method)) {
+            return $parameters;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;resolveMethodDependencies(
+            $parameters, new ReflectionMethod($instance, $method)
+        );
+    }
+
+    /**
+     * Resolve the given method&#039;s type-hinted dependencies.
+     *
+     * @param  array  $parameters
+     * @param  \ReflectionFunctionAbstract  $reflector
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function resolveMethodDependencies(array $parameters, ReflectionFunctionAbstract $reflector)
+    {
+        $instanceCount = 0;
+
+        $values = array_values($parameters);
+
+        $skippableValue = new stdClass;
+
+        <span style="background-color: red">f</span>oreach ($reflector-&gt;getParameters() as $key =&gt; $parameter) {
+            $instance = $this-&gt;transformDependency($parameter, $parameters, $skippableValue);
+
+            <span style="background-color: red">i</span>f ($instance !== $skippableValue) {
+                $instanceCount++;
+
+                $this-&gt;spliceIntoParameters($parameters, $key, $instance);
+            } <span style="background-color: red">e</span>lseif (! isset($values[$key - $instanceCount]) &amp;&amp;
+                      <span style="background-color: red">$</span>parameter-&gt;isDefaultValueAvailable()) {
+                $this-&gt;spliceIntoParameters($parameters, $key, $parameter-&gt;getDefaultValue());
+            <span style="background-color: red">}</span>
+
+            $this-&gt;container-&gt;fireAfterResolvingAttributeCallbacks($parameter-&gt;getAttributes(), $instance);
+        <span style="background-color: red">}</span>
+
+        return $parameters;
+    }
+
+    /**
+     * Attempt to transform the given parameter into a class instance.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @param  array  $parameters
+     * @param  object  $skippableValue
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function transformDependency(ReflectionParameter $parameter, $parameters, $skippableValue)
+    {
+        <span style="background-color: red">i</span>f ($attribute = Util::getContextualAttributeFromDependency($parameter)) {
+            return $this-&gt;container-&gt;resolveFromAttribute($attribute);
+        <span style="background-color: red">}</span>
+
+        $className = Reflector::getParameterClassName($parameter);
+
+        // If the parameter has a type-hinted class, we will check to see if it is already in
+        // the list of parameters. If it is we will just skip it as it is probably a model
+        // binding and we do not want to mess with those; otherwise, we resolve it here.
+        <span style="background-color: red">i</span>f ($className &amp;&amp; <span style="background-color: red">!</span> $this-&gt;alreadyInParameters($className, $parameters)) {
+            $isEnum = (new ReflectionClass($className))-&gt;isEnum();
+
+            return $parameter-&gt;isDefaultValueAvailable()
+                ? ($isEnum ? $parameter-&gt;getDefaultValue() : <span style="background-color: red">n</span>ull)
+                : <span style="background-color: red">$</span>this-&gt;container-&gt;make($className);
+        <span style="background-color: red">}</span>
+
+        return $skippableValue;
+    }
+
+    /**
+     * Determine if an object of the given class is in a list of parameters.
+     *
+     * @param  string  $class
+     * @param  array  $parameters
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function alreadyInParameters($class, array $parameters)
+    {
+        return ! is_null(Arr::first($parameters, fn ($value) =&gt; <span style="background-color: red">$</span>value instanceof $class));
+    }
+
+    /**
+     * Splice the given value into the parameter list.
+     *
+     * @param  array  $parameters
+     * @param  string  $offset
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function spliceIntoParameters(array &amp;$parameters, $offset, $value)
+    {
+        array_splice(
+            $parameters, $offset, 0, [$value]
+        );
+    }
+}
+</pre>

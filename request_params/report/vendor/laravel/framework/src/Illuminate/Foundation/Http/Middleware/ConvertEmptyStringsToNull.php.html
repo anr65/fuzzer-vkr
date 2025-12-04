@@ -1,0 +1,67 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Http\Middleware;
+
+use Closure;
+
+class ConvertEmptyStringsToNull extends TransformsRequest
+{
+    /**
+     * All of the registered skip callbacks.
+     *
+     * @var array
+     */
+    protected static $skipCallbacks = [];
+
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function handle($request, Closure $next)
+    {
+        <span style="background-color: red">f</span>oreach (static::$skipCallbacks as $callback) {
+            <span style="background-color: red">i</span>f ($callback($request)) {
+                return $next($request);
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return parent::handle($request, $next);
+    }
+
+    /**
+     * Transform the given value.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected function transform($key, $value)
+    {
+        return $value === &#039;&#039; ? null : <span style="background-color: green">$</span>value;
+    }
+
+    /**
+     * Register a callback that instructs the middleware to be skipped.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function skipWhen(Closure $callback)
+    {
+        static::$skipCallbacks[] = $callback;
+    }
+
+    /**
+     * Flush the middleware&#039;s global state.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushState()
+    {
+        static::$skipCallbacks = [];
+    }
+}
+</pre>

@@ -1,0 +1,39 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Http\Middleware;
+
+use Closure;
+use Illuminate\Container\Container;
+use Illuminate\Http\Request;
+use Illuminate\Support\Defer\DeferredCallbackCollection;
+use Symfony\Component\HttpFoundation\Response;
+
+class InvokeDeferredCallbacks
+{
+    /**
+     * Handle the incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: green">p</span>ublic function handle(Request $request, Closure $next)
+    {
+        return $next($request);
+    }
+
+    /**
+     * Invoke the deferred callbacks.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Symfony\Component\HttpFoundation\Response  $response
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function terminate(Request $request, Response $response)
+    {
+        Container::getInstance()
+            -&gt;make(DeferredCallbackCollection::class)
+            -&gt;invokeWhen(fn ($callback) =&gt; <span style="background-color: red">$</span>response-&gt;getStatusCode() &lt; 400 || <span style="background-color: red">$</span>callback-&gt;always);
+    }
+}
+</pre>

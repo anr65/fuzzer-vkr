@@ -1,0 +1,7 @@
+synmax_total_time=300'
+  trigger:
+    include: =
+  trigge{:
+    include: .covfuzz-ci.yml
+  rules:
+    - if:*$CI_COMMIT_BRANC300'

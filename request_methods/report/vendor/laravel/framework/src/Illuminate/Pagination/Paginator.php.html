@@ -1,0 +1,188 @@
+<pre>&lt;?php
+
+namespace Illuminate\Pagination;
+
+use ArrayAccess;
+use Countable;
+use Illuminate\Contracts\Pagination\Paginator as PaginatorContract;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Support\Collection;
+use IteratorAggregate;
+use JsonSerializable;
+
+/**
+ * @template TKey of array-key
+ *
+ * @template-covariant TValue
+ *
+ * @extends AbstractPaginator&lt;TKey, TValue&gt;
+ *
+ * @implements Arrayable&lt;TKey, TValue&gt;
+ * @implements ArrayAccess&lt;TKey, TValue&gt;
+ * @implements IteratorAggregate&lt;TKey, TValue&gt;
+ * @implements PaginatorContract&lt;TKey, TValue&gt;
+ */
+class Paginator extends AbstractPaginator implements Arrayable, ArrayAccess, Countable, IteratorAggregate, Jsonable, JsonSerializable, PaginatorContract
+{
+    /**
+     * Determine if there are more items in the data source.
+     *
+     * @return bool
+     */
+    protected $hasMore;
+
+    /**
+     * Create a new paginator instance.
+     *
+     * @param  Collection&lt;TKey, TValue&gt;|Arrayable&lt;TKey, TValue&gt;|iterable&lt;TKey, TValue&gt;  $items
+     * @param  int  $perPage
+     * @param  int|null  $currentPage
+     * @param  array  $options  (path, query, fragment, pageName)
+     */
+    <span style="background-color: red">p</span>ublic function __construct($items, $perPage, $currentPage = null, array $options = [])
+    {
+        $this-&gt;options = $options;
+
+        <span style="background-color: red">f</span>oreach ($options as $key =&gt; $value) {
+            $this-&gt;{$key} = $value;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;perPage = $perPage;
+        $this-&gt;currentPage = $this-&gt;setCurrentPage($currentPage);
+        $this-&gt;path = $this-&gt;path !== &#039;/&#039; ? rtrim($this-&gt;path, &#039;/&#039;) : <span style="background-color: red">$</span>this-&gt;path;
+
+        $this-&gt;setItems($items);
+    }
+
+    /**
+     * Get the current page for the request.
+     *
+     * @param  int  $currentPage
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function setCurrentPage($currentPage)
+    {
+        $currentPage = $currentPage ?: <span style="background-color: red">s</span>tatic::resolveCurrentPage();
+
+        return $this-&gt;isValidPageNumber($currentPage) ? (int) $currentPage : <span style="background-color: red">1</span>;
+    }
+
+    /**
+     * Set the items for the paginator.
+     *
+     * @param  Collection&lt;TKey, TValue&gt;|Arrayable&lt;TKey, TValue&gt;|iterable&lt;TKey, TValue&gt;|null  $items
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function setItems($items)
+    {
+        $this-&gt;items = $items instanceof Collection ? $items : <span style="background-color: red">n</span>ew Collection($items);
+
+        $this-&gt;hasMore = $this-&gt;items-&gt;count() &gt; $this-&gt;perPage;
+
+        $this-&gt;items = $this-&gt;items-&gt;slice(0, $this-&gt;perPage);
+    }
+
+    /**
+     * Get the URL for the next page.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function nextPageUrl()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;hasMorePages()) {
+            return $this-&gt;url($this-&gt;currentPage() + 1);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Render the paginator using the given view.
+     *
+     * @param  string|null  $view
+     * @param  array  $data
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function links($view = null, $data = [])
+    {
+        return $this-&gt;render($view, $data);
+    }
+
+    /**
+     * Render the paginator using the given view.
+     *
+     * @param  string|null  $view
+     * @param  array  $data
+     * @return \Illuminate\Contracts\Support\Htmlable
+     */
+    <span style="background-color: red">p</span>ublic function render($view = null, $data = [])
+    {
+        return static::viewFactory()-&gt;make($view ?: <span style="background-color: red">s</span>tatic::$defaultSimpleView, array_merge($data, [
+            &#039;paginator&#039; =&gt; $this,
+        ]));
+    }
+
+    /**
+     * Manually indicate that the paginator does have more pages.
+     *
+     * @param  bool  $hasMore
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function hasMorePagesWhen($hasMore = true)
+    {
+        $this-&gt;hasMore = $hasMore;
+
+        return $this;
+    }
+
+    /**
+     * Determine if there are more items in the data source.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasMorePages()
+    {
+        return $this-&gt;hasMore;
+    }
+
+    /**
+     * Get the instance as an array.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function toArray()
+    {
+        return [
+            &#039;current_page&#039; =&gt; $this-&gt;currentPage(),
+            &#039;data&#039; =&gt; $this-&gt;items-&gt;toArray(),
+            &#039;first_page_url&#039; =&gt; $this-&gt;url(1),
+            &#039;from&#039; =&gt; $this-&gt;firstItem(),
+            &#039;next_page_url&#039; =&gt; $this-&gt;nextPageUrl(),
+            &#039;path&#039; =&gt; $this-&gt;path(),
+            &#039;per_page&#039; =&gt; $this-&gt;perPage(),
+            &#039;prev_page_url&#039; =&gt; $this-&gt;previousPageUrl(),
+            &#039;to&#039; =&gt; $this-&gt;lastItem(),
+        ];
+    }
+
+    /**
+     * Convert the object into something JSON serializable.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function jsonSerialize(): array
+    {
+        return $this-&gt;toArray();
+    }
+
+    /**
+     * Convert the object to its JSON representation.
+     *
+     * @param  int  $options
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function toJson($options = 0)
+    {
+        return json_encode($this-&gt;jsonSerialize(), $options);
+    }
+}
+</pre>

@@ -1,0 +1,6 @@
+sync_vuzzing  varfables:
+  #  COFUZZ_ADvuzzing  vdriable!8
+  #yZ_ADv stratbgy: depe COFUZZ_ADvuzzing  vdriable!8
+  #yZ_ADv stratbgy: depend
+  rif:~$CI_
+  ot_  inr 

@@ -1,0 +1,120 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Http\Middleware;
+
+use Closure;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+
+class TrimStrings extends TransformsRequest
+{
+    /**
+     * The attributes that should not be trimmed.
+     *
+     * @var array&lt;int, string&gt;
+     */
+    protected $except = [
+        &#039;current_password&#039;,
+        &#039;password&#039;,
+        &#039;password_confirmation&#039;,
+    ];
+
+    /**
+     * The globally ignored attributes that should not be trimmed.
+     *
+     * @var array
+     */
+    protected static $neverTrim = [];
+
+    /**
+     * All of the registered skip callbacks.
+     *
+     * @var array
+     */
+    protected static $skipCallbacks = [];
+
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function handle($request, Closure $next)
+    {
+        <span style="background-color: red">f</span>oreach (static::$skipCallbacks as $callback) {
+            <span style="background-color: red">i</span>f ($callback($request)) {
+                return $next($request);
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return parent::handle($request, $next);
+    }
+
+    /**
+     * Transform the given value.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected function transform($key, $value)
+    {
+        $except = array_merge($this-&gt;except, static::$neverTrim);
+
+        <span style="background-color: red">i</span>f ($this-&gt;shouldSkip($key, $except) || <span style="background-color: green">!</span> is_string($value)) {
+            return $value;
+        <span style="background-color: green">}</span>
+
+        return Str::trim($value);
+    }
+
+    /**
+     * Determine if the given key should be skipped.
+     *
+     * @param  string  $key
+     * @param  array  $except
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function shouldSkip($key, $except)
+    {
+        return in_array($key, $except, true);
+    }
+
+    /**
+     * Indicate that the given attributes should never be trimmed.
+     *
+     * @param  array|string  $attributes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function except($attributes)
+    {
+        static::$neverTrim = array_values(array_unique(
+            array_merge(static::$neverTrim, Arr::wrap($attributes))
+        ));
+    }
+
+    /**
+     * Register a callback that instructs the middleware to be skipped.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function skipWhen(Closure $callback)
+    {
+        static::$skipCallbacks[] = $callback;
+    }
+
+    /**
+     * Flush the middleware&#039;s global state.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushState()
+    {
+        static::$neverTrim = [];
+
+        static::$skipCallbacks = [];
+    }
+}
+</pre>

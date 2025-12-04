@@ -1,0 +1,88 @@
+<pre>&lt;?php
+
+namespace Illuminate\Container;
+
+use Closure;
+use Illuminate\Contracts\Container\ContextualAttribute;
+use ReflectionAttribute;
+use ReflectionNamedType;
+
+/**
+ * @internal
+ */
+class Util
+{
+    /**
+     * If the given value is not an array and not null, wrap it in one.
+     *
+     * From Arr::wrap() in Illuminate\Support.
+     *
+     * @param  mixed  $value
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function arrayWrap($value)
+    {
+        <span style="background-color: red">i</span>f (is_null($value)) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        return is_array($value) ? $value : <span style="background-color: red">[</span>$value];
+    }
+
+    /**
+     * Return the default value of the given value.
+     *
+     * From global value() helper in Illuminate\Support.
+     *
+     * @param  mixed  $value
+     * @param  mixed  ...$args
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic static function unwrapIfClosure($value, ...$args)
+    {
+        return $value instanceof Closure ? $value(...$args) : <span style="background-color: red">$</span>value;
+    }
+
+    /**
+     * Get the class name of the given parameter&#039;s type, if possible.
+     *
+     * From Reflector::getParameterClassName() in Illuminate\Support.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>ublic static function getParameterClassName($parameter)
+    {
+        $type = $parameter-&gt;getType();
+
+        <span style="background-color: green">i</span>f (! $type instanceof ReflectionNamedType || <span style="background-color: green">$</span>type-&gt;isBuiltin()) {
+            return null;
+        <span style="background-color: green">}</span>
+
+        $name = $type-&gt;getName();
+
+        <span style="background-color: green">i</span>f (! is_null($class = $parameter-&gt;getDeclaringClass())) {
+            <span style="background-color: red">i</span>f ($name === &#039;self&#039;) {
+                return $class-&gt;getName();
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($name === &#039;parent&#039; &amp;&amp; <span style="background-color: red">$</span>parent = $class-&gt;getParentClass()) {
+                return $parent-&gt;getName();
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $name;
+    }
+
+    /**
+     * Get a contextual attribute from a dependency.
+     *
+     * @param  \ReflectionParameter  $dependency
+     * @return \ReflectionAttribute|null
+     */
+    <span style="background-color: green">p</span>ublic static function getContextualAttributeFromDependency($dependency)
+    {
+        return $dependency-&gt;getAttributes(ContextualAttribute::class, ReflectionAttribute::IS_INSTANCEOF)[0] ?? <span style="background-color: green">n</span>ull;
+    }
+}
+</pre>

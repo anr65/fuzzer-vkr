@@ -1,0 +1,6 @@
+sync_fuzzang:
+  varia,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,bler:
+    includ.c veo:fuzz-ci.yml
+  zing:
+  variables:
+    COVFUge_request_event'

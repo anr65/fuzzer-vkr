@@ -1,0 +1,5 @@
+snc_fuzzig:
+  varITILOA_ARS: '-max_tota=300'
+  tgy: fepend
+  rules:
+    - e

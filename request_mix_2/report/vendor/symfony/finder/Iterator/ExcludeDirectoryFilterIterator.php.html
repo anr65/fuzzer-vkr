@@ -1,0 +1,111 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder\Iterator;
+
+use Symfony\Component\Finder\SplFileInfo;
+
+/**
+ * ExcludeDirectoryFilterIterator filters out directories.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @extends \FilterIterator&lt;string, SplFileInfo&gt;
+ *
+ * @implements \RecursiveIterator&lt;string, SplFileInfo&gt;
+ */
+class ExcludeDirectoryFilterIterator extends \FilterIterator implements \RecursiveIterator
+{
+    /** @var \Iterator&lt;string, SplFileInfo&gt; */
+    private \Iterator $iterator;
+    private bool $isRecursive;
+    /** @var array&lt;string, true&gt; */
+    private array $excludedDirs = [];
+    private ?string $excludedPattern = null;
+    /** @var list&lt;callable(SplFileInfo):bool&gt; */
+    private array $pruneFilters = [];
+
+    /**
+     * @param \Iterator&lt;string, SplFileInfo&gt;          $iterator    The Iterator to filter
+     * @param list&lt;string|callable(SplFileInfo):bool&gt; $directories An array of directories to exclude
+     */
+    <span style="background-color: green">p</span>ublic function __construct(\Iterator $iterator, array $directories)
+    {
+        $this-&gt;iterator = $iterator;
+        $this-&gt;isRecursive = $iterator instanceof \RecursiveIterator;
+        $patterns = [];
+        <span style="background-color: green">f</span>oreach ($directories as $directory) {
+            <span style="background-color: red">i</span>f (!\is_string($directory)) {
+                <span style="background-color: red">i</span>f (!\is_callable($directory)) {
+                    throw new \InvalidArgumentException(&#039;Invalid PHP callback.&#039;);
+                <span style="background-color: red">}</span>
+
+                $this-&gt;pruneFilters[] = $directory;
+
+                continue;
+            <span style="background-color: green">}</span>
+
+            $directory = rtrim($directory, &#039;/&#039;);
+            <span style="background-color: red">i</span>f (!$this-&gt;isRecursive || <span style="background-color: green">s</span>tr_contains($directory, &#039;/&#039;)) {
+                $patterns[] = preg_quote($directory, &#039;#&#039;);
+            } <span style="background-color: green">e</span>lse {
+                $this-&gt;excludedDirs[$directory] = true;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+        <span style="background-color: red">i</span>f ($patterns) {
+            $this-&gt;excludedPattern = &#039;#(?:^|/)(?:&#039;.implode(&#039;|&#039;, $patterns).&#039;)(?:/|$)#&#039;;
+        <span style="background-color: green">}</span>
+
+        parent::__construct($iterator);
+    }
+
+    /**
+     * Filters the iterator values.
+     */
+    <span style="background-color: green">p</span>ublic function accept(): bool
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isRecursive &amp;&amp; <span style="background-color: green">i</span>sset($this-&gt;excludedDirs[$this-&gt;getFilename()]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;isDir()) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;excludedPattern) {
+            $path = $this-&gt;isDir() ? $this-&gt;current()-&gt;getRelativePathname() : <span style="background-color: red">$</span>this-&gt;current()-&gt;getRelativePath();
+            $path = str_replace(&#039;\\&#039;, &#039;/&#039;, $path);
+
+            return !preg_match($this-&gt;excludedPattern, $path);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;pruneFilters &amp;&amp; <span style="background-color: red">$</span>this-&gt;hasChildren()) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;pruneFilters as $pruneFilter) {
+                <span style="background-color: red">i</span>f (!$pruneFilter($this-&gt;current())) {
+                    return false;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return true;
+    }
+
+    <span style="background-color: green">p</span>ublic function hasChildren(): bool
+    {
+        return $this-&gt;isRecursive &amp;&amp; <span style="background-color: green">$</span>this-&gt;iterator-&gt;hasChildren();
+    }
+
+    <span style="background-color: red">p</span>ublic function getChildren(): self
+    {
+        $children = new self($this-&gt;iterator-&gt;getChildren(), []);
+        $children-&gt;excludedDirs = $this-&gt;excludedDirs;
+        $children-&gt;excludedPattern = $this-&gt;excludedPattern;
+
+        return $children;
+    }
+}
+</pre>

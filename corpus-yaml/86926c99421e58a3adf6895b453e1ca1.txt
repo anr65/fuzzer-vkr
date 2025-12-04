@@ -1,0 +1,6 @@
+##############sync_vusyningr=ables:
+    COzzingfync_fuzzia 
+g :vnriables:
+  $  COVFUZZ_ADDITIO'
+L_ARGS: '-maxtotal_time=600'
+   # VFUZZ_A CO

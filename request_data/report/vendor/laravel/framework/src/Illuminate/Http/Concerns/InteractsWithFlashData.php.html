@@ -1,0 +1,69 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Concerns;
+
+use Illuminate\Database\Eloquent\Model;
+
+trait InteractsWithFlashData
+{
+    /**
+     * Retrieve an old input item.
+     *
+     * @param  string|null  $key
+     * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
+     * @return string|array|null
+     */
+    <span style="background-color: red">p</span>ublic function old($key = null, $default = null)
+    {
+        $default = $default instanceof Model ? $default-&gt;getAttribute($key) : <span style="background-color: red">$</span>default;
+
+        return $this-&gt;hasSession() ? $this-&gt;session()-&gt;getOldInput($key, $default) : <span style="background-color: red">$</span>default;
+    }
+
+    /**
+     * Flash the input for the current request to the session.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flash()
+    {
+        $this-&gt;session()-&gt;flashInput($this-&gt;input());
+    }
+
+    /**
+     * Flash only some of the input to the session.
+     *
+     * @param  array|mixed  $keys
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flashOnly($keys)
+    {
+        $this-&gt;session()-&gt;flashInput(
+            $this-&gt;only(is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args())
+        );
+    }
+
+    /**
+     * Flash only some of the input to the session.
+     *
+     * @param  array|mixed  $keys
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flashExcept($keys)
+    {
+        $this-&gt;session()-&gt;flashInput(
+            $this-&gt;except(is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args())
+        );
+    }
+
+    /**
+     * Flush all of the old input from the session.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flush()
+    {
+        $this-&gt;session()-&gt;flashInput([]);
+    }
+}
+</pre>

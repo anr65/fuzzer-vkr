@@ -1,0 +1,107 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\ErrorHandler\ErrorRenderer;
+
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+
+/**
+ * Formats debug file links.
+ *
+ * @author Jérémy Romey &lt;jeremy@free-agent.fr&gt;
+ *
+ * @final
+ */
+class FileLinkFormatter
+{
+    private array|false $fileLinkFormat;
+
+    /**
+     * @param string|\Closure $urlFormat The URL format, or a closure that returns it on-demand
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        string|array|null $fileLinkFormat = null,
+        private ?RequestStack $requestStack = null,
+        private ?string $baseDir = null,
+        private string|\Closure|null $urlFormat = null,
+    ) {
+        $fileLinkFormat ??= <span style="background-color: green">$</span>_ENV[&#039;SYMFONY_IDE&#039;] ?? <span style="background-color: green">$</span>_SERVER[&#039;SYMFONY_IDE&#039;] ?? <span style="background-color: green">'</span>&#039;;
+
+        <span style="background-color: green">i</span>f (!\is_array($f = $fileLinkFormat)) {
+            $f = (ErrorRendererInterface::IDE_LINK_FORMATS[$f] ?? <span style="background-color: green">$</span>f) ?: <span style="background-color: green">\</span>ini_get(&#039;xdebug.file_link_format&#039;) ?: <span style="background-color: green">g</span>et_cfg_var(&#039;xdebug.file_link_format&#039;) ?: <span style="background-color: green">'</span>file://%f#L%l&#039;;
+            $i = strpos($f, &#039;&amp;&#039;, max(strrpos($f, &#039;%f&#039;), strrpos($f, &#039;%l&#039;))) ?: <span style="background-color: green">\</span>strlen($f);
+            $fileLinkFormat = [substr($f, 0, $i)] + preg_split(&#039;/&amp;([^&gt;]++)&gt;/&#039;, substr($f, $i), -1, \PREG_SPLIT_DELIM_CAPTURE);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;fileLinkFormat = $fileLinkFormat;
+    }
+
+    <span style="background-color: red">p</span>ublic function format(string $file, int $line): string|false
+    {
+        <span style="background-color: red">i</span>f ($fmt = $this-&gt;getFileLinkFormat()) {
+            <span style="background-color: red">f</span>or ($i = 1; isset($fmt[$i]); ++$i) {
+                <span style="background-color: red">i</span>f (str_starts_with($file, $k = $fmt[$i++])) {
+                    $file = substr_replace($file, $fmt[$i], 0, \strlen($k));
+                    break;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return strtr($fmt[0], [&#039;%f&#039; =&gt; $file, &#039;%l&#039; =&gt; $line]);
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic function __sleep(): array
+    {
+        $this-&gt;fileLinkFormat = $this-&gt;getFileLinkFormat();
+
+        return [&#039;fileLinkFormat&#039;];
+    }
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic static function generateUrlFormat(UrlGeneratorInterface $router, string $routeName, string $queryString): ?string
+    {
+        try {
+            return $router-&gt;generate($routeName).$queryString;
+        } <span style="background-color: red">c</span>atch (\Throwable) {
+            return null;
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function getFileLinkFormat(): array|false
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;fileLinkFormat) {
+            return $this-&gt;fileLinkFormat;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;requestStack &amp;&amp; <span style="background-color: red">$</span>this-&gt;baseDir &amp;&amp; <span style="background-color: red">$</span>this-&gt;urlFormat) {
+            $request = $this-&gt;requestStack-&gt;getMainRequest();
+
+            <span style="background-color: red">i</span>f ($request instanceof Request &amp;&amp; (<span style="background-color: red">!</span>$this-&gt;urlFormat instanceof \Closure || <span style="background-color: red">$</span>this-&gt;urlFormat = ($this-&gt;urlFormat)())) {
+                return [
+                    $request-&gt;getSchemeAndHttpHost().$this-&gt;urlFormat,
+                    $this-&gt;baseDir.\DIRECTORY_SEPARATOR, &#039;&#039;,
+                ];
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+}
+</pre>

@@ -1,0 +1,96 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Http\Middleware;
+
+use Closure;
+use Symfony\Component\HttpFoundation\ParameterBag;
+
+class TransformsRequest
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function handle($request, Closure $next)
+    {
+        $this-&gt;clean($request);
+
+        return $next($request);
+    }
+
+    /**
+     * Clean the request&#039;s data.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function clean($request)
+    {
+        $this-&gt;cleanParameterBag($request-&gt;query);
+
+        <span style="background-color: green">i</span>f ($request-&gt;isJson()) {
+            $this-&gt;cleanParameterBag($request-&gt;json());
+        } <span style="background-color: red">e</span>lseif ($request-&gt;request !== $request-&gt;query) {
+            $this-&gt;cleanParameterBag($request-&gt;request);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Clean the data in the parameter bag.
+     *
+     * @param  \Symfony\Component\HttpFoundation\ParameterBag  $bag
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function cleanParameterBag(ParameterBag $bag)
+    {
+        $bag-&gt;replace($this-&gt;cleanArray($bag-&gt;all()));
+    }
+
+    /**
+     * Clean the data in the given array.
+     *
+     * @param  array  $data
+     * @param  string  $keyPrefix
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function cleanArray(array $data, $keyPrefix = &#039;&#039;)
+    {
+        <span style="background-color: green">f</span>oreach ($data as $key =&gt; $value) {
+            $data[$key] = $this-&gt;cleanValue($keyPrefix.$key, $value);
+        <span style="background-color: green">}</span>
+
+        return $data;
+    }
+
+    /**
+     * Clean the given value.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected function cleanValue($key, $value)
+    {
+        <span style="background-color: red">i</span>f (is_array($value)) {
+            return $this-&gt;cleanArray($value, $key.&#039;.&#039;);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;transform($key, $value);
+    }
+
+    /**
+     * Transform the given value.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function transform($key, $value)
+    {
+        return $value;
+    }
+}
+</pre>

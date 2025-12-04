@@ -1,0 +1,104 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database;
+
+use Exception;
+use Illuminate\Database\Query\Grammars\SQLiteGrammar as QueryGrammar;
+use Illuminate\Database\Query\Processors\SQLiteProcessor;
+use Illuminate\Database\Schema\Grammars\SQLiteGrammar as SchemaGrammar;
+use Illuminate\Database\Schema\SQLiteBuilder;
+use Illuminate\Database\Schema\SqliteSchemaState;
+use Illuminate\Filesystem\Filesystem;
+
+class SQLiteConnection extends Connection
+{
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function getDriverTitle()
+    {
+        return &#039;SQLite&#039;;
+    }
+
+    /**
+     * Escape a binary value for safe SQL embedding.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function escapeBinary($value)
+    {
+        $hex = bin2hex($value);
+
+        return &quot;x&#039;{$hex}&#039;&quot;;
+    }
+
+    /**
+     * Determine if the given database exception was caused by a unique constraint violation.
+     *
+     * @param  \Exception  $exception
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isUniqueConstraintError(Exception $exception)
+    {
+        return boolval(preg_match(&#039;#(column(s)? .* (is|are) not unique|UNIQUE constraint failed: .*)#i&#039;, $exception-&gt;getMessage()));
+    }
+
+    /**
+     * Get the default query grammar instance.
+     *
+     * @return \Illuminate\Database\Query\Grammars\SQLiteGrammar
+     */
+    <span style="background-color: green">p</span>rotected function getDefaultQueryGrammar()
+    {
+        return new QueryGrammar($this);
+    }
+
+    /**
+     * Get a schema builder instance for the connection.
+     *
+     * @return \Illuminate\Database\Schema\SQLiteBuilder
+     */
+    <span style="background-color: red">p</span>ublic function getSchemaBuilder()
+    {
+        <span style="background-color: red">i</span>f (is_null($this-&gt;schemaGrammar)) {
+            $this-&gt;useDefaultSchemaGrammar();
+        <span style="background-color: red">}</span>
+
+        return new SQLiteBuilder($this);
+    }
+
+    /**
+     * Get the default schema grammar instance.
+     *
+     * @return \Illuminate\Database\Schema\Grammars\SQLiteGrammar
+     */
+    <span style="background-color: red">p</span>rotected function getDefaultSchemaGrammar()
+    {
+        return new SchemaGrammar($this);
+    }
+
+    /**
+     * Get the schema state for the connection.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem|null  $files
+     * @param  callable|null  $processFactory
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function getSchemaState(?Filesystem $files = null, ?callable $processFactory = null)
+    {
+        return new SqliteSchemaState($this, $files, $processFactory);
+    }
+
+    /**
+     * Get the default post processor instance.
+     *
+     * @return \Illuminate\Database\Query\Processors\SQLiteProcessor
+     */
+    <span style="background-color: green">p</span>rotected function getDefaultPostProcessor()
+    {
+        return new SQLiteProcessor;
+    }
+}
+</pre>

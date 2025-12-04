@@ -1,0 +1,291 @@
+<pre>&lt;?php
+
+namespace Illuminate\Testing;
+
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Support\Str;
+
+class ParallelTesting
+{
+    /**
+     * The container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+    protected $container;
+
+    /**
+     * The options resolver callback.
+     *
+     * @var \Closure|null
+     */
+    protected $optionsResolver;
+
+    /**
+     * The token resolver callback.
+     *
+     * @var \Closure|null
+     */
+    protected $tokenResolver;
+
+    /**
+     * All of the registered &quot;setUp&quot; process callbacks.
+     *
+     * @var array
+     */
+    protected $setUpProcessCallbacks = [];
+
+    /**
+     * All of the registered &quot;setUp&quot; test case callbacks.
+     *
+     * @var array
+     */
+    protected $setUpTestCaseCallbacks = [];
+
+    /**
+     * All of the registered &quot;setUp&quot; test database callbacks.
+     *
+     * @var array
+     */
+    protected $setUpTestDatabaseCallbacks = [];
+
+    /**
+     * All of the registered &quot;tearDown&quot; process callbacks.
+     *
+     * @var array
+     */
+    protected $tearDownProcessCallbacks = [];
+
+    /**
+     * All of the registered &quot;tearDown&quot; test case callbacks.
+     *
+     * @var array
+     */
+    protected $tearDownTestCaseCallbacks = [];
+
+    /**
+     * Create a new parallel testing instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Container $container)
+    {
+        $this-&gt;container = $container;
+    }
+
+    /**
+     * Set a callback that should be used when resolving options.
+     *
+     * @param  \Closure|null  $resolver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function resolveOptionsUsing($resolver)
+    {
+        $this-&gt;optionsResolver = $resolver;
+    }
+
+    /**
+     * Set a callback that should be used when resolving the unique process token.
+     *
+     * @param  \Closure|null  $resolver
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function resolveTokenUsing($resolver)
+    {
+        $this-&gt;tokenResolver = $resolver;
+    }
+
+    /**
+     * Register a &quot;setUp&quot; process callback.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function setUpProcess($callback)
+    {
+        $this-&gt;setUpProcessCallbacks[] = $callback;
+    }
+
+    /**
+     * Register a &quot;setUp&quot; test case callback.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function setUpTestCase($callback)
+    {
+        $this-&gt;setUpTestCaseCallbacks[] = $callback;
+    }
+
+    /**
+     * Register a &quot;setUp&quot; test database callback.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setUpTestDatabase($callback)
+    {
+        $this-&gt;setUpTestDatabaseCallbacks[] = $callback;
+    }
+
+    /**
+     * Register a &quot;tearDown&quot; process callback.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function tearDownProcess($callback)
+    {
+        $this-&gt;tearDownProcessCallbacks[] = $callback;
+    }
+
+    /**
+     * Register a &quot;tearDown&quot; test case callback.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function tearDownTestCase($callback)
+    {
+        $this-&gt;tearDownTestCaseCallbacks[] = $callback;
+    }
+
+    /**
+     * Call all of the &quot;setUp&quot; process callbacks.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function callSetUpProcessCallbacks()
+    {
+        $this-&gt;whenRunningInParallel(<span style="background-color: red">f</span>unction () {
+            <span style="background-color: red">f</span>oreach ($this-&gt;setUpProcessCallbacks as $callback) {
+                $this-&gt;container-&gt;call($callback, [
+                    &#039;token&#039; =&gt; $this-&gt;token(),
+                ]);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Call all of the &quot;setUp&quot; test case callbacks.
+     *
+     * @param  \Illuminate\Foundation\Testing\TestCase  $testCase
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function callSetUpTestCaseCallbacks($testCase)
+    {
+        $this-&gt;whenRunningInParallel(<span style="background-color: red">f</span>unction () use ($testCase) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;setUpTestCaseCallbacks as $callback) {
+                $this-&gt;container-&gt;call($callback, [
+                    &#039;testCase&#039; =&gt; $testCase,
+                    &#039;token&#039; =&gt; $this-&gt;token(),
+                ]);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Call all of the &quot;setUp&quot; test database callbacks.
+     *
+     * @param  string  $database
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function callSetUpTestDatabaseCallbacks($database)
+    {
+        $this-&gt;whenRunningInParallel(<span style="background-color: red">f</span>unction () use ($database) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;setUpTestDatabaseCallbacks as $callback) {
+                $this-&gt;container-&gt;call($callback, [
+                    &#039;database&#039; =&gt; $database,
+                    &#039;token&#039; =&gt; $this-&gt;token(),
+                ]);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Call all of the &quot;tearDown&quot; process callbacks.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function callTearDownProcessCallbacks()
+    {
+        $this-&gt;whenRunningInParallel(<span style="background-color: red">f</span>unction () {
+            <span style="background-color: red">f</span>oreach ($this-&gt;tearDownProcessCallbacks as $callback) {
+                $this-&gt;container-&gt;call($callback, [
+                    &#039;token&#039; =&gt; $this-&gt;token(),
+                ]);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Call all of the &quot;tearDown&quot; test case callbacks.
+     *
+     * @param  \Illuminate\Foundation\Testing\TestCase  $testCase
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function callTearDownTestCaseCallbacks($testCase)
+    {
+        $this-&gt;whenRunningInParallel(<span style="background-color: red">f</span>unction () use ($testCase) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;tearDownTestCaseCallbacks as $callback) {
+                $this-&gt;container-&gt;call($callback, [
+                    &#039;testCase&#039; =&gt; $testCase,
+                    &#039;token&#039; =&gt; $this-&gt;token(),
+                ]);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Get a parallel testing option.
+     *
+     * @param  string  $option
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function option($option)
+    {
+        $optionsResolver = $this-&gt;optionsResolver ?: <span style="background-color: red">f</span>unction ($option) {
+            $option = &#039;LARAVEL_PARALLEL_TESTING_&#039;.Str::upper($option);
+
+            return $_SERVER[$option] ?? <span style="background-color: red">f</span>alse;
+        };
+
+        return $optionsResolver($option);
+    }
+
+    /**
+     * Gets a unique test token.
+     *
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function token()
+    {
+        return $this-&gt;tokenResolver
+            ? call_user_func($this-&gt;tokenResolver)
+            : (<span style="background-color: red">$</span>_SERVER[&#039;TEST_TOKEN&#039;] ?? <span style="background-color: red">f</span>alse);
+    }
+
+    /**
+     * Apply the callback if tests are running in parallel.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function whenRunningInParallel($callback)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;inParallel()) {
+            $callback();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Indicates if the current tests are been run in parallel.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function inParallel()
+    {
+        return ! empty($_SERVER[&#039;LARAVEL_PARALLEL_TESTING&#039;]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;token();
+    }
+}
+</pre>

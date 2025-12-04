@@ -1,0 +1,445 @@
+<pre>&lt;?php
+
+namespace Illuminate\Queue;
+
+use Closure;
+use DateTimeInterface;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Encryption\Encrypter;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
+use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Queue\Events\JobQueueing;
+use Illuminate\Support\Collection;
+use Illuminate\Support\InteractsWithTime;
+use Illuminate\Support\Str;
+
+abstract class Queue
+{
+    use InteractsWithTime;
+
+    /**
+     * The IoC container instance.
+     *
+     * @var \Illuminate\Container\Container
+     */
+    protected $container;
+
+    /**
+     * The connection name for the queue.
+     *
+     * @var string
+     */
+    protected $connectionName;
+
+    /**
+     * Indicates that jobs should be dispatched after all database transactions have committed.
+     *
+     * @var bool
+     */
+    protected $dispatchAfterCommit;
+
+    /**
+     * The create payload callbacks.
+     *
+     * @var callable[]
+     */
+    protected static $createPayloadCallbacks = [];
+
+    /**
+     * Push a new job onto the queue.
+     *
+     * @param  string  $queue
+     * @param  string  $job
+     * @param  mixed  $data
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function pushOn($queue, $job, $data = &#039;&#039;)
+    {
+        return $this-&gt;push($job, $data, $queue);
+    }
+
+    /**
+     * Push a new job onto a specific queue after (n) seconds.
+     *
+     * @param  string  $queue
+     * @param  \DateTimeInterface|\DateInterval|int  $delay
+     * @param  string  $job
+     * @param  mixed  $data
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function laterOn($queue, $delay, $job, $data = &#039;&#039;)
+    {
+        return $this-&gt;later($delay, $job, $data, $queue);
+    }
+
+    /**
+     * Push an array of jobs onto the queue.
+     *
+     * @param  array  $jobs
+     * @param  mixed  $data
+     * @param  string|null  $queue
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function bulk($jobs, $data = &#039;&#039;, $queue = null)
+    {
+        <span style="background-color: red">f</span>oreach ((array) $jobs as $job) {
+            $this-&gt;push($job, $data, $queue);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a payload string from the given job and data.
+     *
+     * @param  \Closure|string|object  $job
+     * @param  string  $queue
+     * @param  mixed  $data
+     * @return string
+     *
+     * @throws \Illuminate\Queue\InvalidPayloadException
+     */
+    <span style="background-color: red">p</span>rotected function createPayload($job, $queue, $data = &#039;&#039;)
+    {
+        <span style="background-color: red">i</span>f ($job instanceof Closure) {
+            $job = CallQueuedClosure::create($job);
+        <span style="background-color: red">}</span>
+
+        $payload = json_encode($value = $this-&gt;createPayloadArray($job, $queue, $data), \JSON_UNESCAPED_UNICODE);
+
+        <span style="background-color: red">i</span>f (json_last_error() !== JSON_ERROR_NONE) {
+            throw new InvalidPayloadException(
+                &#039;Unable to JSON encode payload. Error (&#039;.json_last_error().&#039;): &#039;.json_last_error_msg(), $value
+            );
+        <span style="background-color: red">}</span>
+
+        return $payload;
+    }
+
+    /**
+     * Create a payload array from the given job and data.
+     *
+     * @param  string|object  $job
+     * @param  string  $queue
+     * @param  mixed  $data
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function createPayloadArray($job, $queue, $data = &#039;&#039;)
+    {
+        return is_object($job)
+            ? $this-&gt;createObjectPayload($job, $queue)
+            : <span style="background-color: red">$</span>this-&gt;createStringPayload($job, $queue, $data);
+    }
+
+    /**
+     * Create a payload for an object-based queue handler.
+     *
+     * @param  object  $job
+     * @param  string  $queue
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function createObjectPayload($job, $queue)
+    {
+        $payload = $this-&gt;withCreatePayloadHooks($queue, [
+            &#039;uuid&#039; =&gt; (string) Str::uuid(),
+            &#039;displayName&#039; =&gt; $this-&gt;getDisplayName($job),
+            &#039;job&#039; =&gt; &#039;Illuminate\Queue\CallQueuedHandler@call&#039;,
+            &#039;maxTries&#039; =&gt; $this-&gt;getJobTries($job),
+            &#039;maxExceptions&#039; =&gt; $job-&gt;maxExceptions ?? <span style="background-color: red">n</span>ull,
+            &#039;failOnTimeout&#039; =&gt; $job-&gt;failOnTimeout ?? <span style="background-color: red">f</span>alse,
+            &#039;backoff&#039; =&gt; $this-&gt;getJobBackoff($job),
+            &#039;timeout&#039; =&gt; $job-&gt;timeout ?? <span style="background-color: red">n</span>ull,
+            &#039;retryUntil&#039; =&gt; $this-&gt;getJobExpiration($job),
+            &#039;data&#039; =&gt; [
+                &#039;commandName&#039; =&gt; $job,
+                &#039;command&#039; =&gt; $job,
+            ],
+        ]);
+
+        $command = $this-&gt;jobShouldBeEncrypted($job) &amp;&amp; <span style="background-color: red">$</span>this-&gt;container-&gt;bound(Encrypter::class)
+            ? $this-&gt;container[Encrypter::class]-&gt;encrypt(serialize(clone $job))
+            : <span style="background-color: red">s</span>erialize(clone $job);
+
+        return array_merge($payload, [
+            &#039;data&#039; =&gt; array_merge($payload[&#039;data&#039;], [
+                &#039;commandName&#039; =&gt; get_class($job),
+                &#039;command&#039; =&gt; $command,
+            ]),
+        ]);
+    }
+
+    /**
+     * Get the display name for the given job.
+     *
+     * @param  object  $job
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function getDisplayName($job)
+    {
+        return method_exists($job, &#039;displayName&#039;)
+            ? $job-&gt;displayName()
+            : <span style="background-color: red">g</span>et_class($job);
+    }
+
+    /**
+     * Get the maximum number of attempts for an object-based queue handler.
+     *
+     * @param  mixed  $job
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getJobTries($job)
+    {
+        <span style="background-color: red">i</span>f (! method_exists($job, &#039;tries&#039;) &amp;&amp; <span style="background-color: red">!</span> isset($job-&gt;tries)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_null($tries = $job-&gt;tries ?? <span style="background-color: red">$</span>job-&gt;tries())) {
+            return;
+        <span style="background-color: red">}</span>
+
+        return $tries;
+    }
+
+    /**
+     * Get the backoff for an object-based queue handler.
+     *
+     * @param  mixed  $job
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getJobBackoff($job)
+    {
+        <span style="background-color: red">i</span>f (! method_exists($job, &#039;backoff&#039;) &amp;&amp; <span style="background-color: red">!</span> isset($job-&gt;backoff)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_null($backoff = $job-&gt;backoff ?? <span style="background-color: red">$</span>job-&gt;backoff())) {
+            return;
+        <span style="background-color: red">}</span>
+
+        return Collection::wrap($backoff)
+            -&gt;map(fn ($backoff) =&gt; <span style="background-color: red">$</span>backoff instanceof DateTimeInterface ? $this-&gt;secondsUntil($backoff) : <span style="background-color: red">$</span>backoff)
+            -&gt;implode(&#039;,&#039;);
+    }
+
+    /**
+     * Get the expiration timestamp for an object-based queue handler.
+     *
+     * @param  mixed  $job
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getJobExpiration($job)
+    {
+        <span style="background-color: red">i</span>f (! method_exists($job, &#039;retryUntil&#039;) &amp;&amp; <span style="background-color: red">!</span> isset($job-&gt;retryUntil)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $expiration = $job-&gt;retryUntil ?? <span style="background-color: red">$</span>job-&gt;retryUntil();
+
+        return $expiration instanceof DateTimeInterface
+            ? $expiration-&gt;getTimestamp()
+            : <span style="background-color: red">$</span>expiration;
+    }
+
+    /**
+     * Determine if the job should be encrypted.
+     *
+     * @param  object  $job
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function jobShouldBeEncrypted($job)
+    {
+        <span style="background-color: red">i</span>f ($job instanceof ShouldBeEncrypted) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return isset($job-&gt;shouldBeEncrypted) &amp;&amp; <span style="background-color: red">$</span>job-&gt;shouldBeEncrypted;
+    }
+
+    /**
+     * Create a typical, string based queue payload array.
+     *
+     * @param  string  $job
+     * @param  string  $queue
+     * @param  mixed  $data
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function createStringPayload($job, $queue, $data)
+    {
+        return $this-&gt;withCreatePayloadHooks($queue, [
+            &#039;uuid&#039; =&gt; (string) Str::uuid(),
+            &#039;displayName&#039; =&gt; is_string($job) ? explode(&#039;@&#039;, $job)[0] : <span style="background-color: red">n</span>ull,
+            &#039;job&#039; =&gt; $job,
+            &#039;maxTries&#039; =&gt; null,
+            &#039;maxExceptions&#039; =&gt; null,
+            &#039;failOnTimeout&#039; =&gt; false,
+            &#039;backoff&#039; =&gt; null,
+            &#039;timeout&#039; =&gt; null,
+            &#039;data&#039; =&gt; $data,
+        ]);
+    }
+
+    /**
+     * Register a callback to be executed when creating job payloads.
+     *
+     * @param  callable|null  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function createPayloadUsing($callback)
+    {
+        <span style="background-color: red">i</span>f (is_null($callback)) {
+            static::$createPayloadCallbacks = [];
+        } <span style="background-color: green">e</span>lse {
+            static::$createPayloadCallbacks[] = $callback;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Create the given payload using any registered payload hooks.
+     *
+     * @param  string  $queue
+     * @param  array  $payload
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function withCreatePayloadHooks($queue, array $payload)
+    {
+        <span style="background-color: red">i</span>f (! empty(static::$createPayloadCallbacks)) {
+            <span style="background-color: red">f</span>oreach (static::$createPayloadCallbacks as $callback) {
+                $payload = array_merge($payload, $callback($this-&gt;getConnectionName(), $queue, $payload));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $payload;
+    }
+
+    /**
+     * Enqueue a job using the given callback.
+     *
+     * @param  \Closure|string|object  $job
+     * @param  string  $payload
+     * @param  string|null  $queue
+     * @param  \DateTimeInterface|\DateInterval|int|null  $delay
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function enqueueUsing($job, $payload, $queue, $delay, $callback)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;shouldDispatchAfterCommit($job) &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;container-&gt;bound(&#039;db.transactions&#039;)) {
+            return $this-&gt;container-&gt;make(&#039;db.transactions&#039;)-&gt;addCallback(
+                <span style="background-color: red">f</span>unction () use ($queue, $job, $payload, $delay, $callback) {
+                    $this-&gt;raiseJobQueueingEvent($queue, $job, $payload, $delay);
+
+                    return tap($callback($payload, $queue, $delay), <span style="background-color: red">f</span>unction ($jobId) use ($queue, $job, $payload, $delay) {
+                        $this-&gt;raiseJobQueuedEvent($queue, $jobId, $job, $payload, $delay);
+                    });
+                }
+            );
+        <span style="background-color: red">}</span>
+
+        $this-&gt;raiseJobQueueingEvent($queue, $job, $payload, $delay);
+
+        return tap($callback($payload, $queue, $delay), <span style="background-color: red">f</span>unction ($jobId) use ($queue, $job, $payload, $delay) {
+            $this-&gt;raiseJobQueuedEvent($queue, $jobId, $job, $payload, $delay);
+        });
+    }
+
+    /**
+     * Determine if the job should be dispatched after all database transactions have committed.
+     *
+     * @param  \Closure|string|object  $job
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function shouldDispatchAfterCommit($job)
+    {
+        <span style="background-color: red">i</span>f ($job instanceof ShouldQueueAfterCommit) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $job instanceof Closure &amp;&amp; <span style="background-color: red">i</span>s_object($job) &amp;&amp; <span style="background-color: red">i</span>sset($job-&gt;afterCommit)) {
+            return $job-&gt;afterCommit;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;dispatchAfterCommit ?? <span style="background-color: red">f</span>alse;
+    }
+
+    /**
+     * Raise the job queueing event.
+     *
+     * @param  string  $queue
+     * @param  \Closure|string|object  $job
+     * @param  string  $payload
+     * @param  \DateTimeInterface|\DateInterval|int|null  $delay
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function raiseJobQueueingEvent($queue, $job, $payload, $delay)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container-&gt;bound(&#039;events&#039;)) {
+            $delay = ! is_null($delay) ? $this-&gt;secondsUntil($delay) : <span style="background-color: red">$</span>delay;
+
+            $this-&gt;container[&#039;events&#039;]-&gt;dispatch(new JobQueueing($this-&gt;connectionName, $queue, $job, $payload, $delay));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Raise the job queued event.
+     *
+     * @param  string|null  $queue
+     * @param  string|int|null  $jobId
+     * @param  \Closure|string|object  $job
+     * @param  string  $payload
+     * @param  \DateTimeInterface|\DateInterval|int|null  $delay
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function raiseJobQueuedEvent($queue, $jobId, $job, $payload, $delay)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container-&gt;bound(&#039;events&#039;)) {
+            $delay = ! is_null($delay) ? $this-&gt;secondsUntil($delay) : <span style="background-color: red">$</span>delay;
+
+            $this-&gt;container[&#039;events&#039;]-&gt;dispatch(new JobQueued($this-&gt;connectionName, $queue, $jobId, $job, $payload, $delay));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the connection name for the queue.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getConnectionName()
+    {
+        return $this-&gt;connectionName;
+    }
+
+    /**
+     * Set the connection name for the queue.
+     *
+     * @param  string  $name
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setConnectionName($name)
+    {
+        $this-&gt;connectionName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Get the container instance being used by the connection.
+     *
+     * @return \Illuminate\Container\Container
+     */
+    <span style="background-color: red">p</span>ublic function getContainer()
+    {
+        return $this-&gt;container;
+    }
+
+    /**
+     * Set the IoC container instance.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setContainer(Container $container)
+    {
+        $this-&gt;container = $container;
+    }
+}
+</pre>

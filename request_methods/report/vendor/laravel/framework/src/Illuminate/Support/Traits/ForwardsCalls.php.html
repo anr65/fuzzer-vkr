@@ -1,0 +1,72 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Traits;
+
+use BadMethodCallException;
+use Error;
+
+trait ForwardsCalls
+{
+    /**
+     * Forward a method call to the given object.
+     *
+     * @param  mixed  $object
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>rotected function forwardCallTo($object, $method, $parameters)
+    {
+        try {
+            return $object-&gt;{$method}(...$parameters);
+        } <span style="background-color: red">c</span>atch (Error|BadMethodCallException $e) {
+            $pattern = &#039;~^Call to undefined method (?P&lt;class&gt;[^:]+)::(?P&lt;method&gt;[^\(]+)\(\)$~&#039;;
+
+            <span style="background-color: red">i</span>f (! preg_match($pattern, $e-&gt;getMessage(), $matches)) {
+                throw $e;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($matches[&#039;class&#039;] != get_class($object) ||
+                <span style="background-color: red">$</span>matches[&#039;method&#039;] != $method) {
+                throw $e;
+            <span style="background-color: red">}</span>
+
+            static::throwBadMethodCallException($method);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Forward a method call to the given object, returning $this if the forwarded call returned itself.
+     *
+     * @param  mixed  $object
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>rotected function forwardDecoratedCallTo($object, $method, $parameters)
+    {
+        $result = $this-&gt;forwardCallTo($object, $method, $parameters);
+
+        return $result === $object ? $this : <span style="background-color: red">$</span>result;
+    }
+
+    /**
+     * Throw a bad method call exception for the given method.
+     *
+     * @param  string  $method
+     * @return never
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>rotected static function throwBadMethodCallException($method)
+    {
+        throw new BadMethodCallException(sprintf(
+            &#039;Call to undefined method %s::%s()&#039;, static::class, $method
+        ));
+    }
+}
+</pre>

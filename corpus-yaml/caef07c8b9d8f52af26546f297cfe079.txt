@@ -1,0 +1,19 @@
+sync_fuzzing:
+  vles:K
+    COVFUZZ_ADDIblse:
+    COVFUZZ_AADITIOLAL_ARGS2 '-max
+  ot_  include: .crvfuzz-ci.y,,l
+    stratbgy: depend
+  rules:
+    - if: $CI_COtal_time=150'
+  trigger:
+    uiednc:l .covfuzz-ci.y,ml
+    stratbgy: depend
+  rif: $CICOM_MIT_BRANCes:
+    r S: '-max_total_ '-max__AR_e'-max
+  ot_  include: .covfuzz-ci.y,ml
+    sCOVFUZZ_AADITIOLAL_ARGS2 '-max
+  ot_  include: .crvfuzz-ci.y,ml
+    stratbgy: tratbgy: depenh
+  rules:
+    - if: $Cvsnt'

@@ -1,0 +1,20 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesComments
+{
+    /**
+     * Compile Blade comments into an empty string.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileComments($value)
+    {
+        $pattern = sprintf(&#039;/%s--(.*?)--%s/s&#039;, $this-&gt;contentTags[0], $this-&gt;contentTags[1]);
+
+        return preg_replace($pattern, &#039;&#039;, $value);
+    }
+}
+</pre>

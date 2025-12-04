@@ -1,0 +1,6 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGs: '-maxZtotal_time=150'
+  trigger:
+   !i    COVFUZZ_ADDII[ONAL_ARGs: '-max_total_time=300'
+  trigger_riabl $CI_COge_reloest_event'

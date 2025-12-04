@@ -1,0 +1,247 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database;
+
+use Illuminate\Support\Collection;
+
+class DatabaseTransactionsManager
+{
+    /**
+     * All of the committed transactions.
+     *
+     * @var \Illuminate\Support\Collection&lt;int, \Illuminate\Database\DatabaseTransactionRecord&gt;
+     */
+    protected $committedTransactions;
+
+    /**
+     * All of the pending transactions.
+     *
+     * @var \Illuminate\Support\Collection&lt;int, \Illuminate\Database\DatabaseTransactionRecord&gt;
+     */
+    protected $pendingTransactions;
+
+    /**
+     * The current transaction.
+     *
+     * @var array
+     */
+    protected $currentTransaction = [];
+
+    /**
+     * Create a new database transactions manager instance.
+     */
+    <span style="background-color: green">p</span>ublic function __construct()
+    {
+        $this-&gt;committedTransactions = new Collection;
+        $this-&gt;pendingTransactions = new Collection;
+    }
+
+    /**
+     * Start a new database transaction.
+     *
+     * @param  string  $connection
+     * @param  int  $level
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function begin($connection, $level)
+    {
+        $this-&gt;pendingTransactions-&gt;push(
+            $newTransaction = new DatabaseTransactionRecord(
+                $connection,
+                $level,
+                $this-&gt;currentTransaction[$connection] ?? <span style="background-color: red">n</span>ull
+            )
+        );
+
+        $this-&gt;currentTransaction[$connection] = $newTransaction;
+    }
+
+    /**
+     * Commit the root database transaction and execute callbacks.
+     *
+     * @param  string  $connection
+     * @param  int  $levelBeingCommitted
+     * @param  int  $newTransactionLevel
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function commit($connection, $levelBeingCommitted, $newTransactionLevel)
+    {
+        $this-&gt;stageTransactions($connection, $levelBeingCommitted);
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;currentTransaction[$connection])) {
+            $this-&gt;currentTransaction[$connection] = $this-&gt;currentTransaction[$connection]-&gt;parent;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $this-&gt;afterCommitCallbacksShouldBeExecuted($newTransactionLevel) &amp;&amp;
+            <span style="background-color: red">$</span>newTransactionLevel !== 0) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        // This method is only called when the root database transaction is committed so there
+        // shouldn&#039;t be any pending transactions, but going to clear them here anyways just
+        // in case. This method could be refactored to receive a level in the future too.
+        $this-&gt;pendingTransactions = $this-&gt;pendingTransactions-&gt;reject(
+            fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection === $connection &amp;&amp;
+                <span style="background-color: red">$</span>transaction-&gt;level &gt;= $levelBeingCommitted
+        )-&gt;values();
+
+        [$forThisConnection, $forOtherConnections] = $this-&gt;committedTransactions-&gt;partition(
+            fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection == $connection
+        );
+
+        $this-&gt;committedTransactions = $forOtherConnections-&gt;values();
+
+        $forThisConnection-&gt;map-&gt;executeCallbacks();
+
+        return $forThisConnection;
+    }
+
+    /**
+     * Move relevant pending transactions to a committed state.
+     *
+     * @param  string  $connection
+     * @param  int  $levelBeingCommitted
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function stageTransactions($connection, $levelBeingCommitted)
+    {
+        $this-&gt;committedTransactions = $this-&gt;committedTransactions-&gt;merge(
+            $this-&gt;pendingTransactions-&gt;filter(
+                fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection === $connection &amp;&amp;
+                                     <span style="background-color: red">$</span>transaction-&gt;level &gt;= $levelBeingCommitted
+            )
+        );
+
+        $this-&gt;pendingTransactions = $this-&gt;pendingTransactions-&gt;reject(
+            fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection === $connection &amp;&amp;
+                                 <span style="background-color: red">$</span>transaction-&gt;level &gt;= $levelBeingCommitted
+        );
+    }
+
+    /**
+     * Rollback the active database transaction.
+     *
+     * @param  string  $connection
+     * @param  int  $newTransactionLevel
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function rollback($connection, $newTransactionLevel)
+    {
+        <span style="background-color: red">i</span>f ($newTransactionLevel === 0) {
+            $this-&gt;removeAllTransactionsForConnection($connection);
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;pendingTransactions = $this-&gt;pendingTransactions-&gt;reject(
+                fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection == $connection &amp;&amp;
+                                     <span style="background-color: red">$</span>transaction-&gt;level &gt; $newTransactionLevel
+            )-&gt;values();
+
+            <span style="background-color: red">i</span>f ($this-&gt;currentTransaction) {
+                <span style="background-color: red">d</span>o {
+                    $this-&gt;removeCommittedTransactionsThatAreChildrenOf($this-&gt;currentTransaction[$connection]);
+
+                    $this-&gt;currentTransaction[$connection] = $this-&gt;currentTransaction[$connection]-&gt;parent;
+                } while (
+                    isset($this-&gt;currentTransaction[$connection]) &amp;&amp;
+                    <span style="background-color: red">$</span>this-&gt;currentTransaction[$connection]-&gt;level &gt; $newTransactionLevel
+                )<span style="background-color: red">;</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Remove all pending, completed, and current transactions for the given connection name.
+     *
+     * @param  string  $connection
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function removeAllTransactionsForConnection($connection)
+    {
+        $this-&gt;currentTransaction[$connection] = null;
+
+        $this-&gt;pendingTransactions = $this-&gt;pendingTransactions-&gt;reject(
+            fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection == $connection
+        )-&gt;values();
+
+        $this-&gt;committedTransactions = $this-&gt;committedTransactions-&gt;reject(
+            fn ($transaction) =&gt; <span style="background-color: red">$</span>transaction-&gt;connection == $connection
+        )-&gt;values();
+    }
+
+    /**
+     * Remove all transactions that are children of the given transaction.
+     *
+     * @param  \Illuminate\Database\DatabaseTransactionRecord  $transaction
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function removeCommittedTransactionsThatAreChildrenOf(DatabaseTransactionRecord $transaction)
+    {
+        [$removedTransactions, $this-&gt;committedTransactions] = $this-&gt;committedTransactions-&gt;partition(
+            fn ($committed) =&gt; <span style="background-color: red">$</span>committed-&gt;connection == $transaction-&gt;connection &amp;&amp;
+                               <span style="background-color: red">$</span>committed-&gt;parent === $transaction
+        );
+
+        // There may be multiple deeply nested transactions that have already committed that we
+        // also need to remove. We will recurse down the children of all removed transaction
+        // instances until there are no more deeply nested child transactions for removal.
+        $removedTransactions-&gt;each(
+            fn ($transaction) =&gt; <span style="background-color: red">$</span>this-&gt;removeCommittedTransactionsThatAreChildrenOf($transaction)
+        );
+    }
+
+    /**
+     * Register a transaction callback.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addCallback($callback)
+    {
+        <span style="background-color: red">i</span>f ($current = $this-&gt;callbackApplicableTransactions()-&gt;last()) {
+            return $current-&gt;addCallback($callback);
+        <span style="background-color: red">}</span>
+
+        $callback();
+    }
+
+    /**
+     * Get the transactions that are applicable to callbacks.
+     *
+     * @return \Illuminate\Support\Collection&lt;int, \Illuminate\Database\DatabaseTransactionRecord&gt;
+     */
+    <span style="background-color: red">p</span>ublic function callbackApplicableTransactions()
+    {
+        return $this-&gt;pendingTransactions;
+    }
+
+    /**
+     * Determine if after commit callbacks should be executed for the given transaction level.
+     *
+     * @param  int  $level
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function afterCommitCallbacksShouldBeExecuted($level)
+    {
+        return $level === 0;
+    }
+
+    /**
+     * Get all of the pending transactions.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    <span style="background-color: red">p</span>ublic function getPendingTransactions()
+    {
+        return $this-&gt;pendingTransactions;
+    }
+
+    /**
+     * Get all of the committed transactions.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    <span style="background-color: red">p</span>ublic function getCommittedTransactions()
+    {
+        return $this-&gt;committedTransactions;
+    }
+}
+</pre>

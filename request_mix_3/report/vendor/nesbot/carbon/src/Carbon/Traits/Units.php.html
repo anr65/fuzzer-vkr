@@ -1,0 +1,470 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonConverterInterface;
+use Carbon\CarbonInterface;
+use Carbon\CarbonInterval;
+use Carbon\Exceptions\InvalidFormatException;
+use Carbon\Exceptions\InvalidIntervalException;
+use Carbon\Exceptions\UnitException;
+use Carbon\Exceptions\UnsupportedUnitException;
+use Carbon\Unit;
+use Closure;
+use DateInterval;
+use DateMalformedStringException;
+use ReturnTypeWillChange;
+
+/**
+ * Trait Units.
+ *
+ * Add, subtract and set units.
+ */
+trait Units
+{
+    /**
+     * @deprecated Prefer to use add addUTCUnit() which more accurately defines what it&#039;s doing.
+     *
+     * Add seconds to the instance using timestamp. Positive $value travels
+     * forward while negative $value travels into the past.
+     *
+     * @param string         $unit
+     * @param int|float|null $value
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function addRealUnit(string $unit, $value = 1): static
+    {
+        return $this-&gt;addUTCUnit($unit, $value);
+    }
+
+    /**
+     * Add seconds to the instance using timestamp. Positive $value travels
+     * forward while negative $value travels into the past.
+     *
+     * @param string         $unit
+     * @param int|float|null $value
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function addUTCUnit(string $unit, $value = 1): static
+    {
+        $value ??= <span style="background-color: red">0</span>;
+
+        switch ($unit) {
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;micro&#039;:
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;microsecond&#039;:
+                /* @var CarbonInterface $this */
+                $diff = $this-&gt;microsecond + $value;
+                $time = $this-&gt;getTimestamp();
+                $seconds = (int) floor($diff / static::MICROSECONDS_PER_SECOND);
+                $time += $seconds;
+                $diff -= $seconds * static::MICROSECONDS_PER_SECOND;
+                $microtime = str_pad((string) $diff, 6, &#039;0&#039;, STR_PAD_LEFT);
+                $timezone = $this-&gt;tz;
+
+                return $this-&gt;tz(&#039;UTC&#039;)-&gt;modify(&quot;@$time.$microtime&quot;)-&gt;setTimezone($timezone);
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;milli&#039;:
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;millisecond&#039;:
+                return $this-&gt;addUTCUnit(&#039;microsecond&#039;, $value * static::MICROSECONDS_PER_MILLISECOND);
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;second&#039;:
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;minute&#039;:
+                $value *= static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;hour&#039;:
+                $value *= static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;day&#039;:
+                $value *= static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;week&#039;:
+                $value *= static::DAYS_PER_WEEK * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;month&#039;:
+                $value *= 30 * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;quarter&#039;:
+                $value *= static::MONTHS_PER_QUARTER * 30 * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;year&#039;:
+                $value *= 365 * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;decade&#039;:
+                $value *= static::YEARS_PER_DECADE * 365 * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;century&#039;:
+                $value *= static::YEARS_PER_CENTURY * 365 * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            // @call addUTCUnit
+            <span style="background-color: red">c</span>ase &#039;millennium&#039;:
+                $value *= static::YEARS_PER_MILLENNIUM * 365 * static::HOURS_PER_DAY * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE;
+
+                break;
+
+            <span style="background-color: red">d</span>efault:
+                <span style="background-color: red">i</span>f ($this-&gt;isLocalStrictModeEnabled()) {
+                    throw new UnitException(&quot;Invalid unit for real timestamp add/sub: &#039;$unit&#039;&quot;);
+                <span style="background-color: red">}</span>
+
+                return $this;
+        <span style="background-color: red">}</span>
+
+        $seconds = (int) $value;
+        $microseconds = (int) round(
+            (abs($value) - abs($seconds)) * ($value &lt; 0 ? -1 : <span style="background-color: red">1</span>) * static::MICROSECONDS_PER_SECOND,
+        );
+        $date = $this-&gt;setTimestamp($this-&gt;getTimestamp() + $seconds);
+
+        return $microseconds ? $date-&gt;addUTCUnit(&#039;microsecond&#039;, $microseconds) : <span style="background-color: red">$</span>date;
+    }
+
+    /**
+     * @deprecated Prefer to use add subUTCUnit() which more accurately defines what it&#039;s doing.
+     *
+     * Subtract seconds to the instance using timestamp. Positive $value travels
+     * into the past while negative $value travels forward.
+     *
+     * @param string $unit
+     * @param int    $value
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function subRealUnit($unit, $value = 1): static
+    {
+        return $this-&gt;addUTCUnit($unit, -$value);
+    }
+
+    /**
+     * Subtract seconds to the instance using timestamp. Positive $value travels
+     * into the past while negative $value travels forward.
+     *
+     * @param string $unit
+     * @param int    $value
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function subUTCUnit($unit, $value = 1): static
+    {
+        return $this-&gt;addUTCUnit($unit, -$value);
+    }
+
+    /**
+     * Returns true if a property can be changed via setter.
+     *
+     * @param string $unit
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isModifiableUnit($unit): bool
+    {
+        static $modifiableUnits = [
+            // @call addUnit
+            &#039;millennium&#039;,
+            // @call addUnit
+            &#039;century&#039;,
+            // @call addUnit
+            &#039;decade&#039;,
+            // @call addUnit
+            &#039;quarter&#039;,
+            // @call addUnit
+            &#039;week&#039;,
+            // @call addUnit
+            &#039;weekday&#039;,
+        ];
+
+        return \in_array($unit, $modifiableUnits, true) || <span style="background-color: red">\</span>in_array($unit, static::$units, true);
+    }
+
+    /**
+     * Call native PHP DateTime/DateTimeImmutable add() method.
+     *
+     * @param DateInterval $interval
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function rawAdd(DateInterval $interval): static
+    {
+        return parent::add($interval);
+    }
+
+    /**
+     * Add given units or interval to the current instance.
+     *
+     * @example $date-&gt;add(&#039;hour&#039;, 3)
+     * @example $date-&gt;add(15, &#039;days&#039;)
+     * @example $date-&gt;add(CarbonInterval::days(4))
+     *
+     * @param Unit|string|DateInterval|Closure|CarbonConverterInterface $unit
+     * @param int|float                                                 $value
+     * @param bool|null                                                 $overflow
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[ReturnTypeWillChange]
+    public function add($unit, $value = 1, ?bool $overflow = null): static
+    {
+        $unit = Unit::toNameIfUnit($unit);
+        $value = Unit::toNameIfUnit($value);
+
+        <span style="background-color: red">i</span>f (\is_string($unit) &amp;&amp; <span style="background-color: red">\</span>func_num_args() === 1) {
+            $unit = CarbonInterval::make($unit, [], true);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof CarbonConverterInterface) {
+            $unit = Closure::fromCallable([$unit, &#039;convertDate&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof Closure) {
+            $result = $this-&gt;resolveCarbon($unit($this, false));
+
+            <span style="background-color: red">i</span>f ($this !== $result &amp;&amp; <span style="background-color: red">$</span>this-&gt;isMutable()) {
+                return $this-&gt;modify($result-&gt;rawFormat(&#039;Y-m-d H:i:s.u e O&#039;));
+            <span style="background-color: red">}</span>
+
+            return $result;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof DateInterval) {
+            return parent::add($unit);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_numeric($unit)) {
+            [$value, $unit] = [$unit, $value];
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;addUnit((string) $unit, $value, $overflow);
+    }
+
+    /**
+     * Add given units to the current instance.
+     */
+    <span style="background-color: red">p</span>ublic function addUnit(Unit|string $unit, $value = 1, ?bool $overflow = null): static
+    {
+        $unit = Unit::toName($unit);
+
+        $originalArgs = \func_get_args();
+
+        $date = $this;
+
+        <span style="background-color: red">i</span>f (!is_numeric($value) || <span style="background-color: red">!</span>(float) $value) {
+            return $date-&gt;isMutable() ? $date : <span style="background-color: red">$</span>date-&gt;copy();
+        <span style="background-color: red">}</span>
+
+        $unit = self::singularUnit($unit);
+        $metaUnits = [
+            &#039;millennium&#039; =&gt; [static::YEARS_PER_MILLENNIUM, &#039;year&#039;],
+            &#039;century&#039; =&gt; [static::YEARS_PER_CENTURY, &#039;year&#039;],
+            &#039;decade&#039; =&gt; [static::YEARS_PER_DECADE, &#039;year&#039;],
+            &#039;quarter&#039; =&gt; [static::MONTHS_PER_QUARTER, &#039;month&#039;],
+        ];
+
+        <span style="background-color: red">i</span>f (isset($metaUnits[$unit])) {
+            [$factor, $unit] = $metaUnits[$unit];
+            $value *= $factor;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit === &#039;weekday&#039;) {
+            $weekendDays = $this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::getWeekendDays());
+
+            <span style="background-color: red">i</span>f ($weekendDays !== [static::SATURDAY, static::SUNDAY]) {
+                $absoluteValue = abs($value);
+                $sign = $value / max(1, $absoluteValue);
+                $weekDaysCount = static::DAYS_PER_WEEK - min(static::DAYS_PER_WEEK - 1, \count(array_unique($weekendDays)));
+                $weeks = floor($absoluteValue / $weekDaysCount);
+
+                <span style="background-color: red">f</span>or ($diff = $absoluteValue % $weekDaysCount; $diff; $diff--) {
+                    /** @var static $date */
+                    $date = $date-&gt;addDays($sign);
+
+                    <span style="background-color: red">w</span>hile (\in_array($date-&gt;dayOfWeek, $weekendDays, true)) {
+                        $date = $date-&gt;addDays($sign);
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+
+                $value = $weeks * $sign;
+                $unit = &#039;week&#039;;
+            <span style="background-color: red">}</span>
+
+            $timeString = $date-&gt;toTimeString();
+        } <span style="background-color: red">e</span>lseif ($canOverflow = (\in_array($unit, [
+                &#039;month&#039;,
+                &#039;year&#039;,
+            ]) &amp;&amp; (<span style="background-color: red">$</span>overflow === false || (
+                <span style="background-color: red">$</span>overflow === null &amp;&amp;
+                (<span style="background-color: red">$</span>ucUnit = ucfirst($unit).&#039;s&#039;) &amp;&amp;
+                <span style="background-color: red">!</span>($this-&gt;{&#039;local&#039;.$ucUnit.&#039;Overflow&#039;} ?? <span style="background-color: red">s</span>tatic::{&#039;shouldOverflow&#039;.$ucUnit}())
+            )))) {
+            $day = $date-&gt;day;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit === &#039;milli&#039; || <span style="background-color: red">$</span>unit === &#039;millisecond&#039;) {
+            $unit = &#039;microsecond&#039;;
+            $value *= static::MICROSECONDS_PER_MILLISECOND;
+        <span style="background-color: red">}</span>
+
+        $previousException = null;
+
+        try {
+            $date = self::rawAddUnit($date, $unit, $value);
+
+            <span style="background-color: red">i</span>f (isset($timeString)) {
+                $date = $date?-&gt;setTimeFromTimeString($timeString);
+            } <span style="background-color: red">e</span>lseif (isset($canOverflow, $day) &amp;&amp; <span style="background-color: red">$</span>canOverflow &amp;&amp; <span style="background-color: red">$</span>day !== $date?-&gt;day) {
+                $date = $date?-&gt;modify(&#039;last day of previous month&#039;);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">c</span>atch (DateMalformedStringException|InvalidFormatException|UnsupportedUnitException $exception) {
+            $date = null;
+            $previousException = $exception;
+        <span style="background-color: red">}</span>
+
+        return $date ?? <span style="background-color: red">t</span>hrow new UnitException(
+            &#039;Unable to add unit &#039;.var_export($originalArgs, true),
+            previous: $previousException,
+        );
+    }
+
+    /**
+     * Subtract given units to the current instance.
+     */
+    <span style="background-color: red">p</span>ublic function subUnit(Unit|string $unit, $value = 1, ?bool $overflow = null): static
+    {
+        return $this-&gt;addUnit($unit, -$value, $overflow);
+    }
+
+    /**
+     * Call native PHP DateTime/DateTimeImmutable sub() method.
+     */
+    <span style="background-color: red">p</span>ublic function rawSub(DateInterval $interval): static
+    {
+        return parent::sub($interval);
+    }
+
+    /**
+     * Subtract given units or interval to the current instance.
+     *
+     * @example $date-&gt;sub(&#039;hour&#039;, 3)
+     * @example $date-&gt;sub(15, &#039;days&#039;)
+     * @example $date-&gt;sub(CarbonInterval::days(4))
+     *
+     * @param Unit|string|DateInterval|Closure|CarbonConverterInterface $unit
+     * @param int|float                                                 $value
+     * @param bool|null                                                 $overflow
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[ReturnTypeWillChange]
+    public function sub($unit, $value = 1, ?bool $overflow = null): static
+    {
+        <span style="background-color: red">i</span>f (\is_string($unit) &amp;&amp; <span style="background-color: red">\</span>func_num_args() === 1) {
+            $unit = CarbonInterval::make($unit, [], true);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof CarbonConverterInterface) {
+            $unit = Closure::fromCallable([$unit, &#039;convertDate&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof Closure) {
+            $result = $this-&gt;resolveCarbon($unit($this, true));
+
+            <span style="background-color: red">i</span>f ($this !== $result &amp;&amp; <span style="background-color: red">$</span>this-&gt;isMutable()) {
+                return $this-&gt;modify($result-&gt;rawFormat(&#039;Y-m-d H:i:s.u e O&#039;));
+            <span style="background-color: red">}</span>
+
+            return $result;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof DateInterval) {
+            return parent::sub($unit);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_numeric($unit)) {
+            [$value, $unit] = [$unit, $value];
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;addUnit((string) $unit, -(float) $value, $overflow);
+    }
+
+    /**
+     * Subtract given units or interval to the current instance.
+     *
+     * @see sub()
+     *
+     * @param string|DateInterval $unit
+     * @param int|float           $value
+     * @param bool|null           $overflow
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function subtract($unit, $value = 1, ?bool $overflow = null): static
+    {
+        <span style="background-color: red">i</span>f (\is_string($unit) &amp;&amp; <span style="background-color: red">\</span>func_num_args() === 1) {
+            $unit = CarbonInterval::make($unit, [], true);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;sub($unit, $value, $overflow);
+    }
+
+    <span style="background-color: red">p</span>rivate static function rawAddUnit(self $date, string $unit, int|float $value): ?static
+    {
+        try {
+            return $date-&gt;rawAdd(
+                CarbonInterval::fromString(abs($value).&quot; $unit&quot;)-&gt;invert($value &lt; 0),
+            );
+        } <span style="background-color: red">c</span>atch (InvalidIntervalException $exception) {
+            try {
+                return $date-&gt;modify(&quot;$value $unit&quot;);
+            } <span style="background-color: red">c</span>atch (InvalidFormatException) {
+                throw new UnsupportedUnitException($unit, previous: $exception);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

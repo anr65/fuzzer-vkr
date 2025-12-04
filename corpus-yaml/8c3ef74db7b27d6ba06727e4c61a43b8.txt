@@ -1,0 +1,5 @@
+syuzzing:
+  variables:
+    COVFUZZ_A
+  variables:
+   qu'

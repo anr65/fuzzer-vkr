@@ -1,0 +1,110 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder;
+
+/**
+ * Glob matches globbing patterns against text.
+ *
+ *     if match_glob(&quot;foo.*&quot;, &quot;foo.bar&quot;) echo &quot;matched\n&quot;;
+ *
+ *     // prints foo.bar and foo.baz
+ *     $regex = glob_to_regex(&quot;foo.*&quot;);
+ *     for ([&#039;foo.bar&#039;, &#039;foo.baz&#039;, &#039;foo&#039;, &#039;bar&#039;] as $t)
+ *     {
+ *         if (/$regex/) echo &quot;matched: $car\n&quot;;
+ *     }
+ *
+ * Glob implements glob(3) style matching that can be used to match
+ * against text, rather than fetching names from a filesystem.
+ *
+ * Based on the Perl Text::Glob module.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt; PHP port
+ * @author     Richard Clamp &lt;richardc@unixbeard.net&gt; Perl version
+ * @copyright  2004-2005 Fabien Potencier &lt;fabien@symfony.com&gt;
+ * @copyright  2002 Richard Clamp &lt;richardc@unixbeard.net&gt;
+ */
+class Glob
+{
+    /**
+     * Returns a regexp which is the equivalent of the glob pattern.
+     */
+    <span style="background-color: green">p</span>ublic static function toRegex(string $glob, bool $strictLeadingDot = true, bool $strictWildcardSlash = true, string $delimiter = &#039;#&#039;): string
+    {
+        $firstByte = true;
+        $escaping = false;
+        $inCurlies = 0;
+        $regex = &#039;&#039;;
+        $sizeGlob = \strlen($glob);
+        <span style="background-color: green">f</span>or ($i = 0; $i &lt; $sizeGlob; ++$i) {
+            $car = $glob[$i];
+            <span style="background-color: green">i</span>f ($firstByte &amp;&amp; <span style="background-color: green">$</span>strictLeadingDot &amp;&amp; <span style="background-color: green">'</span>.&#039; !== $car) {
+                $regex .= &#039;(?=[^\.])&#039;;
+            <span style="background-color: green">}</span>
+
+            $firstByte = &#039;/&#039; === $car;
+
+            <span style="background-color: red">i</span>f ($firstByte &amp;&amp; <span style="background-color: red">$</span>strictWildcardSlash &amp;&amp; <span style="background-color: red">i</span>sset($glob[$i + 2]) &amp;&amp; <span style="background-color: red">'</span>**&#039; === $glob[$i + 1].$glob[$i + 2] &amp;&amp; (<span style="background-color: red">!</span>isset($glob[$i + 3]) || <span style="background-color: red">'</span>/&#039; === $glob[$i + 3])) {
+                $car = &#039;[^/]++/&#039;;
+                <span style="background-color: red">i</span>f (!isset($glob[$i + 3])) {
+                    $car .= &#039;?&#039;;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($strictLeadingDot) {
+                    $car = &#039;(?=[^\.])&#039;.$car;
+                <span style="background-color: red">}</span>
+
+                $car = &#039;/(?:&#039;.$car.&#039;)*&#039;;
+                $i += 2 + isset($glob[$i + 3]);
+
+                <span style="background-color: red">i</span>f (&#039;/&#039; === $delimiter) {
+                    $car = str_replace(&#039;/&#039;, &#039;\\/&#039;, $car);
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f ($delimiter === $car || <span style="background-color: green">'</span>.&#039; === $car || <span style="background-color: green">'</span>(&#039; === $car || <span style="background-color: green">'</span>)&#039; === $car || <span style="background-color: green">'</span>|&#039; === $car || <span style="background-color: green">'</span>+&#039; === $car || <span style="background-color: green">'</span>^&#039; === $car || <span style="background-color: green">'</span>$&#039; === $car) {
+                $regex .= &quot;\\$car&quot;;
+            } <span style="background-color: green">e</span>lseif (&#039;*&#039; === $car) {
+                $regex .= $escaping ? &#039;\\*&#039; : (<span style="background-color: green">$</span>strictWildcardSlash ? &#039;[^/]*&#039; : <span style="background-color: red">'</span>.*&#039;);
+            } <span style="background-color: red">e</span>lseif (&#039;?&#039; === $car) {
+                $regex .= $escaping ? &#039;\\?&#039; : (<span style="background-color: red">$</span>strictWildcardSlash ? &#039;[^/]&#039; : <span style="background-color: red">'</span>.&#039;);
+            } <span style="background-color: red">e</span>lseif (&#039;{&#039; === $car) {
+                $regex .= $escaping ? &#039;\\{&#039; : <span style="background-color: red">'</span>(&#039;;
+                <span style="background-color: red">i</span>f (!$escaping) {
+                    ++$inCurlies;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif (&#039;}&#039; === $car &amp;&amp; <span style="background-color: red">$</span>inCurlies) {
+                $regex .= $escaping ? &#039;}&#039; : <span style="background-color: red">'</span>)&#039;;
+                <span style="background-color: red">i</span>f (!$escaping) {
+                    --$inCurlies;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif (&#039;,&#039; === $car &amp;&amp; <span style="background-color: red">$</span>inCurlies) {
+                $regex .= $escaping ? &#039;,&#039; : <span style="background-color: red">'</span>|&#039;;
+            } <span style="background-color: red">e</span>lseif (&#039;\\&#039; === $car) {
+                <span style="background-color: red">i</span>f ($escaping) {
+                    $regex .= &#039;\\\\&#039;;
+                    $escaping = false;
+                } <span style="background-color: red">e</span>lse {
+                    $escaping = true;
+                <span style="background-color: red">}</span>
+
+                continue;
+            } <span style="background-color: green">e</span>lse {
+                $regex .= $car;
+            <span style="background-color: green">}</span>
+            $escaping = false;
+        <span style="background-color: green">}</span>
+
+        return $delimiter.&#039;^&#039;.$regex.&#039;$&#039;.$delimiter;
+    }
+}
+</pre>

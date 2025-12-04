@@ -1,0 +1,188 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+/**
+ * Response represents an HTTP response in JSON format.
+ *
+ * Note that this class does not force the returned JSON content to be an
+ * object. It is however recommended that you do return an object as it
+ * protects yourself against XSSI and JSON-JavaScript Hijacking.
+ *
+ * @see https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/AJAX_Security_Cheat_Sheet.md#always-return-json-with-an-object-on-the-outside
+ *
+ * @author Igor Wiedler &lt;igor@wiedler.ch&gt;
+ */
+class JsonResponse extends Response
+{
+    protected mixed $data;
+    protected ?string $callback = null;
+
+    // Encode &lt;, &gt;, &#039;, &amp;, and &quot; characters in the JSON, making it also safe to be embedded into HTML.
+    // 15 === JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
+    public const DEFAULT_ENCODING_OPTIONS = 15;
+
+    protected int $encodingOptions = self::DEFAULT_ENCODING_OPTIONS;
+
+    /**
+     * @param bool $json If the data is already a JSON string
+     */
+    <span style="background-color: green">p</span>ublic function __construct(mixed $data = null, int $status = 200, array $headers = [], bool $json = false)
+    {
+        parent::__construct(&#039;&#039;, $status, $headers);
+
+        <span style="background-color: red">i</span>f ($json &amp;&amp; <span style="background-color: red">!</span>\is_string($data) &amp;&amp; <span style="background-color: red">!</span>is_numeric($data) &amp;&amp; <span style="background-color: red">!</span>$data instanceof \Stringable) {
+            throw new \TypeError(\sprintf(&#039;&quot;%s&quot;: If $json is set to true, argument $data must be a string or object implementing __toString(), &quot;%s&quot; given.&#039;, __METHOD__, get_debug_type($data)));
+        <span style="background-color: green">}</span>
+
+        $data ??= <span style="background-color: red">n</span>ew \ArrayObject();
+
+        $json ? $this-&gt;setJson($data) : <span style="background-color: green">$</span>this-&gt;setData($data);
+    }
+
+    /**
+     * Factory method for chainability.
+     *
+     * Example:
+     *
+     *     return JsonResponse::fromJsonString(&#039;{&quot;key&quot;: &quot;value&quot;}&#039;)
+     *         -&gt;setSharedMaxAge(300);
+     *
+     * @param string $data    The JSON response string
+     * @param int    $status  The response status code (200 &quot;OK&quot; by default)
+     * @param array  $headers An array of response headers
+     */
+    <span style="background-color: red">p</span>ublic static function fromJsonString(string $data, int $status = 200, array $headers = []): static
+    {
+        return new static($data, $status, $headers, true);
+    }
+
+    /**
+     * Sets the JSONP callback.
+     *
+     * @param string|null $callback The JSONP callback or null to use none
+     *
+     * @return $this
+     *
+     * @throws \InvalidArgumentException When the callback name is not valid
+     */
+    <span style="background-color: red">p</span>ublic function setCallback(?string $callback): static
+    {
+        <span style="background-color: red">i</span>f (null !== $callback) {
+            // partially taken from https://geekality.net/2011/08/03/valid-javascript-identifier/
+            // partially taken from https://github.com/willdurand/JsonpCallbackValidator
+            //      JsonpCallbackValidator is released under the MIT License. See https://github.com/willdurand/JsonpCallbackValidator/blob/v1.1.0/LICENSE for details.
+            //      (c) William Durand &lt;william.durand1@gmail.com&gt;
+            $pattern = &#039;/^[$_\p{L}][$_\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\x{200C}\x{200D}]*(?:\[(?:&quot;(?:\\\.|[^&quot;\\\])*&quot;|\&#039;(?:\\\.|[^\&#039;\\\])*\&#039;|\d+)\])*?$/u&#039;;
+            $reserved = [
+                &#039;break&#039;, &#039;do&#039;, &#039;instanceof&#039;, &#039;typeof&#039;, &#039;case&#039;, &#039;else&#039;, &#039;new&#039;, &#039;var&#039;, &#039;catch&#039;, &#039;finally&#039;, &#039;return&#039;, &#039;void&#039;, &#039;continue&#039;, &#039;for&#039;, &#039;switch&#039;, &#039;while&#039;,
+                &#039;debugger&#039;, &#039;function&#039;, &#039;this&#039;, &#039;with&#039;, &#039;default&#039;, &#039;if&#039;, &#039;throw&#039;, &#039;delete&#039;, &#039;in&#039;, &#039;try&#039;, &#039;class&#039;, &#039;enum&#039;, &#039;extends&#039;, &#039;super&#039;,  &#039;const&#039;, &#039;export&#039;,
+                &#039;import&#039;, &#039;implements&#039;, &#039;let&#039;, &#039;private&#039;, &#039;public&#039;, &#039;yield&#039;, &#039;interface&#039;, &#039;package&#039;, &#039;protected&#039;, &#039;static&#039;, &#039;null&#039;, &#039;true&#039;, &#039;false&#039;,
+            ];
+            $parts = explode(&#039;.&#039;, $callback);
+            <span style="background-color: red">f</span>oreach ($parts as $part) {
+                <span style="background-color: red">i</span>f (!preg_match($pattern, $part) || <span style="background-color: red">\</span>in_array($part, $reserved, true)) {
+                    throw new \InvalidArgumentException(&#039;The callback name is not valid.&#039;);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;callback = $callback;
+
+        return $this-&gt;update();
+    }
+
+    /**
+     * Sets a raw string containing a JSON document to be sent.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setJson(string $json): static
+    {
+        $this-&gt;data = $json;
+
+        return $this-&gt;update();
+    }
+
+    /**
+     * Sets the data to be sent as JSON.
+     *
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function setData(mixed $data = []): static
+    {
+        try {
+            $data = json_encode($data, $this-&gt;encodingOptions);
+        } <span style="background-color: red">c</span>atch (\Exception $e) {
+            <span style="background-color: red">i</span>f (&#039;Exception&#039; === $e::class &amp;&amp; <span style="background-color: red">s</span>tr_starts_with($e-&gt;getMessage(), &#039;Failed calling &#039;)) {
+                throw $e-&gt;getPrevious() ?: <span style="background-color: red">$</span>e;
+            <span style="background-color: red">}</span>
+            throw $e;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\JSON_THROW_ON_ERROR &amp; $this-&gt;encodingOptions) {
+            return $this-&gt;setJson($data);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\JSON_ERROR_NONE !== json_last_error()) {
+            throw new \InvalidArgumentException(json_last_error_msg());
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;setJson($data);
+    }
+
+    /**
+     * Returns options used while encoding data to JSON.
+     */
+    <span style="background-color: red">p</span>ublic function getEncodingOptions(): int
+    {
+        return $this-&gt;encodingOptions;
+    }
+
+    /**
+     * Sets options used while encoding data to JSON.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setEncodingOptions(int $encodingOptions): static
+    {
+        $this-&gt;encodingOptions = $encodingOptions;
+
+        return $this-&gt;setData(json_decode($this-&gt;data));
+    }
+
+    /**
+     * Updates the content and headers according to the JSON data and callback.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>rotected function update(): static
+    {
+        <span style="background-color: red">i</span>f (null !== $this-&gt;callback) {
+            // Not using application/javascript for compatibility reasons with older browsers.
+            $this-&gt;headers-&gt;set(&#039;Content-Type&#039;, &#039;text/javascript&#039;);
+
+            return $this-&gt;setContent(\sprintf(&#039;/**/%s(%s);&#039;, $this-&gt;callback, $this-&gt;data));
+        <span style="background-color: green">}</span>
+
+        // Only set the header when there is none or when it equals &#039;text/javascript&#039; (from a previous update with callback)
+        // in order to not overwrite a custom definition.
+        <span style="background-color: green">i</span>f (!$this-&gt;headers-&gt;has(&#039;Content-Type&#039;) || <span style="background-color: red">'</span>text/javascript&#039; === $this-&gt;headers-&gt;get(&#039;Content-Type&#039;)) {
+            $this-&gt;headers-&gt;set(&#039;Content-Type&#039;, &#039;application/json&#039;);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;setContent($this-&gt;data);
+    }
+}
+</pre>

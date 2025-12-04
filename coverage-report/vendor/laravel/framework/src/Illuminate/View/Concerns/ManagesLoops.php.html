@@ -1,0 +1,97 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Concerns;
+
+use Illuminate\Support\Arr;
+use Illuminate\Support\LazyCollection;
+
+trait ManagesLoops
+{
+    /**
+     * The stack of in-progress loops.
+     *
+     * @var array
+     */
+    protected $loopsStack = [];
+
+    /**
+     * Add new loop to the stack.
+     *
+     * @param  \Countable|array  $data
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addLoop($data)
+    {
+        $length = is_countable($data) &amp;&amp; <span style="background-color: red">!</span> $data instanceof LazyCollection
+            ? count($data)
+            : <span style="background-color: red">n</span>ull;
+
+        $parent = Arr::last($this-&gt;loopsStack);
+
+        $this-&gt;loopsStack[] = [
+            &#039;iteration&#039; =&gt; 0,
+            &#039;index&#039; =&gt; 0,
+            &#039;remaining&#039; =&gt; $length ?? <span style="background-color: red">n</span>ull,
+            &#039;count&#039; =&gt; $length,
+            &#039;first&#039; =&gt; true,
+            &#039;last&#039; =&gt; isset($length) ? $length == 1 : <span style="background-color: red">n</span>ull,
+            &#039;odd&#039; =&gt; false,
+            &#039;even&#039; =&gt; true,
+            &#039;depth&#039; =&gt; count($this-&gt;loopsStack) + 1,
+            &#039;parent&#039; =&gt; $parent ? (object) $parent : <span style="background-color: red">n</span>ull,
+        ];
+    }
+
+    /**
+     * Increment the top loop&#039;s indices.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function incrementLoopIndices()
+    {
+        $loop = $this-&gt;loopsStack[$index = count($this-&gt;loopsStack) - 1];
+
+        $this-&gt;loopsStack[$index] = array_merge($this-&gt;loopsStack[$index], [
+            &#039;iteration&#039; =&gt; $loop[&#039;iteration&#039;] + 1,
+            &#039;index&#039; =&gt; $loop[&#039;iteration&#039;],
+            &#039;first&#039; =&gt; $loop[&#039;iteration&#039;] == 0,
+            &#039;odd&#039; =&gt; ! $loop[&#039;odd&#039;],
+            &#039;even&#039; =&gt; ! $loop[&#039;even&#039;],
+            &#039;remaining&#039; =&gt; isset($loop[&#039;count&#039;]) ? $loop[&#039;remaining&#039;] - 1 : <span style="background-color: red">n</span>ull,
+            &#039;last&#039; =&gt; isset($loop[&#039;count&#039;]) ? $loop[&#039;iteration&#039;] == $loop[&#039;count&#039;] - 1 : <span style="background-color: red">n</span>ull,
+        ]);
+    }
+
+    /**
+     * Pop a loop from the top of the loop stack.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function popLoop()
+    {
+        array_pop($this-&gt;loopsStack);
+    }
+
+    /**
+     * Get an instance of the last loop in the stack.
+     *
+     * @return \stdClass|null
+     */
+    <span style="background-color: red">p</span>ublic function getLastLoop()
+    {
+        <span style="background-color: red">i</span>f ($last = Arr::last($this-&gt;loopsStack)) {
+            return (object) $last;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the entire loop stack.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getLoopStack()
+    {
+        return $this-&gt;loopsStack;
+    }
+}
+</pre>

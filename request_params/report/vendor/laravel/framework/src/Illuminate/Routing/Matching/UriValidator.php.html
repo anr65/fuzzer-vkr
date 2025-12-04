@@ -1,0 +1,24 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing\Matching;
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+
+class UriValidator implements ValidatorInterface
+{
+    /**
+     * Validate a given rule against a route and request.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function matches(Route $route, Request $request)
+    {
+        $path = rtrim($request-&gt;getPathInfo(), &#039;/&#039;) ?: <span style="background-color: green">'</span>/&#039;;
+
+        return preg_match($route-&gt;getCompiled()-&gt;getRegex(), rawurldecode($path));
+    }
+}
+</pre>

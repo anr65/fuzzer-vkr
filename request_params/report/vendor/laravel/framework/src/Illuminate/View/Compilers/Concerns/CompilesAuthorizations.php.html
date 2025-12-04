@@ -1,0 +1,103 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesAuthorizations
+{
+    /**
+     * Compile the can statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileCan($expression)
+    {
+        return &quot;&lt;?php if (app(\Illuminate\\Contracts\\Auth\\Access\\Gate::class)-&gt;check{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the cannot statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileCannot($expression)
+    {
+        return &quot;&lt;?php if (app(\Illuminate\\Contracts\\Auth\\Access\\Gate::class)-&gt;denies{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the canany statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileCanany($expression)
+    {
+        return &quot;&lt;?php if (app(\Illuminate\\Contracts\\Auth\\Access\\Gate::class)-&gt;any{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-can statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElsecan($expression)
+    {
+        return &quot;&lt;?php elseif (app(\Illuminate\\Contracts\\Auth\\Access\\Gate::class)-&gt;check{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-cannot statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElsecannot($expression)
+    {
+        return &quot;&lt;?php elseif (app(\Illuminate\\Contracts\\Auth\\Access\\Gate::class)-&gt;denies{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-canany statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElsecanany($expression)
+    {
+        return &quot;&lt;?php elseif (app(\Illuminate\\Contracts\\Auth\\Access\\Gate::class)-&gt;any{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-can statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndcan()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-cannot statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndcannot()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-canany statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndcanany()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+}
+</pre>

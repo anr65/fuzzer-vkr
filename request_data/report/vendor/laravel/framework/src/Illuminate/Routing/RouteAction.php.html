@@ -1,0 +1,112 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Support\Arr;
+use Illuminate\Support\Reflector;
+use Illuminate\Support\Str;
+use LogicException;
+use UnexpectedValueException;
+
+class RouteAction
+{
+    /**
+     * Parse the given action into an array.
+     *
+     * @param  string  $uri
+     * @param  mixed  $action
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function parse($uri, $action)
+    {
+        // If no action is passed in right away, we assume the user will make use of
+        // fluent routing. In that case, we set a default closure, to be executed
+        // if the user never explicitly sets an action to handle the given uri.
+        <span style="background-color: red">i</span>f (is_null($action)) {
+            return static::missingAction($uri);
+        <span style="background-color: green">}</span>
+
+        // If the action is already a Closure instance, we will just set that instance
+        // as the &quot;uses&quot; property, because there is nothing else we need to do when
+        // it is available. Otherwise we will need to find it in the action list.
+        <span style="background-color: green">i</span>f (Reflector::isCallable($action, true)) {
+            return ! is_array($action) ? [&#039;uses&#039; =&gt; $action] : <span style="background-color: red">[</span>
+                &#039;uses&#039; =&gt; $action[0].&#039;@&#039;.$action[1],
+                &#039;controller&#039; =&gt; $action[0].&#039;@&#039;.$action[1],
+            ];
+        }
+
+        // If no &quot;uses&quot; property has been set, we will dig through the array to find a
+        // Closure instance within this list. We will set the first Closure we come
+        // across into the &quot;uses&quot; property that will get fired off by this route.
+        <span style="background-color: red">e</span>lseif (! isset($action[&#039;uses&#039;])) {
+            $action[&#039;uses&#039;] = static::findCallable($action);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! static::containsSerializedClosure($action) &amp;&amp; <span style="background-color: red">i</span>s_string($action[&#039;uses&#039;]) &amp;&amp; <span style="background-color: red">!</span> str_contains($action[&#039;uses&#039;], &#039;@&#039;)) {
+            $action[&#039;uses&#039;] = static::makeInvokable($action[&#039;uses&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $action;
+    }
+
+    /**
+     * Get an action for a route that has no action.
+     *
+     * @param  string  $uri
+     * @return array
+     *
+     * @throws \LogicException
+     */
+    <span style="background-color: red">p</span>rotected static function missingAction($uri)
+    {
+        return [&#039;uses&#039; =&gt; <span style="background-color: red">f</span>unction () use ($uri) {
+            throw new LogicException(&quot;Route for [{$uri}] has no action.&quot;);
+        }];
+    }
+
+    /**
+     * Find the callable in an action array.
+     *
+     * @param  array  $action
+     * @return callable
+     */
+    <span style="background-color: red">p</span>rotected static function findCallable(array $action)
+    {
+        return Arr::first($action, <span style="background-color: red">f</span>unction ($value, $key) {
+            return Reflector::isCallable($value) &amp;&amp; <span style="background-color: red">i</span>s_numeric($key);
+        });
+    }
+
+    /**
+     * Make an action for an invokable controller.
+     *
+     * @param  string  $action
+     * @return string
+     *
+     * @throws \UnexpectedValueException
+     */
+    <span style="background-color: red">p</span>rotected static function makeInvokable($action)
+    {
+        <span style="background-color: red">i</span>f (! method_exists($action, &#039;__invoke&#039;)) {
+            throw new UnexpectedValueException(&quot;Invalid route action: [{$action}].&quot;);
+        <span style="background-color: red">}</span>
+
+        return $action.&#039;@__invoke&#039;;
+    }
+
+    /**
+     * Determine if the given array actions contain a serialized Closure.
+     *
+     * @param  array  $action
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function containsSerializedClosure(array $action)
+    {
+        return is_string($action[&#039;uses&#039;]) &amp;&amp; <span style="background-color: red">S</span>tr::startsWith($action[&#039;uses&#039;], [
+            &#039;O:47:&quot;Laravel\\SerializableClosure\\SerializableClosure&#039;,
+            &#039;O:55:&quot;Laravel\\SerializableClosure\\UnsignedSerializableClosure&#039;,
+        ]) !== false;
+    }
+}
+</pre>

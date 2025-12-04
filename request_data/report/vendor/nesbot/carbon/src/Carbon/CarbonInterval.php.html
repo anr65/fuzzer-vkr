@@ -1,0 +1,3403 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon;
+
+use Carbon\Exceptions\BadFluentConstructorException;
+use Carbon\Exceptions\BadFluentSetterException;
+use Carbon\Exceptions\InvalidCastException;
+use Carbon\Exceptions\InvalidFormatException;
+use Carbon\Exceptions\InvalidIntervalException;
+use Carbon\Exceptions\OutOfRangeException;
+use Carbon\Exceptions\ParseErrorException;
+use Carbon\Exceptions\UnitNotConfiguredException;
+use Carbon\Exceptions\UnknownGetterException;
+use Carbon\Exceptions\UnknownSetterException;
+use Carbon\Exceptions\UnknownUnitException;
+use Carbon\Traits\IntervalRounding;
+use Carbon\Traits\IntervalStep;
+use Carbon\Traits\LocalFactory;
+use Carbon\Traits\MagicParameter;
+use Carbon\Traits\Mixin;
+use Carbon\Traits\Options;
+use Carbon\Traits\ToStringFormat;
+use Closure;
+use DateInterval;
+use DateTime;
+use DateTimeInterface;
+use DateTimeZone;
+use Exception;
+use InvalidArgumentException;
+use ReflectionException;
+use ReturnTypeWillChange;
+use RuntimeException;
+use Symfony\Contracts\Translation\TranslatorInterface;
+use Throwable;
+
+/**
+ * A simple API extension for DateInterval.
+ * The implementation provides helpers to handle weeks but only days are saved.
+ * Weeks are calculated based on the total days of the current instance.
+ *
+ * @property int $years Year component of the current interval. (For P2Y6M, the value will be 2)
+ * @property int $months Month component of the current interval. (For P1Y6M10D, the value will be 6)
+ * @property int $weeks Week component of the current interval calculated from the days. (For P1Y6M17D, the value will be 2)
+ * @property int $dayz Day component of the current interval (weeks * 7 + days). (For P6M17DT20H, the value will be 17)
+ * @property int $hours Hour component of the current interval. (For P7DT20H5M, the value will be 20)
+ * @property int $minutes Minute component of the current interval. (For PT20H5M30S, the value will be 5)
+ * @property int $seconds Second component of the current interval. (CarbonInterval::minutes(2)-&gt;seconds(34)-&gt;microseconds(567_890)-&gt;seconds = 34)
+ * @property int $milliseconds Milliseconds component of the current interval. (CarbonInterval::seconds(34)-&gt;microseconds(567_890)-&gt;milliseconds = 567)
+ * @property int $microseconds Microseconds component of the current interval. (CarbonInterval::seconds(34)-&gt;microseconds(567_890)-&gt;microseconds = 567_890)
+ * @property int $microExcludeMilli Remaining microseconds without the milliseconds.
+ * @property int $dayzExcludeWeeks Total days remaining in the final week of the current instance (days % 7).
+ * @property int $daysExcludeWeeks alias of dayzExcludeWeeks
+ * @property-read float $totalYears Number of years equivalent to the interval. (For P1Y6M, the value will be 1.5)
+ * @property-read float $totalMonths Number of months equivalent to the interval. (For P1Y6M10D, the value will be ~12.357)
+ * @property-read float $totalWeeks Number of weeks equivalent to the interval. (For P6M17DT20H, the value will be ~26.548)
+ * @property-read float $totalDays Number of days equivalent to the interval. (For P17DT20H, the value will be ~17.833)
+ * @property-read float $totalDayz Alias for totalDays.
+ * @property-read float $totalHours Number of hours equivalent to the interval. (For P1DT20H5M, the value will be ~44.083)
+ * @property-read float $totalMinutes Number of minutes equivalent to the interval. (For PT20H5M30S, the value will be 1205.5)
+ * @property-read float $totalSeconds Number of seconds equivalent to the interval. (CarbonInterval::minutes(2)-&gt;seconds(34)-&gt;microseconds(567_890)-&gt;totalSeconds = 154.567_890)
+ * @property-read float $totalMilliseconds Number of milliseconds equivalent to the interval. (CarbonInterval::seconds(34)-&gt;microseconds(567_890)-&gt;totalMilliseconds = 34567.890)
+ * @property-read float $totalMicroseconds Number of microseconds equivalent to the interval. (CarbonInterval::seconds(34)-&gt;microseconds(567_890)-&gt;totalMicroseconds = 34567890)
+ * @property-read string $locale locale of the current instance
+ *
+ * @method static CarbonInterval years($years = 1) Create instance specifying a number of years or modify the number of years if called on an instance.
+ * @method static CarbonInterval year($years = 1) Alias for years()
+ * @method static CarbonInterval months($months = 1) Create instance specifying a number of months or modify the number of months if called on an instance.
+ * @method static CarbonInterval month($months = 1) Alias for months()
+ * @method static CarbonInterval weeks($weeks = 1) Create instance specifying a number of weeks or modify the number of weeks if called on an instance.
+ * @method static CarbonInterval week($weeks = 1) Alias for weeks()
+ * @method static CarbonInterval days($days = 1) Create instance specifying a number of days or modify the number of days if called on an instance.
+ * @method static CarbonInterval dayz($days = 1) Alias for days()
+ * @method static CarbonInterval daysExcludeWeeks($days = 1) Create instance specifying a number of days or modify the number of days (keeping the current number of weeks) if called on an instance.
+ * @method static CarbonInterval dayzExcludeWeeks($days = 1) Alias for daysExcludeWeeks()
+ * @method static CarbonInterval day($days = 1) Alias for days()
+ * @method static CarbonInterval hours($hours = 1) Create instance specifying a number of hours or modify the number of hours if called on an instance.
+ * @method static CarbonInterval hour($hours = 1) Alias for hours()
+ * @method static CarbonInterval minutes($minutes = 1) Create instance specifying a number of minutes or modify the number of minutes if called on an instance.
+ * @method static CarbonInterval minute($minutes = 1) Alias for minutes()
+ * @method static CarbonInterval seconds($seconds = 1) Create instance specifying a number of seconds or modify the number of seconds if called on an instance.
+ * @method static CarbonInterval second($seconds = 1) Alias for seconds()
+ * @method static CarbonInterval milliseconds($milliseconds = 1) Create instance specifying a number of milliseconds or modify the number of milliseconds if called on an instance.
+ * @method static CarbonInterval millisecond($milliseconds = 1) Alias for milliseconds()
+ * @method static CarbonInterval microseconds($microseconds = 1) Create instance specifying a number of microseconds or modify the number of microseconds if called on an instance.
+ * @method static CarbonInterval microsecond($microseconds = 1) Alias for microseconds()
+ * @method $this addYears(int $years) Add given number of years to the current interval
+ * @method $this subYears(int $years) Subtract given number of years to the current interval
+ * @method $this addMonths(int $months) Add given number of months to the current interval
+ * @method $this subMonths(int $months) Subtract given number of months to the current interval
+ * @method $this addWeeks(int|float $weeks) Add given number of weeks to the current interval
+ * @method $this subWeeks(int|float $weeks) Subtract given number of weeks to the current interval
+ * @method $this addDays(int|float $days) Add given number of days to the current interval
+ * @method $this subDays(int|float $days) Subtract given number of days to the current interval
+ * @method $this addHours(int|float $hours) Add given number of hours to the current interval
+ * @method $this subHours(int|float $hours) Subtract given number of hours to the current interval
+ * @method $this addMinutes(int|float $minutes) Add given number of minutes to the current interval
+ * @method $this subMinutes(int|float $minutes) Subtract given number of minutes to the current interval
+ * @method $this addSeconds(int|float $seconds) Add given number of seconds to the current interval
+ * @method $this subSeconds(int|float $seconds) Subtract given number of seconds to the current interval
+ * @method $this addMilliseconds(int|float $milliseconds) Add given number of milliseconds to the current interval
+ * @method $this subMilliseconds(int|float $milliseconds) Subtract given number of milliseconds to the current interval
+ * @method $this addMicroseconds(int|float $microseconds) Add given number of microseconds to the current interval
+ * @method $this subMicroseconds(int|float $microseconds) Subtract given number of microseconds to the current interval
+ * @method $this roundYear(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance year with given precision using the given function.
+ * @method $this roundYears(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance year with given precision using the given function.
+ * @method $this floorYear(int|float $precision = 1) Truncate the current instance year with given precision.
+ * @method $this floorYears(int|float $precision = 1) Truncate the current instance year with given precision.
+ * @method $this ceilYear(int|float $precision = 1) Ceil the current instance year with given precision.
+ * @method $this ceilYears(int|float $precision = 1) Ceil the current instance year with given precision.
+ * @method $this roundMonth(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance month with given precision using the given function.
+ * @method $this roundMonths(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance month with given precision using the given function.
+ * @method $this floorMonth(int|float $precision = 1) Truncate the current instance month with given precision.
+ * @method $this floorMonths(int|float $precision = 1) Truncate the current instance month with given precision.
+ * @method $this ceilMonth(int|float $precision = 1) Ceil the current instance month with given precision.
+ * @method $this ceilMonths(int|float $precision = 1) Ceil the current instance month with given precision.
+ * @method $this roundWeek(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance day with given precision using the given function.
+ * @method $this roundWeeks(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance day with given precision using the given function.
+ * @method $this floorWeek(int|float $precision = 1) Truncate the current instance day with given precision.
+ * @method $this floorWeeks(int|float $precision = 1) Truncate the current instance day with given precision.
+ * @method $this ceilWeek(int|float $precision = 1) Ceil the current instance day with given precision.
+ * @method $this ceilWeeks(int|float $precision = 1) Ceil the current instance day with given precision.
+ * @method $this roundDay(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance day with given precision using the given function.
+ * @method $this roundDays(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance day with given precision using the given function.
+ * @method $this floorDay(int|float $precision = 1) Truncate the current instance day with given precision.
+ * @method $this floorDays(int|float $precision = 1) Truncate the current instance day with given precision.
+ * @method $this ceilDay(int|float $precision = 1) Ceil the current instance day with given precision.
+ * @method $this ceilDays(int|float $precision = 1) Ceil the current instance day with given precision.
+ * @method $this roundHour(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance hour with given precision using the given function.
+ * @method $this roundHours(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance hour with given precision using the given function.
+ * @method $this floorHour(int|float $precision = 1) Truncate the current instance hour with given precision.
+ * @method $this floorHours(int|float $precision = 1) Truncate the current instance hour with given precision.
+ * @method $this ceilHour(int|float $precision = 1) Ceil the current instance hour with given precision.
+ * @method $this ceilHours(int|float $precision = 1) Ceil the current instance hour with given precision.
+ * @method $this roundMinute(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance minute with given precision using the given function.
+ * @method $this roundMinutes(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance minute with given precision using the given function.
+ * @method $this floorMinute(int|float $precision = 1) Truncate the current instance minute with given precision.
+ * @method $this floorMinutes(int|float $precision = 1) Truncate the current instance minute with given precision.
+ * @method $this ceilMinute(int|float $precision = 1) Ceil the current instance minute with given precision.
+ * @method $this ceilMinutes(int|float $precision = 1) Ceil the current instance minute with given precision.
+ * @method $this roundSecond(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance second with given precision using the given function.
+ * @method $this roundSeconds(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance second with given precision using the given function.
+ * @method $this floorSecond(int|float $precision = 1) Truncate the current instance second with given precision.
+ * @method $this floorSeconds(int|float $precision = 1) Truncate the current instance second with given precision.
+ * @method $this ceilSecond(int|float $precision = 1) Ceil the current instance second with given precision.
+ * @method $this ceilSeconds(int|float $precision = 1) Ceil the current instance second with given precision.
+ * @method $this roundMillennium(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance millennium with given precision using the given function.
+ * @method $this roundMillennia(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance millennium with given precision using the given function.
+ * @method $this floorMillennium(int|float $precision = 1) Truncate the current instance millennium with given precision.
+ * @method $this floorMillennia(int|float $precision = 1) Truncate the current instance millennium with given precision.
+ * @method $this ceilMillennium(int|float $precision = 1) Ceil the current instance millennium with given precision.
+ * @method $this ceilMillennia(int|float $precision = 1) Ceil the current instance millennium with given precision.
+ * @method $this roundCentury(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance century with given precision using the given function.
+ * @method $this roundCenturies(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance century with given precision using the given function.
+ * @method $this floorCentury(int|float $precision = 1) Truncate the current instance century with given precision.
+ * @method $this floorCenturies(int|float $precision = 1) Truncate the current instance century with given precision.
+ * @method $this ceilCentury(int|float $precision = 1) Ceil the current instance century with given precision.
+ * @method $this ceilCenturies(int|float $precision = 1) Ceil the current instance century with given precision.
+ * @method $this roundDecade(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance decade with given precision using the given function.
+ * @method $this roundDecades(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance decade with given precision using the given function.
+ * @method $this floorDecade(int|float $precision = 1) Truncate the current instance decade with given precision.
+ * @method $this floorDecades(int|float $precision = 1) Truncate the current instance decade with given precision.
+ * @method $this ceilDecade(int|float $precision = 1) Ceil the current instance decade with given precision.
+ * @method $this ceilDecades(int|float $precision = 1) Ceil the current instance decade with given precision.
+ * @method $this roundQuarter(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance quarter with given precision using the given function.
+ * @method $this roundQuarters(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance quarter with given precision using the given function.
+ * @method $this floorQuarter(int|float $precision = 1) Truncate the current instance quarter with given precision.
+ * @method $this floorQuarters(int|float $precision = 1) Truncate the current instance quarter with given precision.
+ * @method $this ceilQuarter(int|float $precision = 1) Ceil the current instance quarter with given precision.
+ * @method $this ceilQuarters(int|float $precision = 1) Ceil the current instance quarter with given precision.
+ * @method $this roundMillisecond(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance millisecond with given precision using the given function.
+ * @method $this roundMilliseconds(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance millisecond with given precision using the given function.
+ * @method $this floorMillisecond(int|float $precision = 1) Truncate the current instance millisecond with given precision.
+ * @method $this floorMilliseconds(int|float $precision = 1) Truncate the current instance millisecond with given precision.
+ * @method $this ceilMillisecond(int|float $precision = 1) Ceil the current instance millisecond with given precision.
+ * @method $this ceilMilliseconds(int|float $precision = 1) Ceil the current instance millisecond with given precision.
+ * @method $this roundMicrosecond(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance microsecond with given precision using the given function.
+ * @method $this roundMicroseconds(int|float $precision = 1, string $function = &quot;round&quot;) Round the current instance microsecond with given precision using the given function.
+ * @method $this floorMicrosecond(int|float $precision = 1) Truncate the current instance microsecond with given precision.
+ * @method $this floorMicroseconds(int|float $precision = 1) Truncate the current instance microsecond with given precision.
+ * @method $this ceilMicrosecond(int|float $precision = 1) Ceil the current instance microsecond with given precision.
+ * @method $this ceilMicroseconds(int|float $precision = 1) Ceil the current instance microsecond with given precision.
+ */
+class CarbonInterval extends DateInterval implements CarbonConverterInterface
+{
+    use LocalFactory;
+    use IntervalRounding;
+    use IntervalStep;
+    use MagicParameter;
+    use Mixin {
+        Mixin::mixin as baseMixin;
+    }
+    use Options;
+    use ToStringFormat;
+
+    /**
+     * Unlimited parts for forHumans() method.
+     *
+     * INF constant can be used instead.
+     */
+    public const NO_LIMIT = -1;
+
+    public const POSITIVE = 1;
+    public const NEGATIVE = -1;
+
+    /**
+     * Interval spec period designators
+     */
+    public const PERIOD_PREFIX = &#039;P&#039;;
+    public const PERIOD_YEARS = &#039;Y&#039;;
+    public const PERIOD_MONTHS = &#039;M&#039;;
+    public const PERIOD_DAYS = &#039;D&#039;;
+    public const PERIOD_TIME_PREFIX = &#039;T&#039;;
+    public const PERIOD_HOURS = &#039;H&#039;;
+    public const PERIOD_MINUTES = &#039;M&#039;;
+    public const PERIOD_SECONDS = &#039;S&#039;;
+
+    public const SPECIAL_TRANSLATIONS = [
+        1 =&gt; [
+            &#039;option&#039; =&gt; CarbonInterface::ONE_DAY_WORDS,
+            &#039;future&#039; =&gt; &#039;diff_tomorrow&#039;,
+            &#039;past&#039; =&gt; &#039;diff_yesterday&#039;,
+        ],
+        2 =&gt; [
+            &#039;option&#039; =&gt; CarbonInterface::TWO_DAY_WORDS,
+            &#039;future&#039; =&gt; &#039;diff_after_tomorrow&#039;,
+            &#039;past&#039; =&gt; &#039;diff_before_yesterday&#039;,
+        ],
+    ];
+
+    protected static ?array $cascadeFactors = null;
+
+    protected static array $formats = [
+        &#039;y&#039; =&gt; &#039;y&#039;,
+        &#039;Y&#039; =&gt; &#039;y&#039;,
+        &#039;o&#039; =&gt; &#039;y&#039;,
+        &#039;m&#039; =&gt; &#039;m&#039;,
+        &#039;n&#039; =&gt; &#039;m&#039;,
+        &#039;W&#039; =&gt; &#039;weeks&#039;,
+        &#039;d&#039; =&gt; &#039;d&#039;,
+        &#039;j&#039; =&gt; &#039;d&#039;,
+        &#039;z&#039; =&gt; &#039;d&#039;,
+        &#039;h&#039; =&gt; &#039;h&#039;,
+        &#039;g&#039; =&gt; &#039;h&#039;,
+        &#039;H&#039; =&gt; &#039;h&#039;,
+        &#039;G&#039; =&gt; &#039;h&#039;,
+        &#039;i&#039; =&gt; &#039;i&#039;,
+        &#039;s&#039; =&gt; &#039;s&#039;,
+        &#039;u&#039; =&gt; &#039;micro&#039;,
+        &#039;v&#039; =&gt; &#039;milli&#039;,
+    ];
+
+    private static ?array $flipCascadeFactors = null;
+
+    private static bool $floatSettersEnabled = false;
+
+    /**
+     * The registered macros.
+     */
+    protected static array $macros = [];
+
+    /**
+     * Timezone handler for settings() method.
+     */
+    protected DateTimeZone|string|int|null $timezoneSetting = null;
+
+    /**
+     * The input used to create the interval.
+     */
+    protected mixed $originalInput = null;
+
+    /**
+     * Start date if interval was created from a difference between 2 dates.
+     */
+    protected ?CarbonInterface $startDate = null;
+
+    /**
+     * End date if interval was created from a difference between 2 dates.
+     */
+    protected ?CarbonInterface $endDate = null;
+
+    /**
+     * End date if interval was created from a difference between 2 dates.
+     */
+    protected ?DateInterval $rawInterval = null;
+
+    /**
+     * Flag if the interval was made from a diff with absolute flag on.
+     */
+    protected bool $absolute = false;
+
+    protected ?array $initialValues = null;
+
+    /**
+     * Set the instance&#039;s timezone from a string or object.
+     */
+    <span style="background-color: red">p</span>ublic function setTimezone(DateTimeZone|string|int $timezone): static
+    {
+        $this-&gt;timezoneSetting = $timezone;
+        $this-&gt;checkStartAndEnd();
+
+        <span style="background-color: red">i</span>f ($this-&gt;startDate) {
+            $this-&gt;startDate = $this-&gt;startDate
+                -&gt;avoidMutation()
+                -&gt;setTimezone($timezone);
+            $this-&gt;rawInterval = null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;endDate) {
+            $this-&gt;endDate = $this-&gt;endDate
+                -&gt;avoidMutation()
+                -&gt;setTimezone($timezone);
+            $this-&gt;rawInterval = null;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Set the instance&#039;s timezone from a string or object and add/subtract the offset difference.
+     */
+    <span style="background-color: red">p</span>ublic function shiftTimezone(DateTimeZone|string|int $timezone): static
+    {
+        $this-&gt;timezoneSetting = $timezone;
+        $this-&gt;checkStartAndEnd();
+
+        <span style="background-color: red">i</span>f ($this-&gt;startDate) {
+            $this-&gt;startDate = $this-&gt;startDate
+                -&gt;avoidMutation()
+                -&gt;shiftTimezone($timezone);
+            $this-&gt;rawInterval = null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;endDate) {
+            $this-&gt;endDate = $this-&gt;endDate
+                -&gt;avoidMutation()
+                -&gt;shiftTimezone($timezone);
+            $this-&gt;rawInterval = null;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Mapping of units and factors for cascading.
+     *
+     * Should only be modified by changing the factors or referenced constants.
+     */
+    <span style="background-color: red">p</span>ublic static function getCascadeFactors(): array
+    {
+        return static::$cascadeFactors ?: <span style="background-color: red">s</span>tatic::getDefaultCascadeFactors();
+    }
+
+    <span style="background-color: red">p</span>rotected static function getDefaultCascadeFactors(): array
+    {
+        return [
+            &#039;milliseconds&#039; =&gt; [CarbonInterface::MICROSECONDS_PER_MILLISECOND, &#039;microseconds&#039;],
+            &#039;seconds&#039; =&gt; [CarbonInterface::MILLISECONDS_PER_SECOND, &#039;milliseconds&#039;],
+            &#039;minutes&#039; =&gt; [CarbonInterface::SECONDS_PER_MINUTE, &#039;seconds&#039;],
+            &#039;hours&#039; =&gt; [CarbonInterface::MINUTES_PER_HOUR, &#039;minutes&#039;],
+            &#039;dayz&#039; =&gt; [CarbonInterface::HOURS_PER_DAY, &#039;hours&#039;],
+            &#039;weeks&#039; =&gt; [CarbonInterface::DAYS_PER_WEEK, &#039;dayz&#039;],
+            &#039;months&#039; =&gt; [CarbonInterface::WEEKS_PER_MONTH, &#039;weeks&#039;],
+            &#039;years&#039; =&gt; [CarbonInterface::MONTHS_PER_YEAR, &#039;months&#039;],
+        ];
+    }
+
+    /**
+     * Set default cascading factors for -&gt;cascade() method.
+     *
+     * @param array $cascadeFactors
+     */
+    <span style="background-color: red">p</span>ublic static function setCascadeFactors(array $cascadeFactors)
+    {
+        self::$flipCascadeFactors = null;
+        static::$cascadeFactors = $cascadeFactors;
+    }
+
+    /**
+     * This option allow you to opt-in for the Carbon 3 behavior where float
+     * values will no longer be cast to integer (so truncated).
+     *
+     * ⚠️ This settings will be applied globally, which mean your whole application
+     * code including the third-party dependencies that also may use Carbon will
+     * adopt the new behavior.
+     */
+    <span style="background-color: red">p</span>ublic static function enableFloatSetters(bool $floatSettersEnabled = true): void
+    {
+        self::$floatSettersEnabled = $floatSettersEnabled;
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    //////////////////////////// CONSTRUCTORS /////////////////////////
+    ///////////////////////////////////////////////////////////////////
+
+    /**
+     * Create a new CarbonInterval instance.
+     *
+     * @param Closure|DateInterval|string|int|null $years
+     * @param int|float|null                       $months
+     * @param int|float|null                       $weeks
+     * @param int|float|null                       $days
+     * @param int|float|null                       $hours
+     * @param int|float|null                       $minutes
+     * @param int|float|null                       $seconds
+     * @param int|float|null                       $microseconds
+     *
+     * @throws Exception when the interval_spec (passed as $years) cannot be parsed as an interval.
+     */
+    <span style="background-color: red">p</span>ublic function __construct($years = null, $months = null, $weeks = null, $days = null, $hours = null, $minutes = null, $seconds = null, $microseconds = null)
+    {
+        $this-&gt;originalInput = \func_num_args() === 1 ? $years : <span style="background-color: red">\</span>func_get_args();
+
+        <span style="background-color: red">i</span>f ($years instanceof Closure) {
+            $this-&gt;step = $years;
+            $years = null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($years instanceof DateInterval) {
+            parent::__construct(static::getDateIntervalSpec($years));
+            $this-&gt;f = $years-&gt;f;
+            self::copyNegativeUnits($years, $this);
+
+            return;
+        <span style="background-color: red">}</span>
+
+        $spec = $years;
+        $isStringSpec = (\is_string($spec) &amp;&amp; <span style="background-color: red">!</span>preg_match(&#039;/^[\d.]/&#039;, $spec));
+
+        <span style="background-color: red">i</span>f (!$isStringSpec || <span style="background-color: red">(</span>float) $years) {
+            $spec = static::PERIOD_PREFIX;
+
+            $spec .= $years &gt; 0 ? $years.static::PERIOD_YEARS : <span style="background-color: red">'</span>&#039;;
+            $spec .= $months &gt; 0 ? $months.static::PERIOD_MONTHS : <span style="background-color: red">'</span>&#039;;
+
+            $specDays = 0;
+            $specDays += $weeks &gt; 0 ? $weeks * static::getDaysPerWeek() : <span style="background-color: red">0</span>;
+            $specDays += $days &gt; 0 ? $days : <span style="background-color: red">0</span>;
+
+            $spec .= $specDays &gt; 0 ? $specDays.static::PERIOD_DAYS : <span style="background-color: red">'</span>&#039;;
+
+            <span style="background-color: red">i</span>f ($hours &gt; 0 || <span style="background-color: red">$</span>minutes &gt; 0 || <span style="background-color: red">$</span>seconds &gt; 0) {
+                $spec .= static::PERIOD_TIME_PREFIX;
+                $spec .= $hours &gt; 0 ? $hours.static::PERIOD_HOURS : <span style="background-color: red">'</span>&#039;;
+                $spec .= $minutes &gt; 0 ? $minutes.static::PERIOD_MINUTES : <span style="background-color: red">'</span>&#039;;
+                $spec .= $seconds &gt; 0 ? $seconds.static::PERIOD_SECONDS : <span style="background-color: red">'</span>&#039;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($spec === static::PERIOD_PREFIX) {
+                // Allow the zero interval.
+                $spec .= &#039;0&#039;.static::PERIOD_YEARS;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        try {
+            parent::__construct($spec);
+        } <span style="background-color: red">c</span>atch (Throwable $exception) {
+            try {
+                parent::__construct(&#039;PT0S&#039;);
+
+                <span style="background-color: red">i</span>f ($isStringSpec) {
+                    <span style="background-color: red">i</span>f (!preg_match(&#039;/^P
+                        (?:(?&lt;year&gt;[+-]?\d*(?:\.\d+)?)Y)?
+                        (?:(?&lt;month&gt;[+-]?\d*(?:\.\d+)?)M)?
+                        (?:(?&lt;week&gt;[+-]?\d*(?:\.\d+)?)W)?
+                        (?:(?&lt;day&gt;[+-]?\d*(?:\.\d+)?)D)?
+                        (?:T
+                            (?:(?&lt;hour&gt;[+-]?\d*(?:\.\d+)?)H)?
+                            (?:(?&lt;minute&gt;[+-]?\d*(?:\.\d+)?)M)?
+                            (?:(?&lt;second&gt;[+-]?\d*(?:\.\d+)?)S)?
+                        )?
+                    $/x&#039;, $spec, $match)) {
+                        throw new InvalidArgumentException(&quot;Invalid duration: $spec&quot;);
+                    <span style="background-color: red">}</span>
+
+                    $years = (float) ($match[&#039;year&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;year&#039;, $years);
+                    $months = (float) ($match[&#039;month&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;month&#039;, $months);
+                    $weeks = (float) ($match[&#039;week&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;week&#039;, $weeks);
+                    $days = (float) ($match[&#039;day&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;day&#039;, $days);
+                    $hours = (float) ($match[&#039;hour&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;hour&#039;, $hours);
+                    $minutes = (float) ($match[&#039;minute&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;minute&#039;, $minutes);
+                    $seconds = (float) ($match[&#039;second&#039;] ?? <span style="background-color: red">0</span>);
+                    $this-&gt;assertSafeForInteger(&#039;second&#039;, $seconds);
+                    $microseconds = (int) str_pad(
+                        substr(explode(&#039;.&#039;, $match[&#039;second&#039;] ?? <span style="background-color: red">'</span>0.0&#039;)[1] ?? <span style="background-color: red">'</span>0&#039;, 0, 6),
+                        6,
+                        &#039;0&#039;,
+                    );
+                <span style="background-color: red">}</span>
+
+                $totalDays = (($weeks * static::getDaysPerWeek()) + $days);
+                $this-&gt;assertSafeForInteger(&#039;days total (including weeks)&#039;, $totalDays);
+
+                $this-&gt;y = (int) $years;
+                $this-&gt;m = (int) $months;
+                $this-&gt;d = (int) $totalDays;
+                $this-&gt;h = (int) $hours;
+                $this-&gt;i = (int) $minutes;
+                $this-&gt;s = (int) $seconds;
+                $secondFloatPart = (float) ($microseconds / CarbonInterface::MICROSECONDS_PER_SECOND);
+                $this-&gt;f = $secondFloatPart;
+                $intervalMicroseconds = (int) ($this-&gt;f * CarbonInterface::MICROSECONDS_PER_SECOND);
+                $intervalSeconds = $seconds - $secondFloatPart;
+
+                <span style="background-color: red">i</span>f (
+                    ((float) $this-&gt;y) !== $years ||
+                    <span style="background-color: red">(</span>(float) $this-&gt;m) !== $months ||
+                    <span style="background-color: red">(</span>(float) $this-&gt;d) !== $totalDays ||
+                    <span style="background-color: red">(</span>(float) $this-&gt;h) !== $hours ||
+                    <span style="background-color: red">(</span>(float) $this-&gt;i) !== $minutes ||
+                    <span style="background-color: red">(</span>(float) $this-&gt;s) !== $intervalSeconds ||
+                    <span style="background-color: red">$</span>intervalMicroseconds !== ((int) $microseconds)
+                ) {
+                    $this-&gt;add(static::fromString(
+                        ($years - $this-&gt;y).&#039; years &#039;.
+                        ($months - $this-&gt;m).&#039; months &#039;.
+                        ($totalDays - $this-&gt;d).&#039; days &#039;.
+                        ($hours - $this-&gt;h).&#039; hours &#039;.
+                        ($minutes - $this-&gt;i).&#039; minutes &#039;.
+                        ($intervalSeconds - $this-&gt;s).&#039; seconds &#039;.
+                        ($microseconds - $intervalMicroseconds).&#039; microseconds &#039;,
+                    ));
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">c</span>atch (Throwable $secondException) {
+                throw $secondException instanceof OutOfRangeException ? $secondException : <span style="background-color: red">$</span>exception;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($microseconds !== null) {
+            $this-&gt;f = $microseconds / CarbonInterface::MICROSECONDS_PER_SECOND;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ([&#039;years&#039;, &#039;months&#039;, &#039;weeks&#039;, &#039;days&#039;, &#039;hours&#039;, &#039;minutes&#039;, &#039;seconds&#039;] as $unit) {
+            <span style="background-color: red">i</span>f ($$unit &lt; 0) {
+                $this-&gt;set($unit, $$unit);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns the factor for a given source-to-target couple.
+     *
+     * @param string $source
+     * @param string $target
+     *
+     * @return int|float|null
+     */
+    <span style="background-color: red">p</span>ublic static function getFactor($source, $target)
+    {
+        $source = self::standardizeUnit($source);
+        $target = self::standardizeUnit($target);
+        $factors = self::getFlipCascadeFactors();
+
+        <span style="background-color: red">i</span>f (isset($factors[$source])) {
+            [$to, $factor] = $factors[$source];
+
+            <span style="background-color: red">i</span>f ($to === $target) {
+                return $factor;
+            <span style="background-color: red">}</span>
+
+            return $factor * static::getFactor($to, $target);
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Returns the factor for a given source-to-target couple if set,
+     * else try to find the appropriate constant as the factor, such as Carbon::DAYS_PER_WEEK.
+     *
+     * @param string $source
+     * @param string $target
+     *
+     * @return int|float|null
+     */
+    <span style="background-color: red">p</span>ublic static function getFactorWithDefault($source, $target)
+    {
+        $factor = self::getFactor($source, $target);
+
+        <span style="background-color: red">i</span>f ($factor) {
+            return $factor;
+        <span style="background-color: red">}</span>
+
+        static $defaults = [
+            &#039;month&#039; =&gt; [&#039;year&#039; =&gt; Carbon::MONTHS_PER_YEAR],
+            &#039;week&#039; =&gt; [&#039;month&#039; =&gt; Carbon::WEEKS_PER_MONTH],
+            &#039;day&#039; =&gt; [&#039;week&#039; =&gt; Carbon::DAYS_PER_WEEK],
+            &#039;hour&#039; =&gt; [&#039;day&#039; =&gt; Carbon::HOURS_PER_DAY],
+            &#039;minute&#039; =&gt; [&#039;hour&#039; =&gt; Carbon::MINUTES_PER_HOUR],
+            &#039;second&#039; =&gt; [&#039;minute&#039; =&gt; Carbon::SECONDS_PER_MINUTE],
+            &#039;millisecond&#039; =&gt; [&#039;second&#039; =&gt; Carbon::MILLISECONDS_PER_SECOND],
+            &#039;microsecond&#039; =&gt; [&#039;millisecond&#039; =&gt; Carbon::MICROSECONDS_PER_MILLISECOND],
+        ];
+
+        return $defaults[$source][$target] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Returns current config for days per week.
+     *
+     * @return int|float
+     */
+    <span style="background-color: red">p</span>ublic static function getDaysPerWeek()
+    {
+        return static::getFactor(&#039;dayz&#039;, &#039;weeks&#039;) ?: <span style="background-color: red">C</span>arbon::DAYS_PER_WEEK;
+    }
+
+    /**
+     * Returns current config for hours per day.
+     *
+     * @return int|float
+     */
+    <span style="background-color: red">p</span>ublic static function getHoursPerDay()
+    {
+        return static::getFactor(&#039;hours&#039;, &#039;dayz&#039;) ?: <span style="background-color: red">C</span>arbon::HOURS_PER_DAY;
+    }
+
+    /**
+     * Returns current config for minutes per hour.
+     *
+     * @return int|float
+     */
+    <span style="background-color: red">p</span>ublic static function getMinutesPerHour()
+    {
+        return static::getFactor(&#039;minutes&#039;, &#039;hours&#039;) ?: <span style="background-color: red">C</span>arbon::MINUTES_PER_HOUR;
+    }
+
+    /**
+     * Returns current config for seconds per minute.
+     *
+     * @return int|float
+     */
+    <span style="background-color: red">p</span>ublic static function getSecondsPerMinute()
+    {
+        return static::getFactor(&#039;seconds&#039;, &#039;minutes&#039;) ?: <span style="background-color: red">C</span>arbon::SECONDS_PER_MINUTE;
+    }
+
+    /**
+     * Returns current config for microseconds per second.
+     *
+     * @return int|float
+     */
+    <span style="background-color: red">p</span>ublic static function getMillisecondsPerSecond()
+    {
+        return static::getFactor(&#039;milliseconds&#039;, &#039;seconds&#039;) ?: <span style="background-color: red">C</span>arbon::MILLISECONDS_PER_SECOND;
+    }
+
+    /**
+     * Returns current config for microseconds per second.
+     *
+     * @return int|float
+     */
+    <span style="background-color: red">p</span>ublic static function getMicrosecondsPerMillisecond()
+    {
+        return static::getFactor(&#039;microseconds&#039;, &#039;milliseconds&#039;) ?: <span style="background-color: red">C</span>arbon::MICROSECONDS_PER_MILLISECOND;
+    }
+
+    /**
+     * Create a new CarbonInterval instance from specific values.
+     * This is an alias for the constructor that allows better fluent
+     * syntax as it allows you to do CarbonInterval::create(1)-&gt;fn() rather than
+     * (new CarbonInterval(1))-&gt;fn().
+     *
+     * @param int $years
+     * @param int $months
+     * @param int $weeks
+     * @param int $days
+     * @param int $hours
+     * @param int $minutes
+     * @param int $seconds
+     * @param int $microseconds
+     *
+     * @throws Exception when the interval_spec (passed as $years) cannot be parsed as an interval.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function create($years = null, $months = null, $weeks = null, $days = null, $hours = null, $minutes = null, $seconds = null, $microseconds = null)
+    {
+        return new static($years, $months, $weeks, $days, $hours, $minutes, $seconds, $microseconds);
+    }
+
+    /**
+     * Parse a string into a new CarbonInterval object according to the specified format.
+     *
+     * @example
+     * ```
+     * echo Carboninterval::createFromFormat(&#039;H:i&#039;, &#039;1:30&#039;);
+     * ```
+     *
+     * @param string      $format   Format of the $interval input string
+     * @param string|null $interval Input string to convert into an interval
+     *
+     * @throws \Carbon\Exceptions\ParseErrorException when the $interval cannot be parsed as an interval.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function createFromFormat(string $format, ?string $interval): static
+    {
+        $instance = new static(0);
+        $length = mb_strlen($format);
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/s([,.])([uv])$/&#039;, $format, $match)) {
+            $interval = explode($match[1], $interval);
+            $index = \count($interval) - 1;
+            $interval[$index] = str_pad($interval[$index], $match[2] === &#039;v&#039; ? 3 : <span style="background-color: red">6</span>, &#039;0&#039;);
+            $interval = implode($match[1], $interval);
+        <span style="background-color: red">}</span>
+
+        $interval ??= <span style="background-color: red">'</span>&#039;;
+
+        <span style="background-color: red">f</span>or ($index = 0; $index &lt; $length; $index++) {
+            $expected = mb_substr($format, $index, 1);
+            $nextCharacter = mb_substr($interval, 0, 1);
+            $unit = static::$formats[$expected] ?? <span style="background-color: red">n</span>ull;
+
+            <span style="background-color: red">i</span>f ($unit) {
+                <span style="background-color: red">i</span>f (!preg_match(&#039;/^-?\d+/&#039;, $interval, $match)) {
+                    throw new ParseErrorException(&#039;number&#039;, $nextCharacter);
+                <span style="background-color: red">}</span>
+
+                $interval = mb_substr($interval, mb_strlen($match[0]));
+                $instance-&gt;$unit += (int) ($match[0]);
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($nextCharacter !== $expected) {
+                throw new ParseErrorException(
+                    &quot;&#039;$expected&#039;&quot;,
+                    $nextCharacter,
+                    &#039;Allowed substitutes for interval formats are &#039;.implode(&#039;, &#039;, array_keys(static::$formats)).&quot;\n&quot;.
+                    &#039;See https://php.net/manual/en/function.date.php for their meaning&#039;,
+                );
+            <span style="background-color: red">}</span>
+
+            $interval = mb_substr($interval, 1);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval !== &#039;&#039;) {
+            throw new ParseErrorException(
+                &#039;end of string&#039;,
+                $interval,
+            );
+        <span style="background-color: red">}</span>
+
+        return $instance;
+    }
+
+    /**
+     * Return the original source used to create the current interval.
+     *
+     * @return array|int|string|DateInterval|mixed|null
+     */
+    <span style="background-color: red">p</span>ublic function original()
+    {
+        return $this-&gt;originalInput;
+    }
+
+    /**
+     * Return the start date if interval was created from a difference between 2 dates.
+     *
+     * @return CarbonInterface|null
+     */
+    <span style="background-color: red">p</span>ublic function start(): ?CarbonInterface
+    {
+        $this-&gt;checkStartAndEnd();
+
+        return $this-&gt;startDate;
+    }
+
+    /**
+     * Return the end date if interval was created from a difference between 2 dates.
+     *
+     * @return CarbonInterface|null
+     */
+    <span style="background-color: red">p</span>ublic function end(): ?CarbonInterface
+    {
+        $this-&gt;checkStartAndEnd();
+
+        return $this-&gt;endDate;
+    }
+
+    /**
+     * Get rid of the original input, start date and end date that may be kept in memory.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function optimize(): static
+    {
+        $this-&gt;originalInput = null;
+        $this-&gt;startDate = null;
+        $this-&gt;endDate = null;
+        $this-&gt;rawInterval = null;
+        $this-&gt;absolute = false;
+
+        return $this;
+    }
+
+    /**
+     * Get a copy of the instance.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function copy(): static
+    {
+        $date = new static(0);
+        $date-&gt;copyProperties($this);
+        $date-&gt;step = $this-&gt;step;
+
+        return $date;
+    }
+
+    /**
+     * Get a copy of the instance.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function clone(): static
+    {
+        return $this-&gt;copy();
+    }
+
+    /**
+     * Provide static helpers to create instances.  Allows CarbonInterval::years(3).
+     *
+     * Note: This is done using the magic method to allow static and instance methods to
+     *       have the same names.
+     *
+     * @param string $method     magic method name called
+     * @param array  $parameters parameters list
+     *
+     * @return static|mixed|null
+     */
+    <span style="background-color: red">p</span>ublic static function __callStatic(string $method, array $parameters)
+    {
+        try {
+            $interval = new static(0);
+            $localStrictModeEnabled = $interval-&gt;localStrictModeEnabled;
+            $interval-&gt;localStrictModeEnabled = true;
+
+            $result = static::hasMacro($method)
+                ? static::bindMacroContext(null, <span style="background-color: red">f</span>unction () use (&amp;$method, &amp;$parameters, &amp;$interval) {
+                    return $interval-&gt;callMacro($method, $parameters);
+                })
+                : <span style="background-color: red">$</span>interval-&gt;$method(...$parameters);
+
+            $interval-&gt;localStrictModeEnabled = $localStrictModeEnabled;
+
+            return $result;
+        } <span style="background-color: red">c</span>atch (BadFluentSetterException $exception) {
+            <span style="background-color: red">i</span>f (Carbon::isStrictModeEnabled()) {
+                throw new BadFluentConstructorException($method, 0, $exception);
+            <span style="background-color: red">}</span>
+
+            return null;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Evaluate the PHP generated by var_export() and recreate the exported CarbonInterval instance.
+     *
+     * @param array $dump data as exported by var_export()
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[ReturnTypeWillChange]
+    public static function __set_state($dump)
+    {
+        /** @noinspection PhpVoidFunctionResultUsedInspection */
+        /** @var DateInterval $dateInterval */
+        $dateInterval = parent::__set_state($dump);
+
+        return static::instance($dateInterval);
+    }
+
+    /**
+     * Return the current context from inside a macro callee or a new one if static.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>rotected static function this(): static
+    {
+        return end(static::$macroContextStack) ?: <span style="background-color: red">n</span>ew static(0);
+    }
+
+    /**
+     * Creates a CarbonInterval from string.
+     *
+     * Format:
+     *
+     * Suffix | Unit    | Example | DateInterval expression
+     * -------|---------|---------|------------------------
+     * y      | years   |   1y    | P1Y
+     * mo     | months  |   3mo   | P3M
+     * w      | weeks   |   2w    | P2W
+     * d      | days    |  28d    | P28D
+     * h      | hours   |   4h    | PT4H
+     * m      | minutes |  12m    | PT12M
+     * s      | seconds |  59s    | PT59S
+     *
+     * e. g. `1w 3d 4h 32m 23s` is converted to 10 days 4 hours 32 minutes and 23 seconds.
+     *
+     * Special cases:
+     *  - An empty string will return a zero interval
+     *  - Fractions are allowed for weeks, days, hours and minutes and will be converted
+     *    and rounded to the next smaller value (caution: 0.5w = 4d)
+     *
+     * @param string $intervalDefinition
+     *
+     * @throws InvalidIntervalException
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function fromString(string $intervalDefinition): static
+    {
+        <span style="background-color: red">i</span>f (empty($intervalDefinition)) {
+            return self::withOriginal(new static(0), $intervalDefinition);
+        <span style="background-color: red">}</span>
+
+        $years = 0;
+        $months = 0;
+        $weeks = 0;
+        $days = 0;
+        $hours = 0;
+        $minutes = 0;
+        $seconds = 0;
+        $milliseconds = 0;
+        $microseconds = 0;
+
+        $pattern = &#039;/(-?\d+(?:\.\d+)?)\h*([^\d\h]*)/i&#039;;
+        preg_match_all($pattern, $intervalDefinition, $parts, PREG_SET_ORDER);
+
+        <span style="background-color: red">w</span>hile ([$part, $value, $unit] = array_shift($parts)) {
+            $intValue = (int) $value;
+            $fraction = (float) $value - $intValue;
+
+            // Fix calculation precision
+            switch (round($fraction, 6)) {
+                <span style="background-color: red">c</span>ase 1:
+                    $fraction = 0;
+                    $intValue++;
+
+                    break;
+                <span style="background-color: red">c</span>ase 0:
+                    $fraction = 0;
+
+                    break;
+            <span style="background-color: red">}</span>
+
+            switch ($unit === &#039;µs&#039; ? &#039;µs&#039; : <span style="background-color: red">s</span>trtolower($unit)) {
+                <span style="background-color: red">c</span>ase &#039;millennia&#039;:
+                <span style="background-color: red">c</span>ase &#039;millennium&#039;:
+                    $years += $intValue * CarbonInterface::YEARS_PER_MILLENNIUM;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;century&#039;:
+                <span style="background-color: red">c</span>ase &#039;centuries&#039;:
+                    $years += $intValue * CarbonInterface::YEARS_PER_CENTURY;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;decade&#039;:
+                <span style="background-color: red">c</span>ase &#039;decades&#039;:
+                    $years += $intValue * CarbonInterface::YEARS_PER_DECADE;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;year&#039;:
+                <span style="background-color: red">c</span>ase &#039;years&#039;:
+                <span style="background-color: red">c</span>ase &#039;y&#039;:
+                <span style="background-color: red">c</span>ase &#039;yr&#039;:
+                <span style="background-color: red">c</span>ase &#039;yrs&#039;:
+                    $years += $intValue;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;quarter&#039;:
+                <span style="background-color: red">c</span>ase &#039;quarters&#039;:
+                    $months += $intValue * CarbonInterface::MONTHS_PER_QUARTER;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;month&#039;:
+                <span style="background-color: red">c</span>ase &#039;months&#039;:
+                <span style="background-color: red">c</span>ase &#039;mo&#039;:
+                <span style="background-color: red">c</span>ase &#039;mos&#039;:
+                    $months += $intValue;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;week&#039;:
+                <span style="background-color: red">c</span>ase &#039;weeks&#039;:
+                <span style="background-color: red">c</span>ase &#039;w&#039;:
+                    $weeks += $intValue;
+
+                    <span style="background-color: red">i</span>f ($fraction) {
+                        $parts[] = [null, $fraction * static::getDaysPerWeek(), &#039;d&#039;];
+                    <span style="background-color: red">}</span>
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;day&#039;:
+                <span style="background-color: red">c</span>ase &#039;days&#039;:
+                <span style="background-color: red">c</span>ase &#039;d&#039;:
+                    $days += $intValue;
+
+                    <span style="background-color: red">i</span>f ($fraction) {
+                        $parts[] = [null, $fraction * static::getHoursPerDay(), &#039;h&#039;];
+                    <span style="background-color: red">}</span>
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;hour&#039;:
+                <span style="background-color: red">c</span>ase &#039;hours&#039;:
+                <span style="background-color: red">c</span>ase &#039;h&#039;:
+                    $hours += $intValue;
+
+                    <span style="background-color: red">i</span>f ($fraction) {
+                        $parts[] = [null, $fraction * static::getMinutesPerHour(), &#039;m&#039;];
+                    <span style="background-color: red">}</span>
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;minute&#039;:
+                <span style="background-color: red">c</span>ase &#039;minutes&#039;:
+                <span style="background-color: red">c</span>ase &#039;m&#039;:
+                    $minutes += $intValue;
+
+                    <span style="background-color: red">i</span>f ($fraction) {
+                        $parts[] = [null, $fraction * static::getSecondsPerMinute(), &#039;s&#039;];
+                    <span style="background-color: red">}</span>
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;second&#039;:
+                <span style="background-color: red">c</span>ase &#039;seconds&#039;:
+                <span style="background-color: red">c</span>ase &#039;s&#039;:
+                    $seconds += $intValue;
+
+                    <span style="background-color: red">i</span>f ($fraction) {
+                        $parts[] = [null, $fraction * static::getMillisecondsPerSecond(), &#039;ms&#039;];
+                    <span style="background-color: red">}</span>
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;millisecond&#039;:
+                <span style="background-color: red">c</span>ase &#039;milliseconds&#039;:
+                <span style="background-color: red">c</span>ase &#039;milli&#039;:
+                <span style="background-color: red">c</span>ase &#039;ms&#039;:
+                    $milliseconds += $intValue;
+
+                    <span style="background-color: red">i</span>f ($fraction) {
+                        $microseconds += round($fraction * static::getMicrosecondsPerMillisecond());
+                    <span style="background-color: red">}</span>
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;microsecond&#039;:
+                <span style="background-color: red">c</span>ase &#039;microseconds&#039;:
+                <span style="background-color: red">c</span>ase &#039;micro&#039;:
+                <span style="background-color: red">c</span>ase &#039;µs&#039;:
+                    $microseconds += $intValue;
+
+                    break;
+
+                <span style="background-color: red">d</span>efault:
+                    throw new InvalidIntervalException(
+                        \sprintf(&#039;Invalid part %s in definition %s&#039;, $part, $intervalDefinition),
+                    );
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return self::withOriginal(
+            new static($years, $months, $weeks, $days, $hours, $minutes, $seconds, $milliseconds * Carbon::MICROSECONDS_PER_MILLISECOND + $microseconds),
+            $intervalDefinition,
+        );
+    }
+
+    /**
+     * Creates a CarbonInterval from string using a different locale.
+     *
+     * @param string      $interval interval string in the given language (may also contain English).
+     * @param string|null $locale   if locale is null or not specified, current global locale will be used instead.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function parseFromLocale(string $interval, ?string $locale = null): static
+    {
+        return static::fromString(Carbon::translateTimeString($interval, $locale ?: <span style="background-color: red">s</span>tatic::getLocale(), CarbonInterface::DEFAULT_LOCALE));
+    }
+
+    /**
+     * Create an interval from the difference between 2 dates.
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $start
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $end
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function diff($start, $end = null, bool $absolute = false, array $skip = []): static
+    {
+        $start = $start instanceof CarbonInterface ? $start : <span style="background-color: red">C</span>arbon::make($start);
+        $end = $end instanceof CarbonInterface ? $end : <span style="background-color: red">C</span>arbon::make($end);
+        $rawInterval = $start-&gt;diffAsDateInterval($end, $absolute);
+        $interval = static::instance($rawInterval, $skip);
+
+        $interval-&gt;absolute = $absolute;
+        $interval-&gt;rawInterval = $rawInterval;
+        $interval-&gt;startDate = $start;
+        $interval-&gt;endDate = $end;
+        $interval-&gt;initialValues = $interval-&gt;getInnerValues();
+
+        return $interval;
+    }
+
+    /**
+     * Invert the interval if it&#039;s inverted.
+     *
+     * @param bool $absolute do nothing if set to false
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function abs(bool $absolute = false): static
+    {
+        <span style="background-color: red">i</span>f ($absolute &amp;&amp; <span style="background-color: red">$</span>this-&gt;invert) {
+            $this-&gt;invert();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * @alias abs
+     *
+     * Invert the interval if it&#039;s inverted.
+     *
+     * @param bool $absolute do nothing if set to false
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function absolute(bool $absolute = true): static
+    {
+        return $this-&gt;abs($absolute);
+    }
+
+    /**
+     * Cast the current instance into the given class.
+     *
+     * @template T of DateInterval
+     *
+     * @psalm-param class-string&lt;T&gt; $className The $className::instance() method will be called to cast the current object.
+     *
+     * @return T
+     */
+    <span style="background-color: red">p</span>ublic function cast(string $className): mixed
+    {
+        return self::castIntervalToClass($this, $className);
+    }
+
+    /**
+     * Create a CarbonInterval instance from a DateInterval one.  Can not instance
+     * DateInterval objects created from DateTime::diff() as you can&#039;t externally
+     * set the $days field.
+     *
+     * @param DateInterval $interval
+     * @param bool         $skipCopy set to true to return the passed object
+     *                               (without copying it) if it&#039;s already of the
+     *                               current class
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function instance(DateInterval $interval, array $skip = [], bool $skipCopy = false): static
+    {
+        <span style="background-color: red">i</span>f ($skipCopy &amp;&amp; <span style="background-color: red">$</span>interval instanceof static) {
+            return $interval;
+        <span style="background-color: red">}</span>
+
+        return self::castIntervalToClass($interval, static::class, $skip);
+    }
+
+    /**
+     * Make a CarbonInterval instance from given variable if possible.
+     *
+     * Always return a new instance. Parse only strings and only these likely to be intervals (skip dates
+     * and recurrences). Throw an exception for invalid format, but otherwise return null.
+     *
+     * @param mixed|int|DateInterval|string|Closure|Unit|null $interval interval or number of the given $unit
+     * @param Unit|string|null                                $unit     if specified, $interval must be an integer
+     * @param bool                                            $skipCopy set to true to return the passed object
+     *                                                                  (without copying it) if it&#039;s already of the
+     *                                                                  current class
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function make($interval, $unit = null, bool $skipCopy = false): ?self
+    {
+        <span style="background-color: red">i</span>f ($interval instanceof Unit) {
+            $interval = $interval-&gt;interval();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit instanceof Unit) {
+            $unit = $unit-&gt;value;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit) {
+            $interval = &quot;$interval $unit&quot;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval instanceof DateInterval) {
+            return static::instance($interval, [], $skipCopy);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval instanceof Closure) {
+            return self::withOriginal(new static($interval), $interval);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!\is_string($interval)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return static::makeFromString($interval);
+    }
+
+    <span style="background-color: red">p</span>rotected static function makeFromString(string $interval): ?self
+    {
+        $interval = preg_replace(&#039;/\s+/&#039;, &#039; &#039;, trim($interval));
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^P[T\d]/&#039;, $interval)) {
+            return new static($interval);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^(?:\h*-?\d+(?:\.\d+)?\h*[a-z]+)+$/i&#039;, $interval)) {
+            return static::fromString($interval);
+        <span style="background-color: red">}</span>
+
+        $intervalInstance = static::createFromDateString($interval);
+
+        return $intervalInstance-&gt;isEmpty() ? null : <span style="background-color: red">$</span>intervalInstance;
+    }
+
+    <span style="background-color: red">p</span>rotected function resolveInterval($interval): ?self
+    {
+        <span style="background-color: red">i</span>f (!($interval instanceof self)) {
+            return self::make($interval);
+        <span style="background-color: red">}</span>
+
+        return $interval;
+    }
+
+    /**
+     * Sets up a DateInterval from the relative parts of the string.
+     *
+     * @param string $datetime
+     *
+     * @return static
+     *
+     * @link https://php.net/manual/en/dateinterval.createfromdatestring.php
+     */
+    <span style="background-color: red">p</span>ublic static function createFromDateString(string $datetime): static
+    {
+        $string = strtr($datetime, [
+            &#039;,&#039; =&gt; &#039; &#039;,
+            &#039; and &#039; =&gt; &#039; &#039;,
+        ]);
+        $previousException = null;
+
+        try {
+            $interval = parent::createFromDateString($string);
+        } <span style="background-color: red">c</span>atch (Throwable $exception) {
+            $interval = null;
+            $previousException = $exception;
+        <span style="background-color: red">}</span>
+
+        $interval ?: <span style="background-color: red">t</span>hrow new InvalidFormatException(
+            &#039;Could not create interval from: &#039;.var_export($datetime, true),
+            previous: $previousException,
+        );
+
+        <span style="background-color: red">i</span>f (!($interval instanceof static)) {
+            $interval = static::instance($interval);
+        <span style="background-color: red">}</span>
+
+        return self::withOriginal($interval, $datetime);
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    ///////////////////////// GETTERS AND SETTERS /////////////////////
+    ///////////////////////////////////////////////////////////////////
+
+    /**
+     * Get a part of the CarbonInterval object.
+     */
+    <span style="background-color: red">p</span>ublic function get(Unit|string $name): int|float|string|null
+    {
+        $name = Unit::toName($name);
+
+        <span style="background-color: red">i</span>f (str_starts_with($name, &#039;total&#039;)) {
+            return $this-&gt;total(substr($name, 5));
+        <span style="background-color: red">}</span>
+
+        $resolvedUnit = Carbon::singularUnit(rtrim($name, &#039;z&#039;));
+
+        return match ($resolvedUnit) {
+            &#039;tzname&#039;, &#039;tz_name&#039; =&gt; <span style="background-color: red">m</span>atch (true) {
+                ($this-&gt;timezoneSetting === null) =&gt; <span style="background-color: red">n</span>ull,
+                \is_string($this-&gt;timezoneSetting) =&gt; <span style="background-color: red">$</span>this-&gt;timezoneSetting,
+                ($this-&gt;timezoneSetting instanceof DateTimeZone) =&gt; <span style="background-color: red">$</span>this-&gt;timezoneSetting-&gt;getName(),
+                default =&gt; <span style="background-color: red">C</span>arbonTimeZone::instance($this-&gt;timezoneSetting)-&gt;getName(),
+            },
+            &#039;year&#039; =&gt; <span style="background-color: red">$</span>this-&gt;y,
+            &#039;month&#039; =&gt; <span style="background-color: red">$</span>this-&gt;m,
+            &#039;day&#039; =&gt; <span style="background-color: red">$</span>this-&gt;d,
+            &#039;hour&#039; =&gt; <span style="background-color: red">$</span>this-&gt;h,
+            &#039;minute&#039; =&gt; <span style="background-color: red">$</span>this-&gt;i,
+            &#039;second&#039; =&gt; <span style="background-color: red">$</span>this-&gt;s,
+            &#039;milli&#039;, &#039;millisecond&#039; =&gt; <span style="background-color: red">(</span>int) (round($this-&gt;f * Carbon::MICROSECONDS_PER_SECOND) /
+                Carbon::MICROSECONDS_PER_MILLISECOND),
+            &#039;micro&#039;, &#039;microsecond&#039; =&gt; <span style="background-color: red">(</span>int) round($this-&gt;f * Carbon::MICROSECONDS_PER_SECOND),
+            &#039;microexcludemilli&#039; =&gt; <span style="background-color: red">(</span>int) round($this-&gt;f * Carbon::MICROSECONDS_PER_SECOND) %
+                Carbon::MICROSECONDS_PER_MILLISECOND,
+            &#039;week&#039; =&gt; <span style="background-color: red">(</span>int) ($this-&gt;d / (int) static::getDaysPerWeek()),
+            &#039;daysexcludeweek&#039;, &#039;dayzexcludeweek&#039; =&gt; <span style="background-color: red">$</span>this-&gt;d % (int) static::getDaysPerWeek(),
+            &#039;locale&#039; =&gt; <span style="background-color: red">$</span>this-&gt;getTranslatorLocale(),
+            default =&gt; <span style="background-color: red">t</span>hrow new UnknownGetterException($name, previous: new UnknownGetterException($resolvedUnit)),
+        };
+    }
+
+    /**
+     * Get a part of the CarbonInterval object.
+     */
+    <span style="background-color: red">p</span>ublic function __get(string $name): int|float|string|null
+    {
+        return $this-&gt;get($name);
+    }
+
+    /**
+     * Set a part of the CarbonInterval object.
+     *
+     * @param Unit|string|array $name
+     * @param int               $value
+     *
+     * @throws UnknownSetterException
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function set($name, $value = null): static
+    {
+        $properties = \is_array($name) ? $name : <span style="background-color: red">[</span>$name =&gt; $value];
+
+        <span style="background-color: red">f</span>oreach ($properties as $key =&gt; $value) {
+            switch (Carbon::singularUnit($key instanceof Unit ? $key-&gt;value : <span style="background-color: red">r</span>trim((string) $key, &#039;z&#039;))) {
+                <span style="background-color: red">c</span>ase &#039;year&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $this-&gt;y = $value;
+                    $this-&gt;handleDecimalPart(&#039;year&#039;, $value, $this-&gt;y);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;month&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $this-&gt;m = $value;
+                    $this-&gt;handleDecimalPart(&#039;month&#039;, $value, $this-&gt;m);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;week&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $days = $value * (int) static::getDaysPerWeek();
+                    $this-&gt;assertSafeForInteger(&#039;days total (including weeks)&#039;, $days);
+                    $this-&gt;d = $days;
+                    $this-&gt;handleDecimalPart(&#039;day&#039;, $days, $this-&gt;d);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;day&#039;:
+                    <span style="background-color: red">i</span>f ($value === false) {
+                        break;
+                    <span style="background-color: red">}</span>
+
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $this-&gt;d = $value;
+                    $this-&gt;handleDecimalPart(&#039;day&#039;, $value, $this-&gt;d);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;daysexcludeweek&#039;:
+                <span style="background-color: red">c</span>ase &#039;dayzexcludeweek&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $days = $this-&gt;weeks * (int) static::getDaysPerWeek() + $value;
+                    $this-&gt;assertSafeForInteger(&#039;days total (including weeks)&#039;, $days);
+                    $this-&gt;d = $days;
+                    $this-&gt;handleDecimalPart(&#039;day&#039;, $days, $this-&gt;d);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;hour&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $this-&gt;h = $value;
+                    $this-&gt;handleDecimalPart(&#039;hour&#039;, $value, $this-&gt;h);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;minute&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $this-&gt;i = $value;
+                    $this-&gt;handleDecimalPart(&#039;minute&#039;, $value, $this-&gt;i);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;second&#039;:
+                    $this-&gt;checkIntegerValue($key, $value);
+                    $this-&gt;s = $value;
+                    $this-&gt;handleDecimalPart(&#039;second&#039;, $value, $this-&gt;s);
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;milli&#039;:
+                <span style="background-color: red">c</span>ase &#039;millisecond&#039;:
+                    $this-&gt;microseconds = $value * Carbon::MICROSECONDS_PER_MILLISECOND + $this-&gt;microseconds % Carbon::MICROSECONDS_PER_MILLISECOND;
+
+                    break;
+
+                <span style="background-color: red">c</span>ase &#039;micro&#039;:
+                <span style="background-color: red">c</span>ase &#039;microsecond&#039;:
+                    $this-&gt;f = $value / Carbon::MICROSECONDS_PER_SECOND;
+
+                    break;
+
+                <span style="background-color: red">d</span>efault:
+                    <span style="background-color: red">i</span>f (str_starts_with($key, &#039; * &#039;)) {
+                        return $this-&gt;setSetting(substr($key, 3), $value);
+                    <span style="background-color: red">}</span>
+
+                    <span style="background-color: red">i</span>f ($this-&gt;localStrictModeEnabled ?? <span style="background-color: red">C</span>arbon::isStrictModeEnabled()) {
+                        throw new UnknownSetterException($key);
+                    <span style="background-color: red">}</span>
+
+                    $this-&gt;$key = $value;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Set a part of the CarbonInterval object.
+     *
+     * @param string $name
+     * @param int    $value
+     *
+     * @throws UnknownSetterException
+     */
+    <span style="background-color: red">p</span>ublic function __set(string $name, $value)
+    {
+        $this-&gt;set($name, $value);
+    }
+
+    /**
+     * Allow setting of weeks and days to be cumulative.
+     *
+     * @param int $weeks Number of weeks to set
+     * @param int $days  Number of days to set
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function weeksAndDays(int $weeks, int $days): static
+    {
+        $this-&gt;dayz = ($weeks * static::getDaysPerWeek()) + $days;
+
+        return $this;
+    }
+
+    /**
+     * Returns true if the interval is empty for each unit.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isEmpty(): bool
+    {
+        return $this-&gt;years === 0 &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;months === 0 &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;dayz === 0 &amp;&amp;
+            <span style="background-color: red">!</span>$this-&gt;days &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;hours === 0 &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;minutes === 0 &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;seconds === 0 &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;microseconds === 0;
+    }
+
+    /**
+     * Register a custom macro.
+     *
+     * Pass null macro to remove it.
+     *
+     * @example
+     * ```
+     * CarbonInterval::macro(&#039;twice&#039;, function () {
+     *   return $this-&gt;times(2);
+     * });
+     * echo CarbonInterval::hours(2)-&gt;twice();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic static function macro(string $name, ?callable $macro): void
+    {
+        static::$macros[$name] = $macro;
+    }
+
+    /**
+     * Register macros from a mixin object.
+     *
+     * @example
+     * ```
+     * CarbonInterval::mixin(new class {
+     *   public function daysToHours() {
+     *     return function () {
+     *       $this-&gt;hours += $this-&gt;days;
+     *       $this-&gt;days = 0;
+     *
+     *       return $this;
+     *     };
+     *   }
+     *   public function hoursToDays() {
+     *     return function () {
+     *       $this-&gt;days += $this-&gt;hours;
+     *       $this-&gt;hours = 0;
+     *
+     *       return $this;
+     *     };
+     *   }
+     * });
+     * echo CarbonInterval::hours(5)-&gt;hoursToDays() . &quot;\n&quot;;
+     * echo CarbonInterval::days(5)-&gt;daysToHours() . &quot;\n&quot;;
+     * ```
+     *
+     * @param object|string $mixin
+     *
+     * @throws ReflectionException
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function mixin($mixin): void
+    {
+        static::baseMixin($mixin);
+    }
+
+    /**
+     * Check if macro is registered.
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function hasMacro(string $name): bool
+    {
+        return isset(static::$macros[$name]);
+    }
+
+    /**
+     * Call given macro.
+     *
+     * @param string $name
+     * @param array  $parameters
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function callMacro(string $name, array $parameters)
+    {
+        $macro = static::$macros[$name];
+
+        <span style="background-color: red">i</span>f ($macro instanceof Closure) {
+            $boundMacro = @$macro-&gt;bindTo($this, static::class) ?: <span style="background-color: red">@</span>$macro-&gt;bindTo(null, static::class);
+
+            return ($boundMacro ?: <span style="background-color: red">$</span>macro)(...$parameters);
+        <span style="background-color: red">}</span>
+
+        return $macro(...$parameters);
+    }
+
+    /**
+     * Allow fluent calls on the setters... CarbonInterval::years(3)-&gt;months(5)-&gt;day().
+     *
+     * Note: This is done using the magic method to allow static and instance methods to
+     *       have the same names.
+     *
+     * @param string $method     magic method name called
+     * @param array  $parameters parameters list
+     *
+     * @throws BadFluentSetterException|Throwable
+     *
+     * @return static|int|float|string
+     */
+    <span style="background-color: red">p</span>ublic function __call(string $method, array $parameters)
+    {
+        <span style="background-color: red">i</span>f (static::hasMacro($method)) {
+            return static::bindMacroContext($this, <span style="background-color: red">f</span>unction () use (&amp;$method, &amp;$parameters) {
+                return $this-&gt;callMacro($method, $parameters);
+            });
+        <span style="background-color: red">}</span>
+
+        $roundedValue = $this-&gt;callRoundMethod($method, $parameters);
+
+        <span style="background-color: red">i</span>f ($roundedValue !== null) {
+            return $roundedValue;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^(?&lt;method&gt;add|sub)(?&lt;unit&gt;[A-Z].*)$/&#039;, $method, $match)) {
+            $value = $this-&gt;getMagicParameter($parameters, 0, Carbon::pluralUnit($match[&#039;unit&#039;]), 0);
+
+            return $this-&gt;{$match[&#039;method&#039;]}($value, $match[&#039;unit&#039;]);
+        <span style="background-color: red">}</span>
+
+        $value = $this-&gt;getMagicParameter($parameters, 0, Carbon::pluralUnit($method), 1);
+
+        try {
+            $this-&gt;set($method, $value);
+        } <span style="background-color: red">c</span>atch (UnknownSetterException $exception) {
+            <span style="background-color: red">i</span>f ($this-&gt;localStrictModeEnabled ?? <span style="background-color: red">C</span>arbon::isStrictModeEnabled()) {
+                throw new BadFluentSetterException($method, 0, $exception);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>rotected function getForHumansInitialVariables($syntax, $short): array
+    {
+        <span style="background-color: red">i</span>f (\is_array($syntax)) {
+            return $syntax;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_int($short)) {
+            return [
+                &#039;parts&#039; =&gt; $short,
+                &#039;short&#039; =&gt; false,
+            ];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_bool($syntax)) {
+            return [
+                &#039;short&#039; =&gt; $syntax,
+                &#039;syntax&#039; =&gt; CarbonInterface::DIFF_ABSOLUTE,
+            ];
+        <span style="background-color: red">}</span>
+
+        return [];
+    }
+
+    /**
+     * @param mixed $syntax
+     * @param mixed $short
+     * @param mixed $parts
+     * @param mixed $options
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getForHumansParameters($syntax = null, $short = false, $parts = self::NO_LIMIT, $options = null): array
+    {
+        $optionalSpace = &#039; &#039;;
+        $default = $this-&gt;getTranslationMessage(&#039;list.0&#039;) ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;list&#039;) ?? <span style="background-color: red">'</span> &#039;;
+        /** @var bool|string $join */
+        $join = $default === &#039;&#039; ? &#039;&#039; : <span style="background-color: red">'</span> &#039;;
+        /** @var bool|array|string $altNumbers */
+        $altNumbers = false;
+        $aUnit = false;
+        $minimumUnit = &#039;s&#039;;
+        $skip = [];
+        extract($this-&gt;getForHumansInitialVariables($syntax, $short));
+        $skip = array_map(
+            static fn ($unit) =&gt; <span style="background-color: red">$</span>unit instanceof Unit ? $unit-&gt;value : <span style="background-color: red">$</span>unit,
+            (array) $skip,
+        );
+        $skip = array_map(
+            &#039;strtolower&#039;,
+            array_filter($skip, static fn ($unit) =&gt; <span style="background-color: red">\</span>is_string($unit) &amp;&amp; <span style="background-color: red">$</span>unit !== &#039;&#039;),
+        );
+
+        $syntax ??= <span style="background-color: red">C</span>arbonInterface::DIFF_ABSOLUTE;
+
+        <span style="background-color: red">i</span>f ($parts === self::NO_LIMIT) {
+            $parts = INF;
+        <span style="background-color: red">}</span>
+
+        $options ??= <span style="background-color: red">s</span>tatic::getHumanDiffOptions();
+
+        <span style="background-color: red">i</span>f ($join === false) {
+            $join = &#039; &#039;;
+        } <span style="background-color: red">e</span>lseif ($join === true) {
+            $join = [
+                $default,
+                $this-&gt;getTranslationMessage(&#039;list.1&#039;) ?? <span style="background-color: red">$</span>default,
+            ];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($altNumbers &amp;&amp; <span style="background-color: red">$</span>altNumbers !== true) {
+            $language = new Language($this-&gt;locale);
+            $altNumbers = \in_array($language-&gt;getCode(), (array) $altNumbers, true);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_array($join)) {
+            [$default, $last] = $join;
+
+            <span style="background-color: red">i</span>f ($default !== &#039; &#039;) {
+                $optionalSpace = &#039;&#039;;
+            <span style="background-color: red">}</span>
+
+            $join = <span style="background-color: red">f</span>unction ($list) use ($default, $last) {
+                <span style="background-color: red">i</span>f (\count($list) &lt; 2) {
+                    return implode(&#039;&#039;, $list);
+                <span style="background-color: red">}</span>
+
+                $end = array_pop($list);
+
+                return implode($default, $list).$last.$end;
+            };
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($join)) {
+            <span style="background-color: red">i</span>f ($join !== &#039; &#039;) {
+                $optionalSpace = &#039;&#039;;
+            <span style="background-color: red">}</span>
+
+            $glue = $join;
+            $join = static fn ($list) =&gt; <span style="background-color: red">i</span>mplode($glue, $list);
+        <span style="background-color: red">}</span>
+
+        $interpolations = [
+            &#039;:optional-space&#039; =&gt; $optionalSpace,
+        ];
+
+        $translator ??= <span style="background-color: red">i</span>sset($locale) ? Translator::get($locale) : <span style="background-color: red">n</span>ull;
+
+        return [$syntax, $short, $parts, $options, $join, $aUnit, $altNumbers, $interpolations, $minimumUnit, $skip, $translator];
+    }
+
+    <span style="background-color: red">p</span>rotected static function getRoundingMethodFromOptions(int $options): ?string
+    {
+        <span style="background-color: red">i</span>f ($options &amp; CarbonInterface::ROUND) {
+            return &#039;round&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($options &amp; CarbonInterface::CEIL) {
+            return &#039;ceil&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($options &amp; CarbonInterface::FLOOR) {
+            return &#039;floor&#039;;
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Returns interval values as an array where key are the unit names and values the counts.
+     *
+     * @return int[]
+     */
+    <span style="background-color: red">p</span>ublic function toArray(): array
+    {
+        return [
+            &#039;years&#039; =&gt; $this-&gt;years,
+            &#039;months&#039; =&gt; $this-&gt;months,
+            &#039;weeks&#039; =&gt; $this-&gt;weeks,
+            &#039;days&#039; =&gt; $this-&gt;daysExcludeWeeks,
+            &#039;hours&#039; =&gt; $this-&gt;hours,
+            &#039;minutes&#039; =&gt; $this-&gt;minutes,
+            &#039;seconds&#039; =&gt; $this-&gt;seconds,
+            &#039;microseconds&#039; =&gt; $this-&gt;microseconds,
+        ];
+    }
+
+    /**
+     * Returns interval non-zero values as an array where key are the unit names and values the counts.
+     *
+     * @return int[]
+     */
+    <span style="background-color: red">p</span>ublic function getNonZeroValues(): array
+    {
+        return array_filter($this-&gt;toArray(), &#039;intval&#039;);
+    }
+
+    /**
+     * Returns interval values as an array where key are the unit names and values the counts
+     * from the biggest non-zero one the the smallest non-zero one.
+     *
+     * @return int[]
+     */
+    <span style="background-color: red">p</span>ublic function getValuesSequence(): array
+    {
+        $nonZeroValues = $this-&gt;getNonZeroValues();
+
+        <span style="background-color: red">i</span>f ($nonZeroValues === []) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        $keys = array_keys($nonZeroValues);
+        $firstKey = $keys[0];
+        $lastKey = $keys[\count($keys) - 1];
+        $values = [];
+        $record = false;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;toArray() as $unit =&gt; $count) {
+            <span style="background-color: red">i</span>f ($unit === $firstKey) {
+                $record = true;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($record) {
+                $values[$unit] = $count;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($unit === $lastKey) {
+                $record = false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $values;
+    }
+
+    /**
+     * Get the current interval in a human readable format in the current locale.
+     *
+     * @example
+     * ```
+     * echo CarbonInterval::fromString(&#039;4d 3h 40m&#039;)-&gt;forHumans() . &quot;\n&quot;;
+     * echo CarbonInterval::fromString(&#039;4d 3h 40m&#039;)-&gt;forHumans([&#039;parts&#039; =&gt; 2]) . &quot;\n&quot;;
+     * echo CarbonInterval::fromString(&#039;4d 3h 40m&#039;)-&gt;forHumans([&#039;parts&#039; =&gt; 3, &#039;join&#039; =&gt; true]) . &quot;\n&quot;;
+     * echo CarbonInterval::fromString(&#039;4d 3h 40m&#039;)-&gt;forHumans([&#039;short&#039; =&gt; true]) . &quot;\n&quot;;
+     * echo CarbonInterval::fromString(&#039;1d 24h&#039;)-&gt;forHumans([&#039;join&#039; =&gt; &#039; or &#039;]) . &quot;\n&quot;;
+     * echo CarbonInterval::fromString(&#039;1d 24h&#039;)-&gt;forHumans([&#039;minimumUnit&#039; =&gt; &#039;hour&#039;]) . &quot;\n&quot;;
+     * ```
+     *
+     * @param int|array $syntax  if array passed, parameters will be extracted from it, the array may contain:
+     *                           ⦿ &#039;syntax&#039; entry (see below)
+     *                           ⦿ &#039;short&#039; entry (see below)
+     *                           ⦿ &#039;parts&#039; entry (see below)
+     *                           ⦿ &#039;options&#039; entry (see below)
+     *                           ⦿ &#039;skip&#039; entry, list of units to skip (array of strings or a single string,
+     *                           ` it can be the unit name (singular or plural) or its shortcut
+     *                           ` (y, m, w, d, h, min, s, ms, µs).
+     *                           ⦿ &#039;aUnit&#039; entry, prefer &quot;an hour&quot; over &quot;1 hour&quot; if true
+     *                           ⦿ &#039;altNumbers&#039; entry, use alternative numbers if available
+     *                           ` (from the current language if true is passed, from the given language(s)
+     *                           ` if array or string is passed)
+     *                           ⦿ &#039;join&#039; entry determines how to join multiple parts of the string
+     *                           `  - if $join is a string, it&#039;s used as a joiner glue
+     *                           `  - if $join is a callable/closure, it get the list of string and should return a string
+     *                           `  - if $join is an array, the first item will be the default glue, and the second item
+     *                           `    will be used instead of the glue for the last item
+     *                           `  - if $join is true, it will be guessed from the locale (&#039;list&#039; translation file entry)
+     *                           `  - if $join is missing, a space will be used as glue
+     *                           ⦿ &#039;minimumUnit&#039; entry determines the smallest unit of time to display can be long or
+     *                           `  short form of the units, e.g. &#039;hour&#039; or &#039;h&#039; (default value: s)
+     *                           ⦿ &#039;locale&#039; language in which the diff should be output (has no effect if &#039;translator&#039; key is set)
+     *                           ⦿ &#039;translator&#039; a custom translator to use to translator the output.
+     *                           if int passed, it adds modifiers:
+     *                           Possible values:
+     *                           - CarbonInterface::DIFF_ABSOLUTE          no modifiers
+     *                           - CarbonInterface::DIFF_RELATIVE_TO_NOW   add ago/from now modifier
+     *                           - CarbonInterface::DIFF_RELATIVE_TO_OTHER add before/after modifier
+     *                           Default value: CarbonInterface::DIFF_ABSOLUTE
+     * @param bool      $short   displays short format of time units
+     * @param int       $parts   maximum number of parts to display (default value: -1: no limits)
+     * @param int       $options human diff options
+     *
+     * @throws Exception
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function forHumans($syntax = null, $short = false, $parts = self::NO_LIMIT, $options = null): string
+    {
+        /* @var TranslatorInterface|null $translator */
+        [$syntax, $short, $parts, $options, $join, $aUnit, $altNumbers, $interpolations, $minimumUnit, $skip, $translator] = $this
+            -&gt;getForHumansParameters($syntax, $short, $parts, $options);
+
+        $interval = [];
+
+        $syntax = (int) ($syntax ?? <span style="background-color: red">C</span>arbonInterface::DIFF_ABSOLUTE);
+        $absolute = $syntax === CarbonInterface::DIFF_ABSOLUTE;
+        $relativeToNow = $syntax === CarbonInterface::DIFF_RELATIVE_TO_NOW;
+        $count = 1;
+        $unit = $short ? &#039;s&#039; : <span style="background-color: red">'</span>second&#039;;
+        $isFuture = $this-&gt;invert === 1;
+        $transId = $relativeToNow ? ($isFuture ? &#039;from_now&#039; : <span style="background-color: red">'</span>ago&#039;) : (<span style="background-color: red">$</span>isFuture ? &#039;after&#039; : <span style="background-color: red">'</span>before&#039;);
+        $declensionMode = null;
+
+        $translator ??= <span style="background-color: red">$</span>this-&gt;getLocalTranslator();
+
+        $handleDeclensions = <span style="background-color: red">f</span>unction ($unit, $count, $index = 0, $parts = 1) use ($interpolations, $transId, $translator, $altNumbers, $absolute, &amp;$declensionMode) {
+            <span style="background-color: red">i</span>f (!$absolute) {
+                $declensionMode = $declensionMode ?? <span style="background-color: red">$</span>this-&gt;translate($transId.&#039;_mode&#039;);
+
+                <span style="background-color: red">i</span>f ($this-&gt;needsDeclension($declensionMode, $index, $parts)) {
+                    // Some languages have special pluralization for past and future tense.
+                    $key = $unit.&#039;_&#039;.$transId;
+                    $result = $this-&gt;translate($key, $interpolations, $count, $translator, $altNumbers);
+
+                    <span style="background-color: red">i</span>f ($result !== $key) {
+                        return $result;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $result = $this-&gt;translate($unit, $interpolations, $count, $translator, $altNumbers);
+
+            <span style="background-color: red">i</span>f ($result !== $unit) {
+                return $result;
+            <span style="background-color: red">}</span>
+
+            return null;
+        };
+
+        $intervalValues = $this;
+        $method = static::getRoundingMethodFromOptions($options);
+
+        <span style="background-color: red">i</span>f ($method) {
+            $previousCount = INF;
+
+            <span style="background-color: red">w</span>hile (
+                \count($intervalValues-&gt;getNonZeroValues()) &gt; $parts &amp;&amp;
+                <span style="background-color: red">(</span>$count = \count($keys = array_keys($intervalValues-&gt;getValuesSequence()))) &gt; 1
+            ) {
+                $index = min($count, $previousCount - 1) - 2;
+
+                <span style="background-color: red">i</span>f ($index &lt; 0) {
+                    break;
+                <span style="background-color: red">}</span>
+
+                $intervalValues = $this-&gt;copy()-&gt;roundUnit(
+                    $keys[$index],
+                    1,
+                    $method,
+                );
+                $previousCount = $count;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $diffIntervalArray = [
+            [&#039;value&#039; =&gt; $intervalValues-&gt;years,             &#039;unit&#039; =&gt; &#039;year&#039;,        &#039;unitShort&#039; =&gt; &#039;y&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;months,            &#039;unit&#039; =&gt; &#039;month&#039;,       &#039;unitShort&#039; =&gt; &#039;m&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;weeks,             &#039;unit&#039; =&gt; &#039;week&#039;,        &#039;unitShort&#039; =&gt; &#039;w&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;daysExcludeWeeks,  &#039;unit&#039; =&gt; &#039;day&#039;,         &#039;unitShort&#039; =&gt; &#039;d&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;hours,             &#039;unit&#039; =&gt; &#039;hour&#039;,        &#039;unitShort&#039; =&gt; &#039;h&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;minutes,           &#039;unit&#039; =&gt; &#039;minute&#039;,      &#039;unitShort&#039; =&gt; &#039;min&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;seconds,           &#039;unit&#039; =&gt; &#039;second&#039;,      &#039;unitShort&#039; =&gt; &#039;s&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;milliseconds,      &#039;unit&#039; =&gt; &#039;millisecond&#039;, &#039;unitShort&#039; =&gt; &#039;ms&#039;],
+            [&#039;value&#039; =&gt; $intervalValues-&gt;microExcludeMilli, &#039;unit&#039; =&gt; &#039;microsecond&#039;, &#039;unitShort&#039; =&gt; &#039;µs&#039;],
+        ];
+
+        <span style="background-color: red">i</span>f (!empty($skip)) {
+            <span style="background-color: red">f</span>oreach ($diffIntervalArray as $index =&gt; &amp;$unitData) {
+                $nextIndex = $index + 1;
+
+                <span style="background-color: red">i</span>f ($unitData[&#039;value&#039;] &amp;&amp;
+                    <span style="background-color: red">i</span>sset($diffIntervalArray[$nextIndex]) &amp;&amp;
+                    <span style="background-color: red">\</span>count(array_intersect([$unitData[&#039;unit&#039;], $unitData[&#039;unit&#039;].&#039;s&#039;, $unitData[&#039;unitShort&#039;]], $skip))
+                ) {
+                    $diffIntervalArray[$nextIndex][&#039;value&#039;] += $unitData[&#039;value&#039;] *
+                        self::getFactorWithDefault($diffIntervalArray[$nextIndex][&#039;unit&#039;], $unitData[&#039;unit&#039;]);
+                    $unitData[&#039;value&#039;] = 0;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $transChoice = <span style="background-color: red">f</span>unction ($short, $unitData, $index, $parts) use ($absolute, $handleDeclensions, $translator, $aUnit, $altNumbers, $interpolations) {
+            $count = $unitData[&#039;value&#039;];
+
+            <span style="background-color: red">i</span>f ($short) {
+                $result = $handleDeclensions($unitData[&#039;unitShort&#039;], $count, $index, $parts);
+
+                <span style="background-color: red">i</span>f ($result !== null) {
+                    return $result;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif ($aUnit) {
+                $result = $handleDeclensions(&#039;a_&#039;.$unitData[&#039;unit&#039;], $count, $index, $parts);
+
+                <span style="background-color: red">i</span>f ($result !== null) {
+                    return $result;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (!$absolute) {
+                return $handleDeclensions($unitData[&#039;unit&#039;], $count, $index, $parts);
+            <span style="background-color: red">}</span>
+
+            return $this-&gt;translate($unitData[&#039;unit&#039;], $interpolations, $count, $translator, $altNumbers);
+        };
+
+        $fallbackUnit = [&#039;second&#039;, &#039;s&#039;];
+
+        <span style="background-color: red">f</span>oreach ($diffIntervalArray as $diffIntervalData) {
+            <span style="background-color: red">i</span>f ($diffIntervalData[&#039;value&#039;] &gt; 0) {
+                $unit = $short ? $diffIntervalData[&#039;unitShort&#039;] : <span style="background-color: red">$</span>diffIntervalData[&#039;unit&#039;];
+                $count = $diffIntervalData[&#039;value&#039;];
+                $interval[] = [$short, $diffIntervalData];
+            } <span style="background-color: red">e</span>lseif ($options &amp; CarbonInterface::SEQUENTIAL_PARTS_ONLY &amp;&amp; <span style="background-color: red">\</span>count($interval) &gt; 0) {
+                break;
+            <span style="background-color: red">}</span>
+
+            // break the loop after we get the required number of parts in array
+            <span style="background-color: red">i</span>f (\count($interval) &gt;= $parts) {
+                break;
+            <span style="background-color: red">}</span>
+
+            // break the loop after we have reached the minimum unit
+            <span style="background-color: red">i</span>f (\in_array($minimumUnit, [$diffIntervalData[&#039;unit&#039;], $diffIntervalData[&#039;unitShort&#039;]], true)) {
+                $fallbackUnit = [$diffIntervalData[&#039;unit&#039;], $diffIntervalData[&#039;unitShort&#039;]];
+
+                break;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $actualParts = \count($interval);
+
+        <span style="background-color: red">f</span>oreach ($interval as $index =&gt; &amp;$item) {
+            $item = $transChoice($item[0], $item[1], $index, $actualParts);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\count($interval) === 0) {
+            <span style="background-color: red">i</span>f ($relativeToNow &amp;&amp; <span style="background-color: red">$</span>options &amp; CarbonInterface::JUST_NOW) {
+                $key = &#039;diff_now&#039;;
+                $translation = $this-&gt;translate($key, $interpolations, null, $translator);
+
+                <span style="background-color: red">i</span>f ($translation !== $key) {
+                    return $translation;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $count = $options &amp; CarbonInterface::NO_ZERO_DIFF ? 1 : <span style="background-color: red">0</span>;
+            $unit = $fallbackUnit[$short ? 1 : <span style="background-color: red">0</span>];
+            $interval[] = $this-&gt;translate($unit, $interpolations, $count, $translator, $altNumbers);
+        <span style="background-color: red">}</span>
+
+        // join the interval parts by a space
+        $time = $join($interval);
+
+        unset($diffIntervalArray, $interval);
+
+        <span style="background-color: red">i</span>f ($absolute) {
+            return $time;
+        <span style="background-color: red">}</span>
+
+        $isFuture = $this-&gt;invert === 1;
+
+        $transId = $relativeToNow ? ($isFuture ? &#039;from_now&#039; : <span style="background-color: red">'</span>ago&#039;) : (<span style="background-color: red">$</span>isFuture ? &#039;after&#039; : <span style="background-color: red">'</span>before&#039;);
+
+        <span style="background-color: red">i</span>f ($parts === 1) {
+            <span style="background-color: red">i</span>f ($relativeToNow &amp;&amp; <span style="background-color: red">$</span>unit === &#039;day&#039;) {
+                $specialTranslations = static::SPECIAL_TRANSLATIONS[$count] ?? <span style="background-color: red">n</span>ull;
+
+                <span style="background-color: red">i</span>f ($specialTranslations &amp;&amp; <span style="background-color: red">$</span>options &amp; $specialTranslations[&#039;option&#039;]) {
+                    $key = $specialTranslations[$isFuture ? &#039;future&#039; : <span style="background-color: red">'</span>past&#039;];
+                    $translation = $this-&gt;translate($key, $interpolations, null, $translator);
+
+                    <span style="background-color: red">i</span>f ($translation !== $key) {
+                        return $translation;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $aTime = $aUnit ? $handleDeclensions(&#039;a_&#039;.$unit, $count) : <span style="background-color: red">n</span>ull;
+
+            $time = $aTime ?: <span style="background-color: red">$</span>handleDeclensions($unit, $count) ?: <span style="background-color: red">$</span>time;
+        <span style="background-color: red">}</span>
+
+        $time = [&#039;:time&#039; =&gt; $time];
+
+        return $this-&gt;translate($transId, array_merge($time, $interpolations, $time), null, $translator);
+    }
+
+    <span style="background-color: red">p</span>ublic function format(string $format): string
+    {
+        $output = parent::format($format);
+
+        <span style="background-color: red">i</span>f (!str_contains($format, &#039;%a&#039;) || <span style="background-color: red">!</span>isset($this-&gt;startDate, $this-&gt;endDate)) {
+            return $output;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;rawInterval ??= <span style="background-color: red">$</span>this-&gt;startDate-&gt;diffAsDateInterval($this-&gt;endDate);
+
+        return str_replace(&#039;(unknown)&#039;, $this-&gt;rawInterval-&gt;format(&#039;%a&#039;), $output);
+    }
+
+    /**
+     * Format the instance as a string using the forHumans() function.
+     *
+     * @throws Exception
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        $format = $this-&gt;localToStringFormat
+            ?? <span style="background-color: red">$</span>this-&gt;getFactory()-&gt;getSettings()[&#039;toStringFormat&#039;]
+            ?? <span style="background-color: red">n</span>ull;
+
+        <span style="background-color: red">i</span>f (!$format) {
+            return $this-&gt;forHumans();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($format instanceof Closure) {
+            return $format($this);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;format($format);
+    }
+
+    /**
+     * Return native DateInterval PHP object matching the current instance.
+     *
+     * @example
+     * ```
+     * var_dump(CarbonInterval::hours(2)-&gt;toDateInterval());
+     * ```
+     *
+     * @return DateInterval
+     */
+    <span style="background-color: red">p</span>ublic function toDateInterval(): DateInterval
+    {
+        return self::castIntervalToClass($this, DateInterval::class);
+    }
+
+    /**
+     * Convert the interval to a CarbonPeriod.
+     *
+     * @param DateTimeInterface|string|int ...$params Start date, [end date or recurrences] and optional settings.
+     *
+     * @return CarbonPeriod
+     */
+    <span style="background-color: red">p</span>ublic function toPeriod(...$params): CarbonPeriod
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;timezoneSetting) {
+            $timeZone = \is_string($this-&gt;timezoneSetting)
+                ? new DateTimeZone($this-&gt;timezoneSetting)
+                : <span style="background-color: red">$</span>this-&gt;timezoneSetting;
+
+            <span style="background-color: red">i</span>f ($timeZone instanceof DateTimeZone) {
+                array_unshift($params, $timeZone);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $class = ($params[0] ?? <span style="background-color: red">n</span>ull) instanceof DateTime ? CarbonPeriod::class : <span style="background-color: red">C</span>arbonPeriodImmutable::class;
+
+        return $class::create($this, ...$params);
+    }
+
+    /**
+     * Decompose the current interval into
+     *
+     * @param mixed|int|DateInterval|string|Closure|Unit|null $interval interval or number of the given $unit
+     * @param Unit|string|null                                $unit     if specified, $interval must be an integer
+     *
+     * @return CarbonPeriod
+     */
+    <span style="background-color: red">p</span>ublic function stepBy($interval, Unit|string|null $unit = null): CarbonPeriod
+    {
+        $this-&gt;checkStartAndEnd();
+        $start = $this-&gt;startDate ?? <span style="background-color: red">C</span>arbonImmutable::make(&#039;now&#039;);
+        $end = $this-&gt;endDate ?? <span style="background-color: red">$</span>start-&gt;copy()-&gt;add($this);
+
+        try {
+            $step = static::make($interval, $unit);
+        } <span style="background-color: red">c</span>atch (InvalidFormatException $exception) {
+            <span style="background-color: red">i</span>f ($unit || (<span style="background-color: red">\</span>is_string($interval) ? preg_match(&#039;/(\s|\d)/&#039;, $interval) : <span style="background-color: red">!</span>($interval instanceof Unit))) {
+                throw $exception;
+            <span style="background-color: red">}</span>
+
+            $step = static::make(1, $interval);
+        <span style="background-color: red">}</span>
+
+        $class = $start instanceof DateTime ? CarbonPeriod::class : <span style="background-color: red">C</span>arbonPeriodImmutable::class;
+
+        return $class::create($step, $start, $end);
+    }
+
+    /**
+     * Invert the interval.
+     *
+     * @param bool|int $inverted if a parameter is passed, the passed value cast as 1 or 0 is used
+     *                           as the new value of the -&gt;invert property.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function invert($inverted = null): static
+    {
+        $this-&gt;invert = (\func_num_args() === 0 ? !$this-&gt;invert : <span style="background-color: red">$</span>inverted) ? 1 : <span style="background-color: red">0</span>;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>rotected function solveNegativeInterval(): static
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;isEmpty() &amp;&amp; <span style="background-color: red">$</span>this-&gt;years &lt;= 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;months &lt;= 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;dayz &lt;= 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;hours &lt;= 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;minutes &lt;= 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;seconds &lt;= 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;microseconds &lt;= 0) {
+            $this-&gt;years *= self::NEGATIVE;
+            $this-&gt;months *= self::NEGATIVE;
+            $this-&gt;dayz *= self::NEGATIVE;
+            $this-&gt;hours *= self::NEGATIVE;
+            $this-&gt;minutes *= self::NEGATIVE;
+            $this-&gt;seconds *= self::NEGATIVE;
+            $this-&gt;microseconds *= self::NEGATIVE;
+            $this-&gt;invert();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add the passed interval to the current instance.
+     *
+     * @param string|DateInterval $unit
+     * @param int|float           $value
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function add($unit, $value = 1): static
+    {
+        <span style="background-color: red">i</span>f (is_numeric($unit)) {
+            [$value, $unit] = [$unit, $value];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($unit) &amp;&amp; <span style="background-color: red">!</span>preg_match(&#039;/^\s*-?\d/&#039;, $unit)) {
+            $unit = &quot;$value $unit&quot;;
+            $value = 1;
+        <span style="background-color: red">}</span>
+
+        $interval = static::make($unit);
+
+        <span style="background-color: red">i</span>f (!$interval) {
+            throw new InvalidIntervalException(&#039;This type of data cannot be added/subtracted.&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($value !== 1) {
+            $interval-&gt;times($value);
+        <span style="background-color: red">}</span>
+
+        $sign = ($this-&gt;invert === 1) !== ($interval-&gt;invert === 1) ? self::NEGATIVE : <span style="background-color: red">s</span>elf::POSITIVE;
+        $this-&gt;years += $interval-&gt;y * $sign;
+        $this-&gt;months += $interval-&gt;m * $sign;
+        $this-&gt;dayz += ($interval-&gt;days === false ? $interval-&gt;d : <span style="background-color: red">$</span>interval-&gt;days) * $sign;
+        $this-&gt;hours += $interval-&gt;h * $sign;
+        $this-&gt;minutes += $interval-&gt;i * $sign;
+        $this-&gt;seconds += $interval-&gt;s * $sign;
+        $this-&gt;microseconds += $interval-&gt;microseconds * $sign;
+
+        $this-&gt;solveNegativeInterval();
+
+        return $this;
+    }
+
+    /**
+     * Subtract the passed interval to the current instance.
+     *
+     * @param string|DateInterval $unit
+     * @param int|float           $value
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function sub($unit, $value = 1): static
+    {
+        <span style="background-color: red">i</span>f (is_numeric($unit)) {
+            [$value, $unit] = [$unit, $value];
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;add($unit, -(float) $value);
+    }
+
+    /**
+     * Subtract the passed interval to the current instance.
+     *
+     * @param string|DateInterval $unit
+     * @param int|float           $value
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function subtract($unit, $value = 1): static
+    {
+        return $this-&gt;sub($unit, $value);
+    }
+
+    /**
+     * Add given parameters to the current interval.
+     *
+     * @param int       $years
+     * @param int       $months
+     * @param int|float $weeks
+     * @param int|float $days
+     * @param int|float $hours
+     * @param int|float $minutes
+     * @param int|float $seconds
+     * @param int|float $microseconds
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function plus(
+        $years = 0,
+        $months = 0,
+        $weeks = 0,
+        $days = 0,
+        $hours = 0,
+        $minutes = 0,
+        $seconds = 0,
+        $microseconds = 0
+    ): static {
+        return $this-&gt;add(&quot;
+            $years years $months months $weeks weeks $days days
+            $hours hours $minutes minutes $seconds seconds $microseconds microseconds
+        &quot;);
+    }
+
+    /**
+     * Add given parameters to the current interval.
+     *
+     * @param int       $years
+     * @param int       $months
+     * @param int|float $weeks
+     * @param int|float $days
+     * @param int|float $hours
+     * @param int|float $minutes
+     * @param int|float $seconds
+     * @param int|float $microseconds
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function minus(
+        $years = 0,
+        $months = 0,
+        $weeks = 0,
+        $days = 0,
+        $hours = 0,
+        $minutes = 0,
+        $seconds = 0,
+        $microseconds = 0
+    ): static {
+        return $this-&gt;sub(&quot;
+            $years years $months months $weeks weeks $days days
+            $hours hours $minutes minutes $seconds seconds $microseconds microseconds
+        &quot;);
+    }
+
+    /**
+     * Multiply current instance given number of times. times() is naive, it multiplies each unit
+     * (so day can be greater than 31, hour can be greater than 23, etc.) and the result is rounded
+     * separately for each unit.
+     *
+     * Use times() when you want a fast and approximated calculation that does not cascade units.
+     *
+     * For a precise and cascaded calculation,
+     *
+     * @see multiply()
+     *
+     * @param float|int $factor
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function times($factor): static
+    {
+        <span style="background-color: red">i</span>f ($factor &lt; 0) {
+            $this-&gt;invert = $this-&gt;invert ? 0 : <span style="background-color: red">1</span>;
+            $factor = -$factor;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;years = (int) round($this-&gt;years * $factor);
+        $this-&gt;months = (int) round($this-&gt;months * $factor);
+        $this-&gt;dayz = (int) round($this-&gt;dayz * $factor);
+        $this-&gt;hours = (int) round($this-&gt;hours * $factor);
+        $this-&gt;minutes = (int) round($this-&gt;minutes * $factor);
+        $this-&gt;seconds = (int) round($this-&gt;seconds * $factor);
+        $this-&gt;microseconds = (int) round($this-&gt;microseconds * $factor);
+
+        return $this;
+    }
+
+    /**
+     * Divide current instance by a given divider. shares() is naive, it divides each unit separately
+     * and the result is rounded for each unit. So 5 hours and 20 minutes shared by 3 becomes 2 hours
+     * and 7 minutes.
+     *
+     * Use shares() when you want a fast and approximated calculation that does not cascade units.
+     *
+     * For a precise and cascaded calculation,
+     *
+     * @see divide()
+     *
+     * @param float|int $divider
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function shares($divider): static
+    {
+        return $this-&gt;times(1 / $divider);
+    }
+
+    <span style="background-color: red">p</span>rotected function copyProperties(self $interval, $ignoreSign = false): static
+    {
+        $this-&gt;years = $interval-&gt;years;
+        $this-&gt;months = $interval-&gt;months;
+        $this-&gt;dayz = $interval-&gt;dayz;
+        $this-&gt;hours = $interval-&gt;hours;
+        $this-&gt;minutes = $interval-&gt;minutes;
+        $this-&gt;seconds = $interval-&gt;seconds;
+        $this-&gt;microseconds = $interval-&gt;microseconds;
+
+        <span style="background-color: red">i</span>f (!$ignoreSign) {
+            $this-&gt;invert = $interval-&gt;invert;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Multiply and cascade current instance by a given factor.
+     *
+     * @param float|int $factor
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function multiply($factor): static
+    {
+        <span style="background-color: red">i</span>f ($factor &lt; 0) {
+            $this-&gt;invert = $this-&gt;invert ? 0 : <span style="background-color: red">1</span>;
+            $factor = -$factor;
+        <span style="background-color: red">}</span>
+
+        $yearPart = (int) floor($this-&gt;years * $factor); // Split calculation to prevent imprecision
+
+        <span style="background-color: red">i</span>f ($yearPart) {
+            $this-&gt;years -= $yearPart / $factor;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;copyProperties(
+            static::create($yearPart)
+                -&gt;microseconds(abs($this-&gt;totalMicroseconds) * $factor)
+                -&gt;cascade(),
+            true,
+        );
+    }
+
+    /**
+     * Divide and cascade current instance by a given divider.
+     *
+     * @param float|int $divider
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function divide($divider): static
+    {
+        return $this-&gt;multiply(1 / $divider);
+    }
+
+    /**
+     * Get the interval_spec string of a date interval.
+     *
+     * @param DateInterval $interval
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function getDateIntervalSpec(DateInterval $interval, bool $microseconds = false, array $skip = []): string
+    {
+        $date = array_filter([
+            static::PERIOD_YEARS =&gt; abs($interval-&gt;y),
+            static::PERIOD_MONTHS =&gt; abs($interval-&gt;m),
+            static::PERIOD_DAYS =&gt; abs($interval-&gt;d),
+        ]);
+
+        $skip = array_map([Unit::class, &#039;toNameIfUnit&#039;], $skip);
+
+        <span style="background-color: red">i</span>f (
+            $interval-&gt;days &gt;= CarbonInterface::DAYS_PER_WEEK * CarbonInterface::WEEKS_PER_MONTH &amp;&amp;
+            (<span style="background-color: red">!</span>isset($date[static::PERIOD_YEARS]) || <span style="background-color: red">\</span>count(array_intersect([&#039;y&#039;, &#039;year&#039;, &#039;years&#039;], $skip))) &amp;&amp;
+            (<span style="background-color: red">!</span>isset($date[static::PERIOD_MONTHS]) || <span style="background-color: red">\</span>count(array_intersect([&#039;m&#039;, &#039;month&#039;, &#039;months&#039;], $skip)))
+        ) {
+            $date = [
+                static::PERIOD_DAYS =&gt; abs($interval-&gt;days),
+            ];
+        <span style="background-color: red">}</span>
+
+        $seconds = abs($interval-&gt;s);
+        <span style="background-color: red">i</span>f ($microseconds &amp;&amp; <span style="background-color: red">$</span>interval-&gt;f &gt; 0) {
+            $seconds = \sprintf(&#039;%d.%06d&#039;, $seconds, abs($interval-&gt;f) * 1000000);
+        <span style="background-color: red">}</span>
+
+        $time = array_filter([
+            static::PERIOD_HOURS =&gt; abs($interval-&gt;h),
+            static::PERIOD_MINUTES =&gt; abs($interval-&gt;i),
+            static::PERIOD_SECONDS =&gt; $seconds,
+        ]);
+
+        $specString = static::PERIOD_PREFIX;
+
+        <span style="background-color: red">f</span>oreach ($date as $key =&gt; $value) {
+            $specString .= $value.$key;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\count($time) &gt; 0) {
+            $specString .= static::PERIOD_TIME_PREFIX;
+            <span style="background-color: red">f</span>oreach ($time as $key =&gt; $value) {
+                $specString .= $value.$key;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $specString === static::PERIOD_PREFIX ? &#039;PT0S&#039; : <span style="background-color: red">$</span>specString;
+    }
+
+    /**
+     * Get the interval_spec string.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function spec(bool $microseconds = false): string
+    {
+        return static::getDateIntervalSpec($this, $microseconds);
+    }
+
+    /**
+     * Comparing 2 date intervals.
+     *
+     * @param DateInterval $first
+     * @param DateInterval $second
+     *
+     * @return int 0, 1 or -1
+     */
+    <span style="background-color: red">p</span>ublic static function compareDateIntervals(DateInterval $first, DateInterval $second): int
+    {
+        $current = Carbon::now();
+        $passed = $current-&gt;avoidMutation()-&gt;add($second);
+        $current-&gt;add($first);
+
+        return $current &lt;=&gt; $passed;
+    }
+
+    /**
+     * Comparing with passed interval.
+     *
+     * @param DateInterval $interval
+     *
+     * @return int 0, 1 or -1
+     */
+    <span style="background-color: red">p</span>ublic function compare(DateInterval $interval): int
+    {
+        return static::compareDateIntervals($this, $interval);
+    }
+
+    /**
+     * Convert overflowed values into bigger units.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function cascade(): static
+    {
+        return $this-&gt;doCascade(false);
+    }
+
+    <span style="background-color: red">p</span>ublic function hasNegativeValues(): bool
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;toArray() as $value) {
+            <span style="background-color: red">i</span>f ($value &lt; 0) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasPositiveValues(): bool
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;toArray() as $value) {
+            <span style="background-color: red">i</span>f ($value &gt; 0) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Get amount of given unit equivalent to the interval.
+     *
+     * @param string $unit
+     *
+     * @throws UnknownUnitException|UnitNotConfiguredException
+     *
+     * @return float
+     */
+    <span style="background-color: red">p</span>ublic function total(string $unit): float
+    {
+        $realUnit = $unit = strtolower($unit);
+
+        <span style="background-color: red">i</span>f (\in_array($unit, [&#039;days&#039;, &#039;weeks&#039;])) {
+            $realUnit = &#039;dayz&#039;;
+        } <span style="background-color: red">e</span>lseif (!\in_array($unit, [&#039;microseconds&#039;, &#039;milliseconds&#039;, &#039;seconds&#039;, &#039;minutes&#039;, &#039;hours&#039;, &#039;dayz&#039;, &#039;months&#039;, &#039;years&#039;])) {
+            throw new UnknownUnitException($unit);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;checkStartAndEnd();
+
+        <span style="background-color: red">i</span>f ($this-&gt;startDate &amp;&amp; <span style="background-color: red">$</span>this-&gt;endDate) {
+            $diff = $this-&gt;startDate-&gt;diffInUnit($unit, $this-&gt;endDate);
+
+            return $this-&gt;absolute ? abs($diff) : <span style="background-color: red">$</span>diff;
+        <span style="background-color: red">}</span>
+
+        $result = 0;
+        $cumulativeFactor = 0;
+        $unitFound = false;
+        $factors = self::getFlipCascadeFactors();
+        $daysPerWeek = (int) static::getDaysPerWeek();
+
+        $values = [
+            &#039;years&#039; =&gt; $this-&gt;years,
+            &#039;months&#039; =&gt; $this-&gt;months,
+            &#039;weeks&#039; =&gt; (int) ($this-&gt;d / $daysPerWeek),
+            &#039;dayz&#039; =&gt; fmod($this-&gt;d, $daysPerWeek),
+            &#039;hours&#039; =&gt; $this-&gt;hours,
+            &#039;minutes&#039; =&gt; $this-&gt;minutes,
+            &#039;seconds&#039; =&gt; $this-&gt;seconds,
+            &#039;milliseconds&#039; =&gt; (int) ($this-&gt;microseconds / Carbon::MICROSECONDS_PER_MILLISECOND),
+            &#039;microseconds&#039; =&gt; $this-&gt;microseconds % Carbon::MICROSECONDS_PER_MILLISECOND,
+        ];
+
+        <span style="background-color: red">i</span>f (isset($factors[&#039;dayz&#039;]) &amp;&amp; <span style="background-color: red">$</span>factors[&#039;dayz&#039;][0] !== &#039;weeks&#039;) {
+            $values[&#039;dayz&#039;] += $values[&#039;weeks&#039;] * $daysPerWeek;
+            $values[&#039;weeks&#039;] = 0;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($factors as $source =&gt; [$target, $factor]) {
+            <span style="background-color: red">i</span>f ($source === $realUnit) {
+                $unitFound = true;
+                $value = $values[$source];
+                $result += $value;
+                $cumulativeFactor = 1;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($factor === false) {
+                <span style="background-color: red">i</span>f ($unitFound) {
+                    break;
+                <span style="background-color: red">}</span>
+
+                $result = 0;
+                $cumulativeFactor = 0;
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($target === $realUnit) {
+                $unitFound = true;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($cumulativeFactor) {
+                $cumulativeFactor *= $factor;
+                $result += $values[$target] * $cumulativeFactor;
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            $value = $values[$source];
+
+            $result = ($result + $value) / $factor;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($target) &amp;&amp; <span style="background-color: red">!</span>$cumulativeFactor) {
+            $result += $values[$target];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$unitFound) {
+            throw new UnitNotConfiguredException($unit);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;invert) {
+            $result *= self::NEGATIVE;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($unit === &#039;weeks&#039;) {
+            $result /= $daysPerWeek;
+        <span style="background-color: red">}</span>
+
+        // Cast as int numbers with no decimal part
+        return fmod($result, 1) === 0.0 ? (int) $result : <span style="background-color: red">$</span>result;
+    }
+
+    /**
+     * Determines if the instance is equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @see equalTo()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function eq($interval): bool
+    {
+        return $this-&gt;equalTo($interval);
+    }
+
+    /**
+     * Determines if the instance is equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function equalTo($interval): bool
+    {
+        $interval = $this-&gt;resolveInterval($interval);
+
+        <span style="background-color: red">i</span>f ($interval === null) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $step = $this-&gt;getStep();
+
+        <span style="background-color: red">i</span>f ($step) {
+            return $step === $interval-&gt;getStep();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;isEmpty()) {
+            return $interval-&gt;isEmpty();
+        <span style="background-color: red">}</span>
+
+        $cascadedInterval = $this-&gt;copy()-&gt;cascade();
+        $comparedInterval = $interval-&gt;copy()-&gt;cascade();
+
+        return $cascadedInterval-&gt;invert === $comparedInterval-&gt;invert &amp;&amp;
+            <span style="background-color: red">$</span>cascadedInterval-&gt;getNonZeroValues() === $comparedInterval-&gt;getNonZeroValues();
+    }
+
+    /**
+     * Determines if the instance is not equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @see notEqualTo()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function ne($interval): bool
+    {
+        return $this-&gt;notEqualTo($interval);
+    }
+
+    /**
+     * Determines if the instance is not equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function notEqualTo($interval): bool
+    {
+        return !$this-&gt;eq($interval);
+    }
+
+    /**
+     * Determines if the instance is greater (longer) than another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @see greaterThan()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function gt($interval): bool
+    {
+        return $this-&gt;greaterThan($interval);
+    }
+
+    /**
+     * Determines if the instance is greater (longer) than another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function greaterThan($interval): bool
+    {
+        $interval = $this-&gt;resolveInterval($interval);
+
+        return $interval === null || <span style="background-color: red">$</span>this-&gt;totalMicroseconds &gt; $interval-&gt;totalMicroseconds;
+    }
+
+    /**
+     * Determines if the instance is greater (longer) than or equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @see greaterThanOrEqualTo()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function gte($interval): bool
+    {
+        return $this-&gt;greaterThanOrEqualTo($interval);
+    }
+
+    /**
+     * Determines if the instance is greater (longer) than or equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function greaterThanOrEqualTo($interval): bool
+    {
+        return $this-&gt;greaterThan($interval) || <span style="background-color: red">$</span>this-&gt;equalTo($interval);
+    }
+
+    /**
+     * Determines if the instance is less (shorter) than another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @see lessThan()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function lt($interval): bool
+    {
+        return $this-&gt;lessThan($interval);
+    }
+
+    /**
+     * Determines if the instance is less (shorter) than another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function lessThan($interval): bool
+    {
+        $interval = $this-&gt;resolveInterval($interval);
+
+        return $interval !== null &amp;&amp; <span style="background-color: red">$</span>this-&gt;totalMicroseconds &lt; $interval-&gt;totalMicroseconds;
+    }
+
+    /**
+     * Determines if the instance is less (shorter) than or equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @see lessThanOrEqualTo()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function lte($interval): bool
+    {
+        return $this-&gt;lessThanOrEqualTo($interval);
+    }
+
+    /**
+     * Determines if the instance is less (shorter) than or equal to another
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function lessThanOrEqualTo($interval): bool
+    {
+        return $this-&gt;lessThan($interval) || <span style="background-color: red">$</span>this-&gt;equalTo($interval);
+    }
+
+    /**
+     * Determines if the instance is between two others.
+     *
+     * The third argument allow you to specify if bounds are included or not (true by default)
+     * but for when you including/excluding bounds may produce different results in your application,
+     * we recommend to use the explicit methods -&gt;betweenIncluded() or -&gt;betweenExcluded() instead.
+     *
+     * @example
+     * ```
+     * CarbonInterval::hours(48)-&gt;between(CarbonInterval::day(), CarbonInterval::days(3)); // true
+     * CarbonInterval::hours(48)-&gt;between(CarbonInterval::day(), CarbonInterval::hours(36)); // false
+     * CarbonInterval::hours(48)-&gt;between(CarbonInterval::day(), CarbonInterval::days(2)); // true
+     * CarbonInterval::hours(48)-&gt;between(CarbonInterval::day(), CarbonInterval::days(2), false); // false
+     * ```
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval1
+     * @param CarbonInterval|DateInterval|mixed $interval2
+     * @param bool                              $equal     Indicates if an equal to comparison should be done
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function between($interval1, $interval2, bool $equal = true): bool
+    {
+        return $equal
+            ? $this-&gt;greaterThanOrEqualTo($interval1) &amp;&amp; <span style="background-color: red">$</span>this-&gt;lessThanOrEqualTo($interval2)
+            : <span style="background-color: red">$</span>this-&gt;greaterThan($interval1) &amp;&amp; <span style="background-color: red">$</span>this-&gt;lessThan($interval2);
+    }
+
+    /**
+     * Determines if the instance is between two others, bounds excluded.
+     *
+     * @example
+     * ```
+     * CarbonInterval::hours(48)-&gt;betweenExcluded(CarbonInterval::day(), CarbonInterval::days(3)); // true
+     * CarbonInterval::hours(48)-&gt;betweenExcluded(CarbonInterval::day(), CarbonInterval::hours(36)); // false
+     * CarbonInterval::hours(48)-&gt;betweenExcluded(CarbonInterval::day(), CarbonInterval::days(2)); // true
+     * ```
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval1
+     * @param CarbonInterval|DateInterval|mixed $interval2
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function betweenIncluded($interval1, $interval2): bool
+    {
+        return $this-&gt;between($interval1, $interval2, true);
+    }
+
+    /**
+     * Determines if the instance is between two others, bounds excluded.
+     *
+     * @example
+     * ```
+     * CarbonInterval::hours(48)-&gt;betweenExcluded(CarbonInterval::day(), CarbonInterval::days(3)); // true
+     * CarbonInterval::hours(48)-&gt;betweenExcluded(CarbonInterval::day(), CarbonInterval::hours(36)); // false
+     * CarbonInterval::hours(48)-&gt;betweenExcluded(CarbonInterval::day(), CarbonInterval::days(2)); // false
+     * ```
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval1
+     * @param CarbonInterval|DateInterval|mixed $interval2
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function betweenExcluded($interval1, $interval2): bool
+    {
+        return $this-&gt;between($interval1, $interval2, false);
+    }
+
+    /**
+     * Determines if the instance is between two others
+     *
+     * @example
+     * ```
+     * CarbonInterval::hours(48)-&gt;isBetween(CarbonInterval::day(), CarbonInterval::days(3)); // true
+     * CarbonInterval::hours(48)-&gt;isBetween(CarbonInterval::day(), CarbonInterval::hours(36)); // false
+     * CarbonInterval::hours(48)-&gt;isBetween(CarbonInterval::day(), CarbonInterval::days(2)); // true
+     * CarbonInterval::hours(48)-&gt;isBetween(CarbonInterval::day(), CarbonInterval::days(2), false); // false
+     * ```
+     *
+     * @param CarbonInterval|DateInterval|mixed $interval1
+     * @param CarbonInterval|DateInterval|mixed $interval2
+     * @param bool                              $equal     Indicates if an equal to comparison should be done
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isBetween($interval1, $interval2, bool $equal = true): bool
+    {
+        return $this-&gt;between($interval1, $interval2, $equal);
+    }
+
+    /**
+     * Round the current instance at the given unit with given precision if specified and the given function.
+     *
+     * @throws Exception
+     */
+    <span style="background-color: red">p</span>ublic function roundUnit(string $unit, DateInterval|string|int|float $precision = 1, string $function = &#039;round&#039;): static
+    {
+        <span style="background-color: red">i</span>f (static::getCascadeFactors() !== static::getDefaultCascadeFactors()) {
+            $value = $function($this-&gt;total($unit) / $precision) * $precision;
+            $inverted = $value &lt; 0;
+
+            return $this-&gt;copyProperties(self::fromString(
+                number_format(abs($value), 12, &#039;.&#039;, &#039;&#039;).&#039; &#039;.$unit
+            )-&gt;invert($inverted)-&gt;cascade());
+        <span style="background-color: red">}</span>
+
+        $base = CarbonImmutable::parse(&#039;2000-01-01 00:00:00&#039;, &#039;UTC&#039;)
+            -&gt;roundUnit($unit, $precision, $function);
+        $next = $base-&gt;add($this);
+        $inverted = $next &lt; $base;
+
+        <span style="background-color: red">i</span>f ($inverted) {
+            $next = $base-&gt;sub($this);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;copyProperties(
+            $next
+                -&gt;roundUnit($unit, $precision, $function)
+                -&gt;diff($base),
+        );
+
+        return $this-&gt;invert($inverted);
+    }
+
+    /**
+     * Truncate the current instance at the given unit with given precision if specified.
+     *
+     * @param string                             $unit
+     * @param float|int|string|DateInterval|null $precision
+     *
+     * @throws Exception
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function floorUnit(string $unit, $precision = 1): static
+    {
+        return $this-&gt;roundUnit($unit, $precision, &#039;floor&#039;);
+    }
+
+    /**
+     * Ceil the current instance at the given unit with given precision if specified.
+     *
+     * @param string                             $unit
+     * @param float|int|string|DateInterval|null $precision
+     *
+     * @throws Exception
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function ceilUnit(string $unit, $precision = 1): static
+    {
+        return $this-&gt;roundUnit($unit, $precision, &#039;ceil&#039;);
+    }
+
+    /**
+     * Round the current instance second with given precision if specified.
+     *
+     * @param float|int|string|DateInterval|null $precision
+     * @param string                             $function
+     *
+     * @throws Exception
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function round($precision = 1, string $function = &#039;round&#039;): static
+    {
+        return $this-&gt;roundWith($precision, $function);
+    }
+
+    /**
+     * Round the current instance second with given precision if specified.
+     *
+     * @throws Exception
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function floor(DateInterval|string|float|int $precision = 1): static
+    {
+        return $this-&gt;round($precision, &#039;floor&#039;);
+    }
+
+    /**
+     * Ceil the current instance second with given precision if specified.
+     *
+     * @throws Exception
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function ceil(DateInterval|string|float|int $precision = 1): static
+    {
+        return $this-&gt;round($precision, &#039;ceil&#039;);
+    }
+
+    <span style="background-color: red">p</span>ublic function __unserialize(array $data): void
+    {
+        $properties = array_combine(
+            array_map(
+                static fn (mixed $key) =&gt; <span style="background-color: red">\</span>is_string($key)
+                    ? str_replace(&#039;tzName&#039;, &#039;timezoneSetting&#039;, $key)
+                    : <span style="background-color: red">$</span>key,
+                array_keys($data),
+            ),
+            $data,
+        );
+
+        <span style="background-color: red">i</span>f (method_exists(parent::class, &#039;__unserialize&#039;)) {
+            // PHP &gt;= 8.2
+            parent::__unserialize($properties);
+
+            return;
+        <span style="background-color: red">}</span>
+
+        // PHP &lt;= 8.1
+        // @codeCoverageIgnoreStart
+        <span style="background-color: red">f</span>oreach ($properties as $property =&gt; $value) {
+            $name = preg_replace(&#039;/^\0.+\0/&#039;, &#039;&#039;, $property);
+            $localStrictMode = $this-&gt;localStrictModeEnabled;
+            $this-&gt;localStrictModeEnabled = false;
+            $this-&gt;$name = $value;
+
+            <span style="background-color: red">i</span>f ($name !== &#039;localStrictModeEnabled&#039;) {
+                $this-&gt;localStrictModeEnabled = $localStrictMode;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+        // @codeCoverageIgnoreEnd
+    }
+
+    /**
+     * @template T
+     *
+     * @param T     $interval
+     * @param mixed $original
+     *
+     * @return T
+     */
+    <span style="background-color: red">p</span>rivate static function withOriginal(mixed $interval, mixed $original): mixed
+    {
+        <span style="background-color: red">i</span>f ($interval instanceof self) {
+            $interval-&gt;originalInput = $original;
+        <span style="background-color: red">}</span>
+
+        return $interval;
+    }
+
+    <span style="background-color: red">p</span>rivate static function standardizeUnit(string $unit): string
+    {
+        $unit = rtrim($unit, &#039;sz&#039;).&#039;s&#039;;
+
+        return $unit === &#039;days&#039; ? &#039;dayz&#039; : <span style="background-color: red">$</span>unit;
+    }
+
+    <span style="background-color: red">p</span>rivate static function getFlipCascadeFactors(): array
+    {
+        <span style="background-color: red">i</span>f (!self::$flipCascadeFactors) {
+            self::$flipCascadeFactors = [];
+
+            <span style="background-color: red">f</span>oreach (self::getCascadeFactors() as $to =&gt; [$factor, $from]) {
+                self::$flipCascadeFactors[self::standardizeUnit($from)] = [self::standardizeUnit($to), $factor];
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return self::$flipCascadeFactors;
+    }
+
+    /**
+     * @template T of DateInterval
+     *
+     * @param DateInterval $interval
+     *
+     * @psalm-param class-string&lt;T&gt; $className
+     *
+     * @return T
+     */
+    <span style="background-color: red">p</span>rivate static function castIntervalToClass(DateInterval $interval, string $className, array $skip = []): object
+    {
+        $mainClass = DateInterval::class;
+
+        <span style="background-color: red">i</span>f (!is_a($className, $mainClass, true)) {
+            throw new InvalidCastException(&quot;$className is not a sub-class of $mainClass.&quot;);
+        <span style="background-color: red">}</span>
+
+        $microseconds = $interval-&gt;f;
+        $instance = new $className(static::getDateIntervalSpec($interval, false, $skip));
+
+        <span style="background-color: red">i</span>f ($instance instanceof self) {
+            $instance-&gt;originalInput = $interval;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($microseconds) {
+            $instance-&gt;f = $microseconds;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval instanceof self &amp;&amp; <span style="background-color: red">i</span>s_a($className, self::class, true)) {
+            self::copyStep($interval, $instance);
+        <span style="background-color: red">}</span>
+
+        self::copyNegativeUnits($interval, $instance);
+
+        return self::withOriginal($instance, $interval);
+    }
+
+    <span style="background-color: red">p</span>rivate static function copyStep(self $from, self $to): void
+    {
+        $to-&gt;setStep($from-&gt;getStep());
+    }
+
+    <span style="background-color: red">p</span>rivate static function copyNegativeUnits(DateInterval $from, DateInterval $to): void
+    {
+        $to-&gt;invert = $from-&gt;invert;
+
+        <span style="background-color: red">f</span>oreach ([&#039;y&#039;, &#039;m&#039;, &#039;d&#039;, &#039;h&#039;, &#039;i&#039;, &#039;s&#039;] as $unit) {
+            <span style="background-color: red">i</span>f ($from-&gt;$unit &lt; 0) {
+                $to-&gt;$unit *= self::NEGATIVE;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function invertCascade(array $values): static
+    {
+        return $this-&gt;set(array_map(<span style="background-color: red">f</span>unction ($value) {
+            return -$value;
+        }, $values))-&gt;doCascade(true)-&gt;invert();
+    }
+
+    <span style="background-color: red">p</span>rivate function doCascade(bool $deep): static
+    {
+        $originalData = $this-&gt;toArray();
+        $originalData[&#039;milliseconds&#039;] = (int) ($originalData[&#039;microseconds&#039;] / static::getMicrosecondsPerMillisecond());
+        $originalData[&#039;microseconds&#039;] = $originalData[&#039;microseconds&#039;] % static::getMicrosecondsPerMillisecond();
+        $originalData[&#039;weeks&#039;] = (int) ($this-&gt;d / static::getDaysPerWeek());
+        $originalData[&#039;daysExcludeWeeks&#039;] = fmod($this-&gt;d, static::getDaysPerWeek());
+        unset($originalData[&#039;days&#039;]);
+        $newData = $originalData;
+        $previous = [];
+
+        <span style="background-color: red">f</span>oreach (self::getFlipCascadeFactors() as $source =&gt; [$target, $factor]) {
+            <span style="background-color: red">f</span>oreach ([&#039;source&#039;, &#039;target&#039;] as $key) {
+                <span style="background-color: red">i</span>f ($$key === &#039;dayz&#039;) {
+                    $$key = &#039;daysExcludeWeeks&#039;;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $value = $newData[$source];
+            $modulo = fmod($factor + fmod($value, $factor), $factor);
+            $newData[$source] = $modulo;
+            $newData[$target] += ($value - $modulo) / $factor;
+
+            $decimalPart = fmod($newData[$source], 1);
+
+            <span style="background-color: red">i</span>f ($decimalPart !== 0.0) {
+                $unit = $source;
+
+                <span style="background-color: red">f</span>oreach ($previous as [$subUnit, $subFactor]) {
+                    $newData[$unit] -= $decimalPart;
+                    $newData[$subUnit] += $decimalPart * $subFactor;
+                    $decimalPart = fmod($newData[$subUnit], 1);
+
+                    <span style="background-color: red">i</span>f ($decimalPart === 0.0) {
+                        break;
+                    <span style="background-color: red">}</span>
+
+                    $unit = $subUnit;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            array_unshift($previous, [$source, $factor]);
+        <span style="background-color: red">}</span>
+
+        $positive = null;
+
+        <span style="background-color: red">i</span>f (!$deep) {
+            <span style="background-color: red">f</span>oreach ($newData as $value) {
+                <span style="background-color: red">i</span>f ($value) {
+                    <span style="background-color: red">i</span>f ($positive === null) {
+                        $positive = ($value &gt; 0);
+
+                        continue;
+                    <span style="background-color: red">}</span>
+
+                    <span style="background-color: red">i</span>f (($value &gt; 0) !== $positive) {
+                        return $this-&gt;invertCascade($originalData)
+                            -&gt;solveNegativeInterval();
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;set($newData)
+            -&gt;solveNegativeInterval();
+    }
+
+    <span style="background-color: red">p</span>rivate function needsDeclension(string $mode, int $index, int $parts): bool
+    {
+        return match ($mode) {
+            &#039;last&#039; =&gt; <span style="background-color: red">$</span>index === $parts - 1,
+            default =&gt; <span style="background-color: red">t</span>rue,
+        };
+    }
+
+    <span style="background-color: red">p</span>rivate function checkIntegerValue(string $name, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (\is_int($value)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;assertSafeForInteger($name, $value);
+
+        <span style="background-color: red">i</span>f (\is_float($value) &amp;&amp; (<span style="background-color: red">(</span>(float) (int) $value) === $value)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!self::$floatSettersEnabled) {
+            $type = \gettype($value);
+            @trigger_error(
+                &quot;Since 2.70.0, it&#039;s deprecated to pass $type value for $name.\n&quot;.
+                &quot;It&#039;s truncated when stored as an integer interval unit.\n&quot;.
+                &quot;From 3.0.0, decimal part will no longer be truncated and will be cascaded to smaller units.\n&quot;.
+                &quot;- To maintain the current behavior, use explicit cast: $name((int) \$value)\n&quot;.
+                &quot;- To adopt the new behavior globally, call CarbonInterval::enableFloatSetters()\n&quot;,
+                \E_USER_DEPRECATED,
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Throw an exception if precision loss when storing the given value as an integer would be &gt;= 1.0.
+     */
+    <span style="background-color: red">p</span>rivate function assertSafeForInteger(string $name, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f ($value &amp;&amp; <span style="background-color: red">!</span>\is_int($value) &amp;&amp; (<span style="background-color: red">$</span>value &gt;= 0x7fffffffffffffff || <span style="background-color: red">$</span>value &lt;= -0x7fffffffffffffff)) {
+            throw new OutOfRangeException($name, -0x7fffffffffffffff, 0x7fffffffffffffff, $value);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function handleDecimalPart(string $unit, mixed $value, mixed $integerValue): void
+    {
+        <span style="background-color: red">i</span>f (self::$floatSettersEnabled) {
+            $floatValue = (float) $value;
+            $base = (float) $integerValue;
+
+            <span style="background-color: red">i</span>f ($floatValue === $base) {
+                return;
+            <span style="background-color: red">}</span>
+
+            $units = [
+                &#039;y&#039; =&gt; &#039;year&#039;,
+                &#039;m&#039; =&gt; &#039;month&#039;,
+                &#039;d&#039; =&gt; &#039;day&#039;,
+                &#039;h&#039; =&gt; &#039;hour&#039;,
+                &#039;i&#039; =&gt; &#039;minute&#039;,
+                &#039;s&#039; =&gt; &#039;second&#039;,
+            ];
+            $upper = true;
+
+            <span style="background-color: red">f</span>oreach ($units as $property =&gt; $name) {
+                <span style="background-color: red">i</span>f ($name === $unit) {
+                    $upper = false;
+
+                    continue;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f (!$upper &amp;&amp; <span style="background-color: red">$</span>this-&gt;$property !== 0) {
+                    throw new RuntimeException(
+                        &quot;You cannot set $unit to a float value as $name would be overridden, &quot;.
+                        &#039;set it first to 0 explicitly if you really want to erase its value&#039;
+                    );
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $this-&gt;add($unit, $floatValue - $base);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function getInnerValues(): array
+    {
+        return [$this-&gt;y, $this-&gt;m, $this-&gt;d, $this-&gt;h, $this-&gt;i, $this-&gt;s, $this-&gt;f, $this-&gt;invert, $this-&gt;days];
+    }
+
+    <span style="background-color: red">p</span>rivate function checkStartAndEnd(): void
+    {
+        <span style="background-color: red">i</span>f (
+            $this-&gt;initialValues !== null
+            &amp;&amp; (<span style="background-color: red">$</span>this-&gt;startDate !== null || <span style="background-color: red">$</span>this-&gt;endDate !== null)
+            &amp;&amp; <span style="background-color: red">$</span>this-&gt;initialValues !== $this-&gt;getInnerValues()
+        ) {
+            $this-&gt;absolute = false;
+            $this-&gt;startDate = null;
+            $this-&gt;endDate = null;
+            $this-&gt;rawInterval = null;
+        <span style="background-color: red">}</span>
+    }
+
+    /** @return $this */
+    <span style="background-color: red">p</span>rivate function setSetting(string $setting, mixed $value): self
+    {
+        switch ($setting) {
+            <span style="background-color: red">c</span>ase &#039;timezoneSetting&#039;:
+                return $value === null ? $this : <span style="background-color: red">$</span>this-&gt;setTimezone($value);
+
+            <span style="background-color: red">c</span>ase &#039;step&#039;:
+                $this-&gt;setStep($value);
+
+                return $this;
+
+            <span style="background-color: red">c</span>ase &#039;localMonthsOverflow&#039;:
+                return $value === null ? $this : <span style="background-color: red">$</span>this-&gt;settings([&#039;monthOverflow&#039; =&gt; $value]);
+
+            <span style="background-color: red">c</span>ase &#039;localYearsOverflow&#039;:
+                return $value === null ? $this : <span style="background-color: red">$</span>this-&gt;settings([&#039;yearOverflow&#039; =&gt; $value]);
+
+            <span style="background-color: red">c</span>ase &#039;localStrictModeEnabled&#039;:
+            <span style="background-color: red">c</span>ase &#039;localHumanDiffOptions&#039;:
+            <span style="background-color: red">c</span>ase &#039;localToStringFormat&#039;:
+            <span style="background-color: red">c</span>ase &#039;localSerializer&#039;:
+            <span style="background-color: red">c</span>ase &#039;localMacros&#039;:
+            <span style="background-color: red">c</span>ase &#039;localGenericMacros&#039;:
+            <span style="background-color: red">c</span>ase &#039;localFormatFunction&#039;:
+            <span style="background-color: red">c</span>ase &#039;localTranslator&#039;:
+                $this-&gt;$setting = $value;
+
+                return $this;
+
+            <span style="background-color: red">d</span>efault:
+                // Drop unknown settings
+                return $this;
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

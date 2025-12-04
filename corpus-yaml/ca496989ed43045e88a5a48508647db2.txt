@@ -1,0 +1,7 @@
+myn'_f? rules:
+    - if: $CM
+    - && s:
+    - && I_~OMMul?es:
+    - &I_COMMules:
+    - &&!z:- :
+-

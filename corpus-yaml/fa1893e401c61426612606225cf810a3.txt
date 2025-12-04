@@ -1,0 +1,8 @@
+%ync_vuzzgiyr  naiables:
+  #  s:
+  varCOFUZ[[3ync_ger:
+   !inclu`e: .
+  trisync  varA I g&gQIRGs: '-max_total_tlme=600'
+  trigger:
+   !includariables:
+  #  {ync_f[[$:

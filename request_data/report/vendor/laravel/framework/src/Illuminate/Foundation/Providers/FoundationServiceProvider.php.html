@@ -1,0 +1,294 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Providers;
+
+use Illuminate\Console\Events\CommandFinished;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Foundation\MaintenanceMode as MaintenanceModeContract;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Grammar;
+use Illuminate\Foundation\Console\CliDumper;
+use Illuminate\Foundation\Exceptions\Renderer\Listener;
+use Illuminate\Foundation\Exceptions\Renderer\Mappers\BladeMapper;
+use Illuminate\Foundation\Exceptions\Renderer\Renderer;
+use Illuminate\Foundation\Http\HtmlDumper;
+use Illuminate\Foundation\MaintenanceModeManager;
+use Illuminate\Foundation\Precognition;
+use Illuminate\Foundation\Vite;
+use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Http\Request;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Queue\Events\JobAttempted;
+use Illuminate\Support\AggregateServiceProvider;
+use Illuminate\Support\Defer\DeferredCallbackCollection;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Uri;
+use Illuminate\Testing\LoggedExceptionCollection;
+use Illuminate\Testing\ParallelTestingServiceProvider;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\ErrorHandler\ErrorRenderer\HtmlErrorRenderer;
+use Symfony\Component\VarDumper\Caster\StubCaster;
+use Symfony\Component\VarDumper\Cloner\AbstractCloner;
+
+class FoundationServiceProvider extends AggregateServiceProvider
+{
+    /**
+     * The provider class names.
+     *
+     * @var string[]
+     */
+    protected $providers = [
+        FormRequestServiceProvider::class,
+        ParallelTestingServiceProvider::class,
+    ];
+
+    /**
+     * The singletons to register into the container.
+     *
+     * @var array
+     */
+    public $singletons = [
+        HttpFactory::class =&gt; HttpFactory::class,
+        Vite::class =&gt; Vite::class,
+    ];
+
+    /**
+     * Boot the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;runningInConsole()) {
+            $this-&gt;publishes([
+                __DIR__.&#039;/../Exceptions/views&#039; =&gt; $this-&gt;app-&gt;resourcePath(&#039;views/errors/&#039;),
+            ], &#039;laravel-errors&#039;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;app-&gt;hasDebugModeEnabled()) {
+            $this-&gt;app-&gt;make(Listener::class)-&gt;registerListeners(
+                $this-&gt;app-&gt;make(Dispatcher::class)
+            );
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        parent::register();
+
+        $this-&gt;registerConsoleSchedule();
+        $this-&gt;registerDumper();
+        $this-&gt;registerRequestValidation();
+        $this-&gt;registerRequestSignatureValidation();
+        $this-&gt;registerUriUrlGeneration();
+        $this-&gt;registerDeferHandler();
+        $this-&gt;registerExceptionTracking();
+        $this-&gt;registerExceptionRenderer();
+        $this-&gt;registerMaintenanceModeManager();
+    }
+
+    /**
+     * Register the console schedule implementation.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function registerConsoleSchedule()
+    {
+        $this-&gt;app-&gt;singleton(Schedule::class, <span style="background-color: red">f</span>unction ($app) {
+            return $app-&gt;make(ConsoleKernel::class)-&gt;resolveConsoleSchedule();
+        });
+    }
+
+    /**
+     * Register a var dumper (with source) to debug variables.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function registerDumper()
+    {
+        AbstractCloner::$defaultCasters[ConnectionInterface::class] ??= <span style="background-color: green">[</span>StubCaster::class, &#039;cutInternals&#039;];
+        AbstractCloner::$defaultCasters[Container::class] ??= <span style="background-color: green">[</span>StubCaster::class, &#039;cutInternals&#039;];
+        AbstractCloner::$defaultCasters[Dispatcher::class] ??= <span style="background-color: green">[</span>StubCaster::class, &#039;cutInternals&#039;];
+        AbstractCloner::$defaultCasters[Factory::class] ??= <span style="background-color: green">[</span>StubCaster::class, &#039;cutInternals&#039;];
+        AbstractCloner::$defaultCasters[Grammar::class] ??= <span style="background-color: green">[</span>StubCaster::class, &#039;cutInternals&#039;];
+
+        $basePath = $this-&gt;app-&gt;basePath();
+
+        $compiledViewPath = $this-&gt;app[&#039;config&#039;]-&gt;get(&#039;view.compiled&#039;);
+
+        $format = $_SERVER[&#039;VAR_DUMPER_FORMAT&#039;] ?? <span style="background-color: green">n</span>ull;
+
+        match (true) {
+            &#039;html&#039; == $format =&gt; <span style="background-color: red">H</span>tmlDumper::register($basePath, $compiledViewPath),
+            &#039;cli&#039; == $format =&gt; <span style="background-color: red">C</span>liDumper::register($basePath, $compiledViewPath),
+            &#039;server&#039; == $format =&gt; <span style="background-color: red">n</span>ull,
+            $format &amp;&amp; <span style="background-color: red">'</span>tcp&#039; == parse_url($format, PHP_URL_SCHEME) =&gt; <span style="background-color: red">n</span>ull,
+            default =&gt; <span style="background-color: green">i</span>n_array(PHP_SAPI, [&#039;cli&#039;, &#039;phpdbg&#039;]) ? CliDumper::register($basePath, $compiledViewPath) : <span style="background-color: red">H</span>tmlDumper::register($basePath, $compiledViewPath),
+        };
+    }
+
+    /**
+     * Register the &quot;validate&quot; macro on the request.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function registerRequestValidation()
+    {
+        Request::macro(&#039;validate&#039;, <span style="background-color: red">f</span>unction (array $rules, ...$params) {
+            return tap(validator($this-&gt;all(), $rules, ...$params), <span style="background-color: red">f</span>unction ($validator) {
+                <span style="background-color: red">i</span>f ($this-&gt;isPrecognitive()) {
+                    $validator-&gt;after(Precognition::afterValidationHook($this))
+                        -&gt;setRules(
+                            $this-&gt;filterPrecognitiveRules($validator-&gt;getRulesWithoutPlaceholders())
+                        );
+                <span style="background-color: red">}</span>
+            })-&gt;validate();
+        });
+
+        Request::macro(&#039;validateWithBag&#039;, <span style="background-color: red">f</span>unction (string $errorBag, array $rules, ...$params) {
+            try {
+                return $this-&gt;validate($rules, ...$params);
+            } <span style="background-color: red">c</span>atch (ValidationException $e) {
+                $e-&gt;errorBag = $errorBag;
+
+                throw $e;
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Register the &quot;hasValidSignature&quot; macro on the request.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function registerRequestSignatureValidation()
+    {
+        Request::macro(&#039;hasValidSignature&#039;, <span style="background-color: red">f</span>unction ($absolute = true) {
+            return URL::hasValidSignature($this, $absolute);
+        });
+
+        Request::macro(&#039;hasValidRelativeSignature&#039;, <span style="background-color: red">f</span>unction () {
+            return URL::hasValidSignature($this, $absolute = false);
+        });
+
+        Request::macro(&#039;hasValidSignatureWhileIgnoring&#039;, <span style="background-color: red">f</span>unction ($ignoreQuery = [], $absolute = true) {
+            return URL::hasValidSignature($this, $absolute, $ignoreQuery);
+        });
+
+        Request::macro(&#039;hasValidRelativeSignatureWhileIgnoring&#039;, <span style="background-color: red">f</span>unction ($ignoreQuery = []) {
+            return URL::hasValidSignature($this, $absolute = false, $ignoreQuery);
+        });
+    }
+
+    /**
+     * Register the URL resolver for the URI generator.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerUriUrlGeneration()
+    {
+        Uri::setUrlGeneratorResolver(fn () =&gt; <span style="background-color: red">a</span>pp(&#039;url&#039;));
+    }
+
+    /**
+     * Register the &quot;defer&quot; function termination handler.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerDeferHandler()
+    {
+        $this-&gt;app-&gt;scoped(DeferredCallbackCollection::class);
+
+        $this-&gt;app[&#039;events&#039;]-&gt;listen(<span style="background-color: red">f</span>unction (CommandFinished $event) {
+            app(DeferredCallbackCollection::class)-&gt;invokeWhen(fn ($callback) =&gt; <span style="background-color: red">a</span>pp()-&gt;runningInConsole() &amp;&amp; (<span style="background-color: red">$</span>event-&gt;exitCode === 0 || <span style="background-color: red">$</span>callback-&gt;always)
+            );
+        });
+
+        $this-&gt;app[&#039;events&#039;]-&gt;listen(<span style="background-color: red">f</span>unction (JobAttempted $event) {
+            app(DeferredCallbackCollection::class)-&gt;invokeWhen(fn ($callback) =&gt; <span style="background-color: red">$</span>event-&gt;connectionName !== &#039;sync&#039; &amp;&amp; (<span style="background-color: red">$</span>event-&gt;successful() || <span style="background-color: red">$</span>callback-&gt;always)
+            );
+        });
+    }
+
+    /**
+     * Register an event listener to track logged exceptions.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerExceptionTracking()
+    {
+        <span style="background-color: green">i</span>f (! $this-&gt;app-&gt;runningUnitTests()) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;app-&gt;instance(
+            LoggedExceptionCollection::class,
+            new LoggedExceptionCollection
+        );
+
+        $this-&gt;app-&gt;make(&#039;events&#039;)-&gt;listen(MessageLogged::class, <span style="background-color: red">f</span>unction ($event) {
+            <span style="background-color: red">i</span>f (isset($event-&gt;context[&#039;exception&#039;])) {
+                $this-&gt;app-&gt;make(LoggedExceptionCollection::class)
+                    -&gt;push($event-&gt;context[&#039;exception&#039;]);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Register the exceptions renderer.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerExceptionRenderer()
+    {
+        $this-&gt;loadViewsFrom(__DIR__.&#039;/../Exceptions/views&#039;, &#039;laravel-exceptions&#039;);
+
+        <span style="background-color: green">i</span>f (! $this-&gt;app-&gt;hasDebugModeEnabled()) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;loadViewsFrom(__DIR__.&#039;/../resources/exceptions/renderer&#039;, &#039;laravel-exceptions-renderer&#039;);
+
+        $this-&gt;app-&gt;singleton(Renderer::class, <span style="background-color: red">f</span>unction (Application $app) {
+            $errorRenderer = new HtmlErrorRenderer(
+                $app[&#039;config&#039;]-&gt;get(&#039;app.debug&#039;),
+            );
+
+            return new Renderer(
+                $app-&gt;make(Factory::class),
+                $app-&gt;make(Listener::class),
+                $errorRenderer,
+                $app-&gt;make(BladeMapper::class),
+                $app-&gt;basePath(),
+            );
+        });
+
+        $this-&gt;app-&gt;singleton(Listener::class);
+    }
+
+    /**
+     * Register the maintenance mode manager service.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function registerMaintenanceModeManager()
+    {
+        $this-&gt;app-&gt;singleton(MaintenanceModeManager::class);
+
+        $this-&gt;app-&gt;bind(
+            MaintenanceModeContract::class,
+            fn () =&gt; <span style="background-color: green">$</span>this-&gt;app-&gt;make(MaintenanceModeManager::class)-&gt;driver()
+        );
+    }
+}
+</pre>

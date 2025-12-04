@@ -1,0 +1,849 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Yaml;
+
+use Symfony\Component\Yaml\Exception\DumpException;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Tag\TaggedValue;
+
+/**
+ * Inline implements a YAML parser/dumper for the YAML inline syntax.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @internal
+ */
+class Inline
+{
+    public const REGEX_QUOTED_STRING = &#039;(?:&quot;([^&quot;\\\\]*+(?:\\\\.[^&quot;\\\\]*+)*+)&quot;|\&#039;([^\&#039;]*+(?:\&#039;\&#039;[^\&#039;]*+)*+)\&#039;)&#039;;
+
+    public static int $parsedLineNumber = -1;
+    public static ?string $parsedFilename = null;
+
+    private static bool $exceptionOnInvalidType = false;
+    private static bool $objectSupport = false;
+    private static bool $objectForMap = false;
+    private static bool $constantSupport = false;
+
+    <span style="background-color: green">p</span>ublic static function initialize(int $flags, ?int $parsedLineNumber = null, ?string $parsedFilename = null): void
+    {
+        self::$exceptionOnInvalidType = (bool) (Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE &amp; $flags);
+        self::$objectSupport = (bool) (Yaml::PARSE_OBJECT &amp; $flags);
+        self::$objectForMap = (bool) (Yaml::PARSE_OBJECT_FOR_MAP &amp; $flags);
+        self::$constantSupport = (bool) (Yaml::PARSE_CONSTANT &amp; $flags);
+        self::$parsedFilename = $parsedFilename;
+
+        <span style="background-color: green">i</span>f (null !== $parsedLineNumber) {
+            self::$parsedLineNumber = $parsedLineNumber;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Converts a YAML string to a PHP value.
+     *
+     * @param int   $flags      A bit field of Yaml::PARSE_* constants to customize the YAML parser behavior
+     * @param array $references Mapping of variable names to values
+     *
+     * @throws ParseException
+     */
+    <span style="background-color: green">p</span>ublic static function parse(string $value, int $flags = 0, array &amp;$references = []): mixed
+    {
+        self::initialize($flags);
+
+        $value = trim($value);
+
+        <span style="background-color: green">i</span>f (&#039;&#039; === $value) {
+            return &#039;&#039;;
+        <span style="background-color: green">}</span>
+
+        $i = 0;
+        $tag = self::parseTag($value, $i, $flags);
+        switch ($value[$i]) {
+            <span style="background-color: green">c</span>ase &#039;[&#039;:
+                $result = self::parseSequence($value, $flags, $i, $references);
+                ++$i;
+                break;
+            <span style="background-color: green">c</span>ase &#039;{&#039;:
+                $result = self::parseMapping($value, $flags, $i, $references);
+                ++$i;
+                break;
+            <span style="background-color: green">d</span>efault:
+                $result = self::parseScalar($value, $flags, null, $i, true, $references);
+        <span style="background-color: green">}</span>
+
+        // some comments are allowed at the end
+        <span style="background-color: green">i</span>f (preg_replace(&#039;/\s*#.*$/A&#039;, &#039;&#039;, substr($value, $i))) {
+            throw new ParseException(\sprintf(&#039;Unexpected characters near &quot;%s&quot;.&#039;, substr($value, $i)), self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (null !== $tag &amp;&amp; <span style="background-color: red">'</span>&#039; !== $tag) {
+            return new TaggedValue($tag, $result);
+        <span style="background-color: green">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Dumps a given PHP variable to a YAML string.
+     *
+     * @param mixed $value The PHP variable to convert
+     * @param int   $flags A bit field of Yaml::DUMP_* constants to customize the dumped YAML string
+     *
+     * @throws DumpException When trying to dump PHP resource
+     */
+    <span style="background-color: red">p</span>ublic static function dump(mixed $value, int $flags = 0): string
+    {
+        switch (true) {
+            <span style="background-color: red">c</span>ase \is_resource($value):
+                <span style="background-color: red">i</span>f (Yaml::DUMP_EXCEPTION_ON_INVALID_TYPE &amp; $flags) {
+                    throw new DumpException(\sprintf(&#039;Unable to dump PHP resources in a YAML file (&quot;%s&quot;).&#039;, get_resource_type($value)));
+                <span style="background-color: red">}</span>
+
+                return self::dumpNull($flags);
+            <span style="background-color: red">c</span>ase $value instanceof \DateTimeInterface:
+                return $value-&gt;format(match (true) {
+                    !$length = \strlen(rtrim($value-&gt;format(&#039;u&#039;), &#039;0&#039;)) =&gt; <span style="background-color: red">'</span>c&#039;,
+                    $length &lt; 4 =&gt; <span style="background-color: red">'</span>Y-m-d\TH:i:s.vP&#039;,
+                    default =&gt; <span style="background-color: red">'</span>Y-m-d\TH:i:s.uP&#039;,
+                });
+            <span style="background-color: red">c</span>ase $value instanceof \UnitEnum:
+                return \sprintf(&#039;!php/enum %s::%s&#039;, $value::class, $value-&gt;name);
+            <span style="background-color: red">c</span>ase \is_object($value):
+                <span style="background-color: red">i</span>f ($value instanceof TaggedValue) {
+                    return &#039;!&#039;.$value-&gt;getTag().&#039; &#039;.self::dump($value-&gt;getValue(), $flags);
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f (Yaml::DUMP_OBJECT &amp; $flags) {
+                    return &#039;!php/object &#039;.self::dump(serialize($value));
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f (Yaml::DUMP_OBJECT_AS_MAP &amp; $flags &amp;&amp; (<span style="background-color: red">$</span>value instanceof \stdClass || <span style="background-color: red">$</span>value instanceof \ArrayObject)) {
+                    return self::dumpHashArray($value, $flags);
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f (Yaml::DUMP_EXCEPTION_ON_INVALID_TYPE &amp; $flags) {
+                    throw new DumpException(&#039;Object support when dumping a YAML file has been disabled.&#039;);
+                <span style="background-color: red">}</span>
+
+                return self::dumpNull($flags);
+            <span style="background-color: red">c</span>ase \is_array($value):
+                return self::dumpArray($value, $flags);
+            <span style="background-color: red">c</span>ase null === $value:
+                return self::dumpNull($flags);
+            <span style="background-color: red">c</span>ase true === $value:
+                return &#039;true&#039;;
+            <span style="background-color: red">c</span>ase false === $value:
+                return &#039;false&#039;;
+            <span style="background-color: red">c</span>ase \is_int($value):
+                return $value;
+            <span style="background-color: red">c</span>ase is_numeric($value) &amp;&amp; <span style="background-color: red">f</span>alse === strpbrk($value, &quot;\f\n\r\t\v&quot;):
+                $locale = setlocale(\LC_NUMERIC, 0);
+                <span style="background-color: red">i</span>f (false !== $locale) {
+                    setlocale(\LC_NUMERIC, &#039;C&#039;);
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f (\is_float($value)) {
+                    $repr = (string) $value;
+                    <span style="background-color: red">i</span>f (is_infinite($value)) {
+                        $repr = str_ireplace(&#039;INF&#039;, &#039;.Inf&#039;, $repr);
+                    } <span style="background-color: red">e</span>lseif (floor($value) == $value &amp;&amp; <span style="background-color: red">$</span>repr == $value) {
+                        // Preserve float data type since storing a whole number will result in integer value.
+                        <span style="background-color: red">i</span>f (!str_contains($repr, &#039;E&#039;)) {
+                            $repr .= &#039;.0&#039;;
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: red">e</span>lse {
+                    $repr = \is_string($value) ? &quot;&#039;$value&#039;&quot; : <span style="background-color: red">(</span>string) $value;
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f (false !== $locale) {
+                    setlocale(\LC_NUMERIC, $locale);
+                <span style="background-color: red">}</span>
+
+                return $repr;
+            <span style="background-color: red">c</span>ase &#039;&#039; == $value:
+                return &quot;&#039;&#039;&quot;;
+            <span style="background-color: red">c</span>ase self::isBinaryString($value):
+                return &#039;!!binary &#039;.base64_encode($value);
+            <span style="background-color: red">c</span>ase Escaper::requiresDoubleQuoting($value):
+                return Escaper::escapeWithDoubleQuotes($value);
+            <span style="background-color: red">c</span>ase Escaper::requiresSingleQuoting($value):
+                $singleQuoted = Escaper::escapeWithSingleQuotes($value);
+                <span style="background-color: red">i</span>f (!str_contains($value, &quot;&#039;&quot;)) {
+                    return $singleQuoted;
+                <span style="background-color: red">}</span>
+                // Attempt double-quoting the string instead to see if it&#039;s more efficient.
+                $doubleQuoted = Escaper::escapeWithDoubleQuotes($value);
+
+                return \strlen($doubleQuoted) &lt; \strlen($singleQuoted) ? $doubleQuoted : <span style="background-color: red">$</span>singleQuoted;
+            <span style="background-color: red">c</span>ase Parser::preg_match(&#039;{^[0-9]+[_0-9]*$}&#039;, $value):
+            <span style="background-color: red">c</span>ase Parser::preg_match(self::getHexRegex(), $value):
+            <span style="background-color: red">c</span>ase Parser::preg_match(self::getTimestampRegex(), $value):
+                return Escaper::escapeWithSingleQuotes($value);
+            <span style="background-color: red">d</span>efault:
+                return $value;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Check if given array is hash or just normal indexed array.
+     */
+    <span style="background-color: red">p</span>ublic static function isHash(array|\ArrayObject|\stdClass $value): bool
+    {
+        <span style="background-color: red">i</span>f ($value instanceof \stdClass || <span style="background-color: red">$</span>value instanceof \ArrayObject) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        $expectedKey = 0;
+
+        <span style="background-color: red">f</span>oreach ($value as $key =&gt; $val) {
+            <span style="background-color: red">i</span>f ($key !== $expectedKey++) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Dumps a PHP array to a YAML string.
+     *
+     * @param array $value The PHP array to dump
+     * @param int   $flags A bit field of Yaml::DUMP_* constants to customize the dumped YAML string
+     */
+    <span style="background-color: red">p</span>rivate static function dumpArray(array $value, int $flags): string
+    {
+        // array
+        <span style="background-color: red">i</span>f (($value || <span style="background-color: red">Y</span>aml::DUMP_EMPTY_ARRAY_AS_SEQUENCE &amp; $flags) &amp;&amp; <span style="background-color: red">!</span>self::isHash($value)) {
+            $output = [];
+            <span style="background-color: red">f</span>oreach ($value as $val) {
+                $output[] = self::dump($val, $flags);
+            <span style="background-color: red">}</span>
+
+            return \sprintf(&#039;[%s]&#039;, implode(&#039;, &#039;, $output));
+        <span style="background-color: red">}</span>
+
+        return self::dumpHashArray($value, $flags);
+    }
+
+    /**
+     * Dumps hash array to a YAML string.
+     *
+     * @param array|\ArrayObject|\stdClass $value The hash array to dump
+     * @param int                          $flags A bit field of Yaml::DUMP_* constants to customize the dumped YAML string
+     */
+    <span style="background-color: red">p</span>rivate static function dumpHashArray(array|\ArrayObject|\stdClass $value, int $flags): string
+    {
+        $output = [];
+        <span style="background-color: red">f</span>oreach ($value as $key =&gt; $val) {
+            <span style="background-color: red">i</span>f (\is_int($key) &amp;&amp; <span style="background-color: red">Y</span>aml::DUMP_NUMERIC_KEY_AS_STRING &amp; $flags) {
+                $key = (string) $key;
+            <span style="background-color: red">}</span>
+
+            $output[] = \sprintf(&#039;%s: %s&#039;, self::dump($key, $flags), self::dump($val, $flags));
+        <span style="background-color: red">}</span>
+
+        return \sprintf(&#039;{ %s }&#039;, implode(&#039;, &#039;, $output));
+    }
+
+    <span style="background-color: red">p</span>rivate static function dumpNull(int $flags): string
+    {
+        <span style="background-color: red">i</span>f (Yaml::DUMP_NULL_AS_TILDE &amp; $flags) {
+            return &#039;~&#039;;
+        <span style="background-color: red">}</span>
+
+        return &#039;null&#039;;
+    }
+
+    /**
+     * Parses a YAML scalar.
+     *
+     * @throws ParseException When malformed inline YAML string is parsed
+     */
+    <span style="background-color: green">p</span>ublic static function parseScalar(string $scalar, int $flags = 0, ?array $delimiters = null, int &amp;$i = 0, bool $evaluate = true, array &amp;$references = [], ?bool &amp;$isQuoted = null): mixed
+    {
+        <span style="background-color: green">i</span>f (\in_array($scalar[$i], [&#039;&quot;&#039;, &quot;&#039;&quot;], true)) {
+            // quoted scalar
+            $isQuoted = true;
+            $output = self::parseQuotedScalar($scalar, $i);
+
+            <span style="background-color: green">i</span>f (null !== $delimiters) {
+                $tmp = ltrim(substr($scalar, $i), &quot; \n&quot;);
+                <span style="background-color: red">i</span>f (&#039;&#039; === $tmp) {
+                    throw new ParseException(\sprintf(&#039;Unexpected end of line, expected one of &quot;%s&quot;.&#039;, implode(&#039;&#039;, $delimiters)), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                <span style="background-color: green">}</span>
+                <span style="background-color: red">i</span>f (!\in_array($tmp[0], $delimiters)) {
+                    throw new ParseException(\sprintf(&#039;Unexpected characters (%s).&#039;, substr($scalar, $i)), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        } <span style="background-color: green">e</span>lse {
+            // &quot;normal&quot; string
+            $isQuoted = false;
+
+            <span style="background-color: green">i</span>f (!$delimiters) {
+                $output = substr($scalar, $i);
+                $i += \strlen($output);
+
+                // remove comments
+                <span style="background-color: red">i</span>f (Parser::preg_match(&#039;/[ \t]+#/&#039;, $output, $match, \PREG_OFFSET_CAPTURE)) {
+                    $output = substr($output, 0, $match[0][1]);
+                <span style="background-color: green">}</span>
+            } <span style="background-color: green">e</span>lseif (Parser::preg_match(&#039;/^(.*?)(&#039;.implode(&#039;|&#039;, $delimiters).&#039;)/&#039;, substr($scalar, $i), $match)) {
+                $output = $match[1];
+                $i += \strlen($output);
+                $output = trim($output);
+            } <span style="background-color: red">e</span>lse {
+                throw new ParseException(\sprintf(&#039;Malformed inline YAML string: &quot;%s&quot;.&#039;, $scalar), self::$parsedLineNumber + 1, null, self::$parsedFilename);
+            <span style="background-color: green">}</span>
+
+            // a non-quoted string cannot start with @ or ` (reserved) nor with a scalar indicator (| or &gt;)
+            <span style="background-color: green">i</span>f ($output &amp;&amp; (<span style="background-color: green">'</span>@&#039; === $output[0] || <span style="background-color: green">'</span>`&#039; === $output[0] || <span style="background-color: green">'</span>|&#039; === $output[0] || <span style="background-color: green">'</span>&gt;&#039; === $output[0] || <span style="background-color: green">'</span>%&#039; === $output[0])) {
+                throw new ParseException(\sprintf(&#039;The reserved indicator &quot;%s&quot; cannot start a plain scalar; you need to quote the scalar.&#039;, $output[0]), self::$parsedLineNumber + 1, $output, self::$parsedFilename);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f ($evaluate) {
+                $output = self::evaluateScalar($output, $flags, $references, $isQuoted);
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $output;
+    }
+
+    /**
+     * Parses a YAML quoted scalar.
+     *
+     * @throws ParseException When malformed inline YAML string is parsed
+     */
+    <span style="background-color: green">p</span>rivate static function parseQuotedScalar(string $scalar, int &amp;$i = 0): string
+    {
+        <span style="background-color: red">i</span>f (!Parser::preg_match(&#039;/&#039;.self::REGEX_QUOTED_STRING.&#039;/Au&#039;, substr($scalar, $i), $match)) {
+            throw new ParseException(\sprintf(&#039;Malformed inline YAML string: &quot;%s&quot;.&#039;, substr($scalar, $i)), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+        <span style="background-color: green">}</span>
+
+        $output = substr($match[0], 1, -1);
+
+        $unescaper = new Unescaper();
+        <span style="background-color: green">i</span>f (&#039;&quot;&#039; == $scalar[$i]) {
+            $output = $unescaper-&gt;unescapeDoubleQuotedString($output);
+        } <span style="background-color: red">e</span>lse {
+            $output = $unescaper-&gt;unescapeSingleQuotedString($output);
+        <span style="background-color: green">}</span>
+
+        $i += \strlen($match[0]);
+
+        return $output;
+    }
+
+    /**
+     * Parses a YAML sequence.
+     *
+     * @throws ParseException When malformed inline YAML string is parsed
+     */
+    <span style="background-color: green">p</span>rivate static function parseSequence(string $sequence, int $flags, int &amp;$i = 0, array &amp;$references = []): array
+    {
+        $output = [];
+        $len = \strlen($sequence);
+        ++$i;
+
+        // [foo, bar, ...]
+        $lastToken = null;
+        <span style="background-color: green">w</span>hile ($i &lt; $len) {
+            <span style="background-color: green">i</span>f (&#039;]&#039; === $sequence[$i]) {
+                return $output;
+            <span style="background-color: green">}</span>
+            <span style="background-color: green">i</span>f (&#039;,&#039; === $sequence[$i] || <span style="background-color: green">'</span> &#039; === $sequence[$i]) {
+                <span style="background-color: green">i</span>f (&#039;,&#039; === $sequence[$i] &amp;&amp; (<span style="background-color: green">n</span>ull === $lastToken || <span style="background-color: green">'</span>separator&#039; === $lastToken)) {
+                    $output[] = null;
+                } <span style="background-color: green">e</span>lseif (&#039;,&#039; === $sequence[$i]) {
+                    $lastToken = &#039;separator&#039;;
+                <span style="background-color: green">}</span>
+
+                ++$i;
+
+                continue;
+            <span style="background-color: green">}</span>
+
+            $tag = self::parseTag($sequence, $i, $flags);
+            switch ($sequence[$i]) {
+                <span style="background-color: green">c</span>ase &#039;[&#039;:
+                    // nested sequence
+                    $value = self::parseSequence($sequence, $flags, $i, $references);
+                    break;
+                <span style="background-color: green">c</span>ase &#039;{&#039;:
+                    // nested mapping
+                    $value = self::parseMapping($sequence, $flags, $i, $references);
+                    break;
+                <span style="background-color: green">d</span>efault:
+                    $value = self::parseScalar($sequence, $flags, [&#039;,&#039;, &#039;]&#039;], $i, null === $tag, $references, $isQuoted);
+
+                    // the value can be an array if a reference has been resolved to an array var
+                    <span style="background-color: red">i</span>f (\is_string($value) &amp;&amp; <span style="background-color: green">!</span>$isQuoted &amp;&amp; <span style="background-color: green">s</span>tr_contains($value, &#039;: &#039;)) {
+                        // embedded mapping?
+                        try {
+                            $pos = 0;
+                            $value = self::parseMapping(&#039;{&#039;.$value.&#039;}&#039;, $flags, $pos, $references);
+                        } <span style="background-color: red">c</span>atch (\InvalidArgumentException) {
+                            // no, it&#039;s not
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: green">}</span>
+
+                    <span style="background-color: red">i</span>f (!$isQuoted &amp;&amp; <span style="background-color: green">\</span>is_string($value) &amp;&amp; <span style="background-color: green">'</span>&#039; !== $value &amp;&amp; <span style="background-color: green">'</span>&amp;&#039; === $value[0] &amp;&amp; <span style="background-color: red">P</span>arser::preg_match(Parser::REFERENCE_PATTERN, $value, $matches)) {
+                        $references[$matches[&#039;ref&#039;]] = $matches[&#039;value&#039;];
+                        $value = $matches[&#039;value&#039;];
+                    <span style="background-color: green">}</span>
+
+                    --$i;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (null !== $tag &amp;&amp; <span style="background-color: red">'</span>&#039; !== $tag) {
+                $value = new TaggedValue($tag, $value);
+            <span style="background-color: green">}</span>
+
+            $output[] = $value;
+
+            $lastToken = &#039;value&#039;;
+            ++$i;
+        <span style="background-color: red">}</span>
+
+        throw new ParseException(\sprintf(&#039;Malformed inline YAML string: &quot;%s&quot;.&#039;, $sequence), self::$parsedLineNumber + 1, null, self::$parsedFilename);
+    }
+
+    /**
+     * Parses a YAML mapping.
+     *
+     * @throws ParseException When malformed inline YAML string is parsed
+     */
+    <span style="background-color: green">p</span>rivate static function parseMapping(string $mapping, int $flags, int &amp;$i = 0, array &amp;$references = []): array|\stdClass
+    {
+        $output = [];
+        $len = \strlen($mapping);
+        ++$i;
+        $allowOverwrite = false;
+
+        // {foo: bar, bar:foo, ...}
+        <span style="background-color: green">w</span>hile ($i &lt; $len) {
+            switch ($mapping[$i]) {
+                <span style="background-color: green">c</span>ase &#039; &#039;:
+                <span style="background-color: green">c</span>ase &#039;,&#039;:
+                <span style="background-color: green">c</span>ase &quot;\n&quot;:
+                    ++$i;
+                    continue 2;
+                <span style="background-color: green">c</span>ase &#039;}&#039;:
+                    <span style="background-color: green">i</span>f (self::$objectForMap) {
+                        return (object) $output;
+                    <span style="background-color: green">}</span>
+
+                    return $output;
+            <span style="background-color: green">}</span>
+
+            // key
+            $offsetBeforeKeyParsing = $i;
+            $isKeyQuoted = \in_array($mapping[$i], [&#039;&quot;&#039;, &quot;&#039;&quot;], true);
+            $key = self::parseScalar($mapping, $flags, [&#039;:&#039;, &#039; &#039;], $i, false);
+
+            <span style="background-color: red">i</span>f ($offsetBeforeKeyParsing === $i) {
+                throw new ParseException(&#039;Missing mapping key.&#039;, self::$parsedLineNumber + 1, $mapping);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (&#039;!php/const&#039; === $key || <span style="background-color: green">'</span>!php/enum&#039; === $key) {
+                $key .= &#039; &#039;.self::parseScalar($mapping, $flags, [&#039;:&#039;], $i, false);
+                $key = self::evaluateScalar($key, $flags);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (false === $i = strpos($mapping, &#039;:&#039;, $i)) {
+                break;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f (!$isKeyQuoted) {
+                $evaluatedKey = self::evaluateScalar($key, $flags, $references);
+
+                <span style="background-color: red">i</span>f (&#039;&#039; !== $key &amp;&amp; <span style="background-color: green">$</span>evaluatedKey !== $key &amp;&amp; <span style="background-color: green">!</span>\is_string($evaluatedKey) &amp;&amp; <span style="background-color: green">!</span>\is_int($evaluatedKey)) {
+                    throw new ParseException(&#039;Implicit casting of incompatible mapping keys to strings is not supported. Quote your evaluable mapping keys instead.&#039;, self::$parsedLineNumber + 1, $mapping);
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f (!$isKeyQuoted &amp;&amp; (<span style="background-color: green">!</span>isset($mapping[$i + 1]) || <span style="background-color: green">!</span>\in_array($mapping[$i + 1], [&#039; &#039;, &#039;,&#039;, &#039;[&#039;, &#039;]&#039;, &#039;{&#039;, &#039;}&#039;, &quot;\n&quot;], true))) {
+                throw new ParseException(&#039;Colons must be followed by a space or an indication character (i.e. &quot; &quot;, &quot;,&quot;, &quot;[&quot;, &quot;]&quot;, &quot;{&quot;, &quot;}&quot;).&#039;, self::$parsedLineNumber + 1, $mapping);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (&#039;&lt;&lt;&#039; === $key) {
+                $allowOverwrite = true;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">w</span>hile ($i &lt; $len) {
+                <span style="background-color: green">i</span>f (&#039;:&#039; === $mapping[$i] || <span style="background-color: green">'</span> &#039; === $mapping[$i] || <span style="background-color: green">"</span>\n&quot; === $mapping[$i]) {
+                    ++$i;
+
+                    continue;
+                <span style="background-color: green">}</span>
+
+                $tag = self::parseTag($mapping, $i, $flags);
+                switch ($mapping[$i]) {
+                    <span style="background-color: green">c</span>ase &#039;[&#039;:
+                        // nested sequence
+                        $value = self::parseSequence($mapping, $flags, $i, $references);
+                        // Spec: Keys MUST be unique; first one wins.
+                        // Parser cannot abort this mapping earlier, since lines
+                        // are processed sequentially.
+                        // But overwriting is allowed when a merge node is used in current block.
+                        <span style="background-color: red">i</span>f (&#039;&lt;&lt;&#039; === $key) {
+                            <span style="background-color: red">f</span>oreach ($value as $parsedValue) {
+                                $output += $parsedValue;
+                            <span style="background-color: red">}</span>
+                        } <span style="background-color: green">e</span>lseif ($allowOverwrite || <span style="background-color: green">!</span>isset($output[$key])) {
+                            <span style="background-color: red">i</span>f (null !== $tag) {
+                                $output[$key] = new TaggedValue($tag, $value);
+                            } <span style="background-color: green">e</span>lse {
+                                $output[$key] = $value;
+                            <span style="background-color: green">}</span>
+                        } <span style="background-color: red">e</span>lseif (isset($output[$key])) {
+                            throw new ParseException(\sprintf(&#039;Duplicate key &quot;%s&quot; detected.&#039;, $key), self::$parsedLineNumber + 1, $mapping);
+                        <span style="background-color: green">}</span>
+                        break;
+                    <span style="background-color: green">c</span>ase &#039;{&#039;:
+                        // nested mapping
+                        $value = self::parseMapping($mapping, $flags, $i, $references);
+                        // Spec: Keys MUST be unique; first one wins.
+                        // Parser cannot abort this mapping earlier, since lines
+                        // are processed sequentially.
+                        // But overwriting is allowed when a merge node is used in current block.
+                        <span style="background-color: red">i</span>f (&#039;&lt;&lt;&#039; === $key) {
+                            $output += $value;
+                        } <span style="background-color: green">e</span>lseif ($allowOverwrite || <span style="background-color: green">!</span>isset($output[$key])) {
+                            <span style="background-color: red">i</span>f (null !== $tag) {
+                                $output[$key] = new TaggedValue($tag, $value);
+                            } <span style="background-color: green">e</span>lse {
+                                $output[$key] = $value;
+                            <span style="background-color: green">}</span>
+                        } <span style="background-color: red">e</span>lseif (isset($output[$key])) {
+                            throw new ParseException(\sprintf(&#039;Duplicate key &quot;%s&quot; detected.&#039;, $key), self::$parsedLineNumber + 1, $mapping);
+                        <span style="background-color: green">}</span>
+                        break;
+                    <span style="background-color: green">d</span>efault:
+                        $value = self::parseScalar($mapping, $flags, [&#039;,&#039;, &#039;}&#039;, &quot;\n&quot;], $i, null === $tag, $references, $isValueQuoted);
+                        // Spec: Keys MUST be unique; first one wins.
+                        // Parser cannot abort this mapping earlier, since lines
+                        // are processed sequentially.
+                        // But overwriting is allowed when a merge node is used in current block.
+                        <span style="background-color: red">i</span>f (&#039;&lt;&lt;&#039; === $key) {
+                            $output += $value;
+                        } <span style="background-color: green">e</span>lseif ($allowOverwrite || <span style="background-color: green">!</span>isset($output[$key])) {
+                            <span style="background-color: red">i</span>f (!$isValueQuoted &amp;&amp; <span style="background-color: green">\</span>is_string($value) &amp;&amp; <span style="background-color: green">'</span>&#039; !== $value &amp;&amp; <span style="background-color: green">'</span>&amp;&#039; === $value[0] &amp;&amp; <span style="background-color: red">!</span>self::isBinaryString($value) &amp;&amp; <span style="background-color: red">P</span>arser::preg_match(Parser::REFERENCE_PATTERN, $value, $matches)) {
+                                $references[$matches[&#039;ref&#039;]] = $matches[&#039;value&#039;];
+                                $value = $matches[&#039;value&#039;];
+                            <span style="background-color: green">}</span>
+
+                            <span style="background-color: red">i</span>f (null !== $tag) {
+                                $output[$key] = new TaggedValue($tag, $value);
+                            } <span style="background-color: green">e</span>lse {
+                                $output[$key] = $value;
+                            <span style="background-color: green">}</span>
+                        } <span style="background-color: red">e</span>lseif (isset($output[$key])) {
+                            throw new ParseException(\sprintf(&#039;Duplicate key &quot;%s&quot; detected.&#039;, $key), self::$parsedLineNumber + 1, $mapping);
+                        <span style="background-color: green">}</span>
+                        --$i;
+                <span style="background-color: green">}</span>
+                ++$i;
+
+                continue 2;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        throw new ParseException(\sprintf(&#039;Malformed inline YAML string: &quot;%s&quot;.&#039;, $mapping), self::$parsedLineNumber + 1, null, self::$parsedFilename);
+    }
+
+    /**
+     * Evaluates scalars and replaces magic values.
+     *
+     * @throws ParseException when object parsing support was disabled and the parser detected a PHP object or when a reference could not be resolved
+     */
+    <span style="background-color: green">p</span>rivate static function evaluateScalar(string $scalar, int $flags, array &amp;$references = [], ?bool &amp;$isQuotedString = null): mixed
+    {
+        $isQuotedString = false;
+        $scalar = trim($scalar);
+
+        <span style="background-color: red">i</span>f (str_starts_with($scalar, &#039;*&#039;)) {
+            <span style="background-color: red">i</span>f (false !== $pos = strpos($scalar, &#039;#&#039;)) {
+                $value = substr($scalar, 1, $pos - 2);
+            } <span style="background-color: red">e</span>lse {
+                $value = substr($scalar, 1);
+            <span style="background-color: red">}</span>
+
+            // an unquoted *
+            <span style="background-color: red">i</span>f (&#039;&#039; === $value) {
+                throw new ParseException(&#039;A reference must contain at least one character.&#039;, self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (!\array_key_exists($value, $references)) {
+                throw new ParseException(\sprintf(&#039;Reference &quot;%s&quot; does not exist.&#039;, $value), self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+            <span style="background-color: red">}</span>
+
+            return $references[$value];
+        <span style="background-color: green">}</span>
+
+        $scalarLower = strtolower($scalar);
+
+        switch (true) {
+            <span style="background-color: red">c</span>ase &#039;null&#039; === $scalarLower:
+            <span style="background-color: green">c</span>ase &#039;&#039; === $scalar:
+            <span style="background-color: green">c</span>ase &#039;~&#039; === $scalar:
+                return null;
+            <span style="background-color: red">c</span>ase &#039;true&#039; === $scalarLower:
+                return true;
+            <span style="background-color: red">c</span>ase &#039;false&#039; === $scalarLower:
+                return false;
+            <span style="background-color: red">c</span>ase &#039;!&#039; === $scalar[0]:
+                switch (true) {
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;!!str &#039;):
+                        $s = substr($scalar, 6);
+
+                        <span style="background-color: red">i</span>f (\in_array($s[0] ?? <span style="background-color: red">'</span>&#039;, [&#039;&quot;&#039;, &quot;&#039;&quot;], true)) {
+                            $isQuotedString = true;
+                            $s = self::parseQuotedScalar($s);
+                        <span style="background-color: red">}</span>
+
+                        return $s;
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;! &#039;):
+                        return substr($scalar, 2);
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;!php/object&#039;):
+                        <span style="background-color: red">i</span>f (self::$objectSupport) {
+                            <span style="background-color: red">i</span>f (!isset($scalar[12])) {
+                                throw new ParseException(&#039;Missing value for tag &quot;!php/object&quot;.&#039;, self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                            <span style="background-color: red">}</span>
+
+                            return unserialize(self::parseScalar(substr($scalar, 12)));
+                        <span style="background-color: red">}</span>
+
+                        <span style="background-color: red">i</span>f (self::$exceptionOnInvalidType) {
+                            throw new ParseException(&#039;Object support when parsing a YAML file has been disabled.&#039;, self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                        <span style="background-color: red">}</span>
+
+                        return null;
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;!php/const&#039;):
+                        <span style="background-color: red">i</span>f (self::$constantSupport) {
+                            <span style="background-color: red">i</span>f (!isset($scalar[11])) {
+                                throw new ParseException(&#039;Missing value for tag &quot;!php/const&quot;.&#039;, self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                            <span style="background-color: red">}</span>
+
+                            $i = 0;
+                            <span style="background-color: red">i</span>f (\defined($const = self::parseScalar(substr($scalar, 11), 0, null, $i, false))) {
+                                return \constant($const);
+                            <span style="background-color: red">}</span>
+
+                            throw new ParseException(\sprintf(&#039;The constant &quot;%s&quot; is not defined.&#039;, $const), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (self::$exceptionOnInvalidType) {
+                            throw new ParseException(\sprintf(&#039;The string &quot;%s&quot; could not be parsed as a constant. Did you forget to pass the &quot;Yaml::PARSE_CONSTANT&quot; flag to the parser?&#039;, $scalar), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                        <span style="background-color: red">}</span>
+
+                        return null;
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;!php/enum&#039;):
+                        <span style="background-color: red">i</span>f (self::$constantSupport) {
+                            <span style="background-color: red">i</span>f (!isset($scalar[11])) {
+                                throw new ParseException(&#039;Missing value for tag &quot;!php/enum&quot;.&#039;, self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                            <span style="background-color: red">}</span>
+
+                            $i = 0;
+                            $enumName = self::parseScalar(substr($scalar, 10), 0, null, $i, false);
+                            $useName = str_contains($enumName, &#039;::&#039;);
+                            $enum = $useName ? strstr($enumName, &#039;::&#039;, true) : <span style="background-color: red">$</span>enumName;
+
+                            <span style="background-color: red">i</span>f (!enum_exists($enum)) {
+                                throw new ParseException(\sprintf(&#039;The enum &quot;%s&quot; is not defined.&#039;, $enum), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                            <span style="background-color: red">}</span>
+                            <span style="background-color: red">i</span>f (!$useName) {
+                                return $enum::cases();
+                            <span style="background-color: red">}</span>
+                            <span style="background-color: red">i</span>f ($useValue = str_ends_with($enumName, &#039;-&gt;value&#039;)) {
+                                $enumName = substr($enumName, 0, -7);
+                            <span style="background-color: red">}</span>
+
+                            <span style="background-color: red">i</span>f (!\defined($enumName)) {
+                                throw new ParseException(\sprintf(&#039;The string &quot;%s&quot; is not the name of a valid enum.&#039;, $enumName), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                            <span style="background-color: red">}</span>
+
+                            $value = \constant($enumName);
+
+                            <span style="background-color: red">i</span>f (!$useValue) {
+                                return $value;
+                            <span style="background-color: red">}</span>
+                            <span style="background-color: red">i</span>f (!$value instanceof \BackedEnum) {
+                                throw new ParseException(\sprintf(&#039;The enum &quot;%s&quot; defines no value next to its name.&#039;, $enumName), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                            <span style="background-color: red">}</span>
+
+                            return $value-&gt;value;
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (self::$exceptionOnInvalidType) {
+                            throw new ParseException(\sprintf(&#039;The string &quot;%s&quot; could not be parsed as an enum. Did you forget to pass the &quot;Yaml::PARSE_CONSTANT&quot; flag to the parser?&#039;, $scalar), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+                        <span style="background-color: red">}</span>
+
+                        return null;
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;!!float &#039;):
+                        return (float) substr($scalar, 8);
+                    <span style="background-color: red">c</span>ase str_starts_with($scalar, &#039;!!binary &#039;):
+                        return self::evaluateBinaryScalar(substr($scalar, 9));
+                <span style="background-color: red">}</span>
+
+                throw new ParseException(\sprintf(&#039;The string &quot;%s&quot; could not be parsed as it uses an unsupported built-in tag.&#039;, $scalar), self::$parsedLineNumber, $scalar, self::$parsedFilename);
+            <span style="background-color: red">c</span>ase preg_match(&#039;/^(?:\+|-)?0o(?P&lt;value&gt;[0-7_]++)$/&#039;, $scalar, $matches):
+                $value = str_replace(&#039;_&#039;, &#039;&#039;, $matches[&#039;value&#039;]);
+
+                <span style="background-color: red">i</span>f (&#039;-&#039; === $scalar[0]) {
+                    return -octdec($value);
+                <span style="background-color: red">}</span>
+
+                return octdec($value);
+            <span style="background-color: green">c</span>ase \in_array($scalar[0], [&#039;+&#039;, &#039;-&#039;, &#039;.&#039;], true) || <span style="background-color: green">i</span>s_numeric($scalar[0]):
+                <span style="background-color: green">i</span>f (Parser::preg_match(&#039;{^[+-]?[0-9][0-9_]*$}&#039;, $scalar)) {
+                    $scalar = str_replace(&#039;_&#039;, &#039;&#039;, $scalar);
+                <span style="background-color: green">}</span>
+
+                switch (true) {
+                    <span style="background-color: green">c</span>ase ctype_digit($scalar):
+                    <span style="background-color: green">c</span>ase &#039;-&#039; === $scalar[0] &amp;&amp; <span style="background-color: green">c</span>type_digit(substr($scalar, 1)):
+                        $cast = (int) $scalar;
+
+                        return ($scalar === (string) $cast) ? $cast : <span style="background-color: red">$</span>scalar;
+                    <span style="background-color: green">c</span>ase is_numeric($scalar):
+                    <span style="background-color: green">c</span>ase Parser::preg_match(self::getHexRegex(), $scalar):
+                        $scalar = str_replace(&#039;_&#039;, &#039;&#039;, $scalar);
+
+                        return &#039;0x&#039; === $scalar[0].$scalar[1] ? hexdec($scalar) : <span style="background-color: green">(</span>float) $scalar;
+                    <span style="background-color: red">c</span>ase &#039;.inf&#039; === $scalarLower:
+                    <span style="background-color: red">c</span>ase &#039;.nan&#039; === $scalarLower:
+                        return -log(0);
+                    <span style="background-color: red">c</span>ase &#039;-.inf&#039; === $scalarLower:
+                        return log(0);
+                    <span style="background-color: red">c</span>ase Parser::preg_match(&#039;/^(-|\+)?[0-9][0-9_]*(\.[0-9_]+)?$/&#039;, $scalar):
+                        return (float) str_replace(&#039;_&#039;, &#039;&#039;, $scalar);
+                    <span style="background-color: green">c</span>ase Parser::preg_match(self::getTimestampRegex(), $scalar):
+                        try {
+                            // When no timezone is provided in the parsed date, YAML spec says we must assume UTC.
+                            $time = new \DateTimeImmutable($scalar, new \DateTimeZone(&#039;UTC&#039;));
+                        } <span style="background-color: red">c</span>atch (\Exception $e) {
+                            // Some dates accepted by the regex are not valid dates.
+                            throw new ParseException(\sprintf(&#039;The date &quot;%s&quot; could not be parsed as it is an invalid date.&#039;, $scalar), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename, $e);
+                        <span style="background-color: green">}</span>
+
+                        <span style="background-color: red">i</span>f (Yaml::PARSE_DATETIME &amp; $flags) {
+                            return $time;
+                        <span style="background-color: green">}</span>
+
+                        <span style="background-color: red">i</span>f (&#039;&#039; !== rtrim($time-&gt;format(&#039;u&#039;), &#039;0&#039;)) {
+                            return (float) $time-&gt;format(&#039;U.u&#039;);
+                        <span style="background-color: green">}</span>
+
+                        try {
+                            <span style="background-color: green">i</span>f (false !== $scalar = $time-&gt;getTimestamp()) {
+                                return $scalar;
+                            <span style="background-color: red">}</span>
+                        } <span style="background-color: red">c</span>atch (\ValueError) {
+                            // no-op
+                        <span style="background-color: red">}</span>
+
+                        return $time-&gt;format(&#039;U&#039;);
+                <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return (string) $scalar;
+    }
+
+    <span style="background-color: green">p</span>rivate static function parseTag(string $value, int &amp;$i, int $flags): ?string
+    {
+        <span style="background-color: green">i</span>f (&#039;!&#039; !== $value[$i]) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        $tagLength = strcspn($value, &quot; \t\n[]{},&quot;, $i + 1);
+        $tag = substr($value, $i + 1, $tagLength);
+
+        $nextOffset = $i + $tagLength + 1;
+        $nextOffset += strspn($value, &#039; &#039;, $nextOffset);
+
+        <span style="background-color: red">i</span>f (&#039;&#039; === $tag &amp;&amp; (<span style="background-color: red">!</span>isset($value[$nextOffset]) || <span style="background-color: red">\</span>in_array($value[$nextOffset], [&#039;]&#039;, &#039;}&#039;, &#039;,&#039;], true))) {
+            throw new ParseException(&#039;Using the unquoted scalar value &quot;!&quot; is not supported. You must quote it.&#039;, self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+        <span style="background-color: red">}</span>
+
+        // Is followed by a scalar and is a built-in tag
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $tag &amp;&amp; (<span style="background-color: red">!</span>isset($value[$nextOffset]) || <span style="background-color: red">!</span>\in_array($value[$nextOffset], [&#039;[&#039;, &#039;{&#039;], true)) &amp;&amp; (<span style="background-color: red">'</span>!&#039; === $tag[0] || <span style="background-color: red">\</span>in_array($tag, [&#039;str&#039;, &#039;php/const&#039;, &#039;php/enum&#039;, &#039;php/object&#039;], true))) {
+            // Manage in {@link self::evaluateScalar()}
+            return null;
+        <span style="background-color: red">}</span>
+
+        $i = $nextOffset;
+
+        // Built-in tags
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $tag &amp;&amp; <span style="background-color: red">'</span>!&#039; === $tag[0]) {
+            throw new ParseException(\sprintf(&#039;The built-in tag &quot;!%s&quot; is not implemented.&#039;, $tag), self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $tag &amp;&amp; <span style="background-color: red">!</span>isset($value[$i])) {
+            throw new ParseException(\sprintf(&#039;Missing value for tag &quot;%s&quot;.&#039;, $tag), self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;&#039; === $tag || <span style="background-color: red">Y</span>aml::PARSE_CUSTOM_TAGS &amp; $flags) {
+            return $tag;
+        <span style="background-color: red">}</span>
+
+        throw new ParseException(\sprintf(&#039;Tags support is not enabled. Enable the &quot;Yaml::PARSE_CUSTOM_TAGS&quot; flag to use &quot;!%s&quot;.&#039;, $tag), self::$parsedLineNumber + 1, $value, self::$parsedFilename);
+    }
+
+    <span style="background-color: red">p</span>ublic static function evaluateBinaryScalar(string $scalar): string
+    {
+        $parsedBinaryData = self::parseScalar(preg_replace(&#039;/\s/&#039;, &#039;&#039;, $scalar));
+
+        <span style="background-color: red">i</span>f (0 !== (\strlen($parsedBinaryData) % 4)) {
+            throw new ParseException(\sprintf(&#039;The normalized base64 encoded data (data without whitespace characters) length must be a multiple of four (%d bytes given).&#039;, \strlen($parsedBinaryData)), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!Parser::preg_match(&#039;#^[A-Z0-9+/]+={0,2}$#i&#039;, $parsedBinaryData)) {
+            throw new ParseException(\sprintf(&#039;The base64 encoded data (%s) contains invalid characters.&#039;, $parsedBinaryData), self::$parsedLineNumber + 1, $scalar, self::$parsedFilename);
+        <span style="background-color: red">}</span>
+
+        return base64_decode($parsedBinaryData, true);
+    }
+
+    <span style="background-color: red">p</span>rivate static function isBinaryString(string $value): bool
+    {
+        return !preg_match(&#039;//u&#039;, $value) || <span style="background-color: red">p</span>reg_match(&#039;/[^\x00\x07-\x0d\x1B\x20-\xff]/&#039;, $value);
+    }
+
+    /**
+     * Gets a regex that matches a YAML date.
+     *
+     * @see http://www.yaml.org/spec/1.2/spec.html#id2761573
+     */
+    <span style="background-color: green">p</span>rivate static function getTimestampRegex(): string
+    {
+        return &lt;&lt;&lt;EOF
+        ~^
+        (?P&lt;year&gt;[0-9][0-9][0-9][0-9])
+        -(?P&lt;month&gt;[0-9][0-9]?)
+        -(?P&lt;day&gt;[0-9][0-9]?)
+        (?:(?:[Tt]|[ \t]+)
+        (?P&lt;hour&gt;[0-9][0-9]?)
+        :(?P&lt;minute&gt;[0-9][0-9])
+        :(?P&lt;second&gt;[0-9][0-9])
+        (?:\.(?P&lt;fraction&gt;[0-9]*))?
+        (?:[ \t]*(?P&lt;tz&gt;Z|(?P&lt;tz_sign&gt;[-+])(?P&lt;tz_hour&gt;[0-9][0-9]?)
+        (?::(?P&lt;tz_minute&gt;[0-9][0-9]))?))?)?
+        $~x
+EOF;
+    }
+
+    /**
+     * Gets a regex that matches a YAML number in hexadecimal notation.
+     */
+    <span style="background-color: green">p</span>rivate static function getHexRegex(): string
+    {
+        return &#039;~^0x[0-9a-f_]++$~i&#039;;
+    }
+}
+</pre>

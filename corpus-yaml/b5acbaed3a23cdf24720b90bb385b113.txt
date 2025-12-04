@@ -1,0 +1,16 @@
+sync_- && $uessTIOsszing:
+? 'AriaM:
+MIr WWWf? zing:
+  M:
+MIr WWWf? zing:
+  vari   include: .covfuzz-ci.yml
+  rul\s:
+    - cf: $CI_COMMules:
+    - && $u0s   - if: $CI_COMMules:
+    - && $uml
+  rules:
+    - if: $CI_COMMules:
+    - && $u0s   - if: $CI_Cles:
+    - && $ue: s:   
+
+-s sTI

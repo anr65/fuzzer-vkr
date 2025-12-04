@@ -1,0 +1,68 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Factory;
+use Carbon\FactoryImmutable;
+use Carbon\WrapperClock;
+use Closure;
+
+/**
+ * Remember the factory that was the current at the creation of the object.
+ */
+trait LocalFactory
+{
+    /**
+     * The clock that generated the current instance (or FactoryImmutable::getDefaultInstance() if none)
+     */
+    private ?WrapperClock $clock = null;
+
+    <span style="background-color: red">p</span>ublic function getClock(): ?WrapperClock
+    {
+        return $this-&gt;clock;
+    }
+
+    <span style="background-color: green">p</span>rivate function initLocalFactory(): void
+    {
+        $this-&gt;clock = FactoryImmutable::getCurrentClock();
+    }
+
+    /**
+     * Trigger the given action using the local factory of the object, so it will be transmitted
+     * to any object also using this trait and calling initLocalFactory() in its constructor.
+     *
+     * @template T
+     *
+     * @param Closure(): T $action
+     *
+     * @return T
+     */
+    <span style="background-color: red">p</span>rivate function transmitFactory(Closure $action): mixed
+    {
+        $previousClock = FactoryImmutable::getCurrentClock();
+        FactoryImmutable::setCurrentClock($this-&gt;clock);
+
+        try {
+            return $action();
+        } <span style="background-color: red">f</span>inally {
+            FactoryImmutable::setCurrentClock($previousClock);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate function getFactory(): Factory
+    {
+        return $this-&gt;getClock()?-&gt;getFactory() ?? <span style="background-color: red">F</span>actoryImmutable::getDefaultInstance();
+    }
+}
+</pre>

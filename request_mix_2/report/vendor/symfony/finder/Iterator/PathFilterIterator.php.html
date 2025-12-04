@@ -1,0 +1,57 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder\Iterator;
+
+use Symfony\Component\Finder\SplFileInfo;
+
+/**
+ * PathFilterIterator filters files by path patterns (e.g. some/special/dir).
+ *
+ * @author Fabien Potencier  &lt;fabien@symfony.com&gt;
+ * @author Włodzimierz Gajda &lt;gajdaw@gajdaw.pl&gt;
+ *
+ * @extends MultiplePcreFilterIterator&lt;string, SplFileInfo&gt;
+ */
+class PathFilterIterator extends MultiplePcreFilterIterator
+{
+    /**
+     * Filters the iterator values.
+     */
+    <span style="background-color: green">p</span>ublic function accept(): bool
+    {
+        $filename = $this-&gt;current()-&gt;getRelativePathname();
+
+        <span style="background-color: red">i</span>f (&#039;\\&#039; === \DIRECTORY_SEPARATOR) {
+            $filename = str_replace(&#039;\\&#039;, &#039;/&#039;, $filename);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;isAccepted($filename);
+    }
+
+    /**
+     * Converts strings to regexp.
+     *
+     * PCRE patterns are left unchanged.
+     *
+     * Default conversion:
+     *     &#039;lorem/ipsum/dolor&#039; ==&gt;  &#039;lorem\/ipsum\/dolor/&#039;
+     *
+     * Use only / as directory separator (on Windows also).
+     *
+     * @param string $str Pattern: regexp or dirname
+     */
+    <span style="background-color: green">p</span>rotected function toRegex(string $str): string
+    {
+        return $this-&gt;isRegex($str) ? $str : <span style="background-color: red">'</span>/&#039;.preg_quote($str, &#039;/&#039;).&#039;/&#039;;
+    }
+}
+</pre>

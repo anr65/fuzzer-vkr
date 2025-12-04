@@ -1,0 +1,56 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session;
+
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\ServiceProvider;
+
+class SessionServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;registerSessionManager();
+
+        $this-&gt;registerSessionDriver();
+
+        $this-&gt;app-&gt;singleton(StartSession::class, <span style="background-color: red">f</span>unction ($app) {
+            return new StartSession($app-&gt;make(SessionManager::class), <span style="background-color: red">f</span>unction () use ($app) {
+                return $app-&gt;make(CacheFactory::class);
+            });
+        });
+    }
+
+    /**
+     * Register the session manager instance.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerSessionManager()
+    {
+        $this-&gt;app-&gt;singleton(&#039;session&#039;, <span style="background-color: green">f</span>unction ($app) {
+            return new SessionManager($app);
+        });
+    }
+
+    /**
+     * Register the session driver instance.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerSessionDriver()
+    {
+        $this-&gt;app-&gt;singleton(&#039;session.store&#039;, <span style="background-color: green">f</span>unction ($app) {
+            // First, we will create the session manager which is responsible for the
+            // creation of the various session drivers when they are needed by the
+            // application instance, and will resolve them on a lazy load basis.
+            return $app-&gt;make(&#039;session&#039;)-&gt;driver();
+        });
+    }
+}
+</pre>

@@ -1,0 +1,668 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Dumper;
+
+use Symfony\Component\ErrorHandler\ErrorRenderer\FileLinkFormatter;
+use Symfony\Component\VarDumper\Cloner\Cursor;
+use Symfony\Component\VarDumper\Cloner\Stub;
+
+/**
+ * CliDumper dumps variables for command line output.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class CliDumper extends AbstractDumper
+{
+    public static bool $defaultColors;
+    /** @var callable|resource|string|null */
+    public static $defaultOutput = &#039;php://stdout&#039;;
+
+    protected bool $colors;
+    protected int $maxStringWidth = 0;
+    protected array $styles = [
+        // See http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
+        &#039;default&#039; =&gt; &#039;0;38;5;208&#039;,
+        &#039;num&#039; =&gt; &#039;1;38;5;38&#039;,
+        &#039;const&#039; =&gt; &#039;1;38;5;208&#039;,
+        &#039;virtual&#039; =&gt; &#039;3&#039;,
+        &#039;str&#039; =&gt; &#039;1;38;5;113&#039;,
+        &#039;note&#039; =&gt; &#039;38;5;38&#039;,
+        &#039;ref&#039; =&gt; &#039;38;5;247&#039;,
+        &#039;public&#039; =&gt; &#039;39&#039;,
+        &#039;protected&#039; =&gt; &#039;39&#039;,
+        &#039;private&#039; =&gt; &#039;39&#039;,
+        &#039;meta&#039; =&gt; &#039;38;5;170&#039;,
+        &#039;key&#039; =&gt; &#039;38;5;113&#039;,
+        &#039;index&#039; =&gt; &#039;38;5;38&#039;,
+    ];
+
+    protected static string $controlCharsRx = &#039;/[\x00-\x1F\x7F]+/&#039;;
+    protected static array $controlCharsMap = [
+        &quot;\t&quot; =&gt; &#039;\t&#039;,
+        &quot;\n&quot; =&gt; &#039;\n&#039;,
+        &quot;\v&quot; =&gt; &#039;\v&#039;,
+        &quot;\f&quot; =&gt; &#039;\f&#039;,
+        &quot;\r&quot; =&gt; &#039;\r&#039;,
+        &quot;\033&quot; =&gt; &#039;\e&#039;,
+    ];
+    protected static string $unicodeCharsRx = &quot;/[\u{00A0}\u{00AD}\u{034F}\u{061C}\u{115F}\u{1160}\u{17B4}\u{17B5}\u{180E}\u{2000}-\u{200F}\u{202F}\u{205F}\u{2060}-\u{2064}\u{206A}-\u{206F}\u{3000}\u{2800}\u{3164}\u{FEFF}\u{FFA0}\u{1D159}\u{1D173}-\u{1D17A}]/u&quot;;
+
+    protected bool $collapseNextHash = false;
+    protected bool $expandNextHash = false;
+
+    private array $displayOptions = [
+        &#039;fileLinkFormat&#039; =&gt; null,
+    ];
+
+    private bool $handlesHrefGracefully;
+
+    <span style="background-color: green">p</span>ublic function __construct($output = null, ?string $charset = null, int $flags = 0)
+    {
+        parent::__construct($output, $charset, $flags);
+
+        <span style="background-color: red">i</span>f (&#039;\\&#039; === \DIRECTORY_SEPARATOR &amp;&amp; <span style="background-color: red">!</span>$this-&gt;isWindowsTrueColor()) {
+            // Use only the base 16 xterm colors when using ANSICON or standard Windows 10 CLI
+            $this-&gt;setStyles([
+                &#039;default&#039; =&gt; &#039;31&#039;,
+                &#039;num&#039; =&gt; &#039;1;34&#039;,
+                &#039;const&#039; =&gt; &#039;1;31&#039;,
+                &#039;str&#039; =&gt; &#039;1;32&#039;,
+                &#039;note&#039; =&gt; &#039;34&#039;,
+                &#039;ref&#039; =&gt; &#039;1;30&#039;,
+                &#039;meta&#039; =&gt; &#039;35&#039;,
+                &#039;key&#039; =&gt; &#039;32&#039;,
+                &#039;index&#039; =&gt; &#039;34&#039;,
+            ]);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;displayOptions[&#039;fileLinkFormat&#039;] = class_exists(FileLinkFormatter::class) ? new FileLinkFormatter() : (<span style="background-color: red">\</span>ini_get(&#039;xdebug.file_link_format&#039;) ?: <span style="background-color: red">g</span>et_cfg_var(&#039;xdebug.file_link_format&#039;) ?: <span style="background-color: red">'</span>file://%f#L%l&#039;);
+    }
+
+    /**
+     * Enables/disables colored output.
+     */
+    <span style="background-color: green">p</span>ublic function setColors(bool $colors): void
+    {
+        $this-&gt;colors = $colors;
+    }
+
+    /**
+     * Sets the maximum number of characters per line for dumped strings.
+     */
+    <span style="background-color: red">p</span>ublic function setMaxStringWidth(int $maxStringWidth): void
+    {
+        $this-&gt;maxStringWidth = $maxStringWidth;
+    }
+
+    /**
+     * Configures styles.
+     *
+     * @param array $styles A map of style names to style definitions
+     */
+    <span style="background-color: red">p</span>ublic function setStyles(array $styles): void
+    {
+        $this-&gt;styles = $styles + $this-&gt;styles;
+    }
+
+    /**
+     * Configures display options.
+     *
+     * @param array $displayOptions A map of display options to customize the behavior
+     */
+    <span style="background-color: red">p</span>ublic function setDisplayOptions(array $displayOptions): void
+    {
+        $this-&gt;displayOptions = $displayOptions + $this-&gt;displayOptions;
+    }
+
+    <span style="background-color: red">p</span>ublic function dumpScalar(Cursor $cursor, string $type, string|int|float|bool|null $value): void
+    {
+        $this-&gt;dumpKey($cursor);
+        $this-&gt;collapseNextHash = $this-&gt;expandNextHash = false;
+
+        $style = &#039;const&#039;;
+        $attr = $cursor-&gt;attr;
+
+        switch ($type) {
+            <span style="background-color: red">c</span>ase &#039;default&#039;:
+                $style = &#039;default&#039;;
+                break;
+
+            <span style="background-color: red">c</span>ase &#039;label&#039;:
+                $this-&gt;styles += [&#039;label&#039; =&gt; $this-&gt;styles[&#039;default&#039;]];
+                $style = &#039;label&#039;;
+                break;
+
+            <span style="background-color: red">c</span>ase &#039;integer&#039;:
+                $style = &#039;num&#039;;
+
+                <span style="background-color: red">i</span>f (isset($this-&gt;styles[&#039;integer&#039;])) {
+                    $style = &#039;integer&#039;;
+                <span style="background-color: red">}</span>
+
+                break;
+
+            <span style="background-color: red">c</span>ase &#039;double&#039;:
+                $style = &#039;num&#039;;
+
+                <span style="background-color: red">i</span>f (isset($this-&gt;styles[&#039;float&#039;])) {
+                    $style = &#039;float&#039;;
+                <span style="background-color: red">}</span>
+
+                $value = match (true) {
+                    \INF === $value =&gt; <span style="background-color: red">'</span>INF&#039;,
+                    -\INF === $value =&gt; <span style="background-color: red">'</span>-INF&#039;,
+                    is_nan($value) =&gt; <span style="background-color: red">'</span>NAN&#039;,
+                    default =&gt; <span style="background-color: red">!</span>str_contains($value = (string) $value, $this-&gt;decimalPoint) ? $value .= $this-&gt;decimalPoint.&#039;0&#039; : <span style="background-color: red">$</span>value,
+                };
+                break;
+
+            <span style="background-color: red">c</span>ase &#039;NULL&#039;:
+                $value = &#039;null&#039;;
+                break;
+
+            <span style="background-color: red">c</span>ase &#039;boolean&#039;:
+                $value = $value ? &#039;true&#039; : <span style="background-color: red">'</span>false&#039;;
+                break;
+
+            <span style="background-color: red">d</span>efault:
+                $attr += [&#039;value&#039; =&gt; $this-&gt;utf8Encode($value)];
+                $value = $this-&gt;utf8Encode($type);
+                break;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;line .= $this-&gt;style($style, $value, $attr);
+
+        $this-&gt;endValue($cursor);
+    }
+
+    <span style="background-color: red">p</span>ublic function dumpString(Cursor $cursor, string $str, bool $bin, int $cut): void
+    {
+        $this-&gt;dumpKey($cursor);
+        $this-&gt;collapseNextHash = $this-&gt;expandNextHash = false;
+        $attr = $cursor-&gt;attr;
+
+        <span style="background-color: red">i</span>f ($bin) {
+            $str = $this-&gt;utf8Encode($str);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (&#039;&#039; === $str) {
+            $this-&gt;line .= &#039;&quot;&quot;&#039;;
+            <span style="background-color: red">i</span>f ($cut) {
+                $this-&gt;line .= &#039;…&#039;.$cut;
+            <span style="background-color: red">}</span>
+            $this-&gt;endValue($cursor);
+        } <span style="background-color: red">e</span>lse {
+            $attr += [
+                &#039;length&#039; =&gt; 0 &lt;= $cut ? mb_strlen($str, &#039;UTF-8&#039;) + $cut : <span style="background-color: red">0</span>,
+                &#039;binary&#039; =&gt; $bin,
+            ];
+            $str = $bin &amp;&amp; <span style="background-color: red">s</span>tr_contains($str, &quot;\0&quot;) ? [$str] : <span style="background-color: red">e</span>xplode(&quot;\n&quot;, $str);
+            <span style="background-color: red">i</span>f (isset($str[1]) &amp;&amp; <span style="background-color: red">!</span>isset($str[2]) &amp;&amp; <span style="background-color: red">!</span>isset($str[1][0])) {
+                unset($str[1]);
+                $str[0] .= &quot;\n&quot;;
+            <span style="background-color: red">}</span>
+            $m = \count($str) - 1;
+            $i = $lineCut = 0;
+
+            <span style="background-color: red">i</span>f (self::DUMP_STRING_LENGTH &amp; $this-&gt;flags) {
+                $this-&gt;line .= &#039;(&#039;.$attr[&#039;length&#039;].&#039;) &#039;;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ($bin) {
+                $this-&gt;line .= &#039;b&#039;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($m) {
+                $this-&gt;line .= &#039;&quot;&quot;&quot;&#039;;
+                $this-&gt;dumpLine($cursor-&gt;depth);
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;line .= &#039;&quot;&#039;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ($str as $str) {
+                <span style="background-color: red">i</span>f ($i &lt; $m) {
+                    $str .= &quot;\n&quot;;
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f (0 &lt; $this-&gt;maxStringWidth &amp;&amp; <span style="background-color: red">$</span>this-&gt;maxStringWidth &lt; $len = mb_strlen($str, &#039;UTF-8&#039;)) {
+                    $str = mb_substr($str, 0, $this-&gt;maxStringWidth, &#039;UTF-8&#039;);
+                    $lineCut = $len - $this-&gt;maxStringWidth;
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f ($m &amp;&amp; <span style="background-color: red">0</span> &lt; $cursor-&gt;depth) {
+                    $this-&gt;line .= $this-&gt;indentPad;
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f (&#039;&#039; !== $str) {
+                    $this-&gt;line .= $this-&gt;style(&#039;str&#039;, $str, $attr);
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f ($i++ == $m) {
+                    <span style="background-color: red">i</span>f ($m) {
+                        <span style="background-color: red">i</span>f (&#039;&#039; !== $str) {
+                            $this-&gt;dumpLine($cursor-&gt;depth);
+                            <span style="background-color: red">i</span>f (0 &lt; $cursor-&gt;depth) {
+                                $this-&gt;line .= $this-&gt;indentPad;
+                            <span style="background-color: red">}</span>
+                        <span style="background-color: red">}</span>
+                        $this-&gt;line .= &#039;&quot;&quot;&quot;&#039;;
+                    } <span style="background-color: red">e</span>lse {
+                        $this-&gt;line .= &#039;&quot;&#039;;
+                    <span style="background-color: red">}</span>
+                    <span style="background-color: red">i</span>f ($cut &lt; 0) {
+                        $this-&gt;line .= &#039;…&#039;;
+                        $lineCut = 0;
+                    } <span style="background-color: red">e</span>lseif ($cut) {
+                        $lineCut += $cut;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+                <span style="background-color: red">i</span>f ($lineCut) {
+                    $this-&gt;line .= &#039;…&#039;.$lineCut;
+                    $lineCut = 0;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($i &gt; $m) {
+                    $this-&gt;endValue($cursor);
+                } <span style="background-color: red">e</span>lse {
+                    $this-&gt;dumpLine($cursor-&gt;depth);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function enterHash(Cursor $cursor, int $type, string|int|null $class, bool $hasChild): void
+    {
+        $this-&gt;colors ??= <span style="background-color: red">$</span>this-&gt;supportsColors();
+
+        $this-&gt;dumpKey($cursor);
+        $this-&gt;expandNextHash = false;
+        $attr = $cursor-&gt;attr;
+
+        <span style="background-color: red">i</span>f ($this-&gt;collapseNextHash) {
+            $cursor-&gt;skipChildren = true;
+            $this-&gt;collapseNextHash = $hasChild = false;
+        <span style="background-color: red">}</span>
+
+        $class = $this-&gt;utf8Encode($class);
+        <span style="background-color: red">i</span>f (Cursor::HASH_OBJECT === $type) {
+            $prefix = $class &amp;&amp; <span style="background-color: red">'</span>stdClass&#039; !== $class ? $this-&gt;style(&#039;note&#039;, $class, $attr).(empty($attr[&#039;cut_hash&#039;]) ? &#039; {&#039; : <span style="background-color: red">'</span>&#039;) : <span style="background-color: red">'</span>{&#039;;
+        } <span style="background-color: red">e</span>lseif (Cursor::HASH_RESOURCE === $type) {
+            $prefix = $this-&gt;style(&#039;note&#039;, $class.&#039; resource&#039;, $attr).($hasChild ? &#039; {&#039; : <span style="background-color: red">'</span> &#039;);
+        } <span style="background-color: red">e</span>lse {
+            $prefix = $class &amp;&amp; <span style="background-color: red">!</span>(self::DUMP_LIGHT_ARRAY &amp; $this-&gt;flags) ? $this-&gt;style(&#039;note&#039;, &#039;array:&#039;.$class).&#039; [&#039; : <span style="background-color: red">'</span>[&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (($cursor-&gt;softRefCount || <span style="background-color: red">0</span> &lt; $cursor-&gt;softRefHandle) &amp;&amp; <span style="background-color: red">e</span>mpty($attr[&#039;cut_hash&#039;])) {
+            $prefix .= $this-&gt;style(&#039;ref&#039;, (Cursor::HASH_RESOURCE === $type ? &#039;@&#039; : <span style="background-color: red">'</span>#&#039;).(0 &lt; $cursor-&gt;softRefHandle ? $cursor-&gt;softRefHandle : <span style="background-color: red">$</span>cursor-&gt;softRefTo), [&#039;count&#039; =&gt; $cursor-&gt;softRefCount]);
+        } <span style="background-color: red">e</span>lseif ($cursor-&gt;hardRefTo &amp;&amp; <span style="background-color: red">!</span>$cursor-&gt;refIndex &amp;&amp; <span style="background-color: red">$</span>class) {
+            $prefix .= $this-&gt;style(&#039;ref&#039;, &#039;&amp;&#039;.$cursor-&gt;hardRefTo, [&#039;count&#039; =&gt; $cursor-&gt;hardRefCount]);
+        } <span style="background-color: red">e</span>lseif (!$hasChild &amp;&amp; <span style="background-color: red">C</span>ursor::HASH_RESOURCE === $type) {
+            $prefix = substr($prefix, 0, -1);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;line .= $prefix;
+
+        <span style="background-color: red">i</span>f ($hasChild) {
+            $this-&gt;dumpLine($cursor-&gt;depth);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function leaveHash(Cursor $cursor, int $type, string|int|null $class, bool $hasChild, int $cut): void
+    {
+        <span style="background-color: red">i</span>f (empty($cursor-&gt;attr[&#039;cut_hash&#039;])) {
+            $this-&gt;dumpEllipsis($cursor, $hasChild, $cut);
+            $this-&gt;line .= Cursor::HASH_OBJECT === $type ? &#039;}&#039; : (<span style="background-color: red">C</span>ursor::HASH_RESOURCE !== $type ? &#039;]&#039; : (<span style="background-color: red">$</span>hasChild ? &#039;}&#039; : <span style="background-color: red">'</span>&#039;));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;endValue($cursor);
+    }
+
+    /**
+     * Dumps an ellipsis for cut children.
+     *
+     * @param bool $hasChild When the dump of the hash has child item
+     * @param int  $cut      The number of items the hash has been cut by
+     */
+    <span style="background-color: red">p</span>rotected function dumpEllipsis(Cursor $cursor, bool $hasChild, int $cut): void
+    {
+        <span style="background-color: red">i</span>f ($cut) {
+            $this-&gt;line .= &#039; …&#039;;
+            <span style="background-color: red">i</span>f (0 &lt; $cut) {
+                $this-&gt;line .= $cut;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ($hasChild) {
+                $this-&gt;dumpLine($cursor-&gt;depth + 1);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Dumps a key in a hash structure.
+     */
+    <span style="background-color: red">p</span>rotected function dumpKey(Cursor $cursor): void
+    {
+        <span style="background-color: red">i</span>f (null !== $key = $cursor-&gt;hashKey) {
+            <span style="background-color: red">i</span>f ($cursor-&gt;hashKeyIsBinary) {
+                $key = $this-&gt;utf8Encode($key);
+            <span style="background-color: red">}</span>
+            $attr = [
+                &#039;binary&#039; =&gt; $cursor-&gt;hashKeyIsBinary,
+                &#039;virtual&#039; =&gt; $cursor-&gt;attr[&#039;virtual&#039;] ?? <span style="background-color: red">f</span>alse,
+            ];
+            $bin = $cursor-&gt;hashKeyIsBinary ? &#039;b&#039; : <span style="background-color: red">'</span>&#039;;
+            $style = &#039;key&#039;;
+            switch ($cursor-&gt;hashType) {
+                <span style="background-color: red">d</span>efault:
+                <span style="background-color: red">c</span>ase Cursor::HASH_INDEXED:
+                    <span style="background-color: red">i</span>f (self::DUMP_LIGHT_ARRAY &amp; $this-&gt;flags) {
+                        break;
+                    <span style="background-color: red">}</span>
+                    $style = &#039;index&#039;;
+                    // no break
+                <span style="background-color: red">c</span>ase Cursor::HASH_ASSOC:
+                    <span style="background-color: red">i</span>f (\is_int($key)) {
+                        $this-&gt;line .= $this-&gt;style($style, $key).&#039; =&gt; &#039;;
+                    } <span style="background-color: red">e</span>lse {
+                        $this-&gt;line .= $bin.&#039;&quot;&#039;.$this-&gt;style($style, $key).&#039;&quot; =&gt; &#039;;
+                    <span style="background-color: red">}</span>
+                    break;
+
+                <span style="background-color: red">c</span>ase Cursor::HASH_RESOURCE:
+                    $key = &quot;\0~\0&quot;.$key;
+                    // no break
+                <span style="background-color: red">c</span>ase Cursor::HASH_OBJECT:
+                    <span style="background-color: red">i</span>f (!isset($key[0]) || <span style="background-color: red">"</span>\0&quot; !== $key[0]) {
+                        $this-&gt;line .= &#039;+&#039;.$bin.$this-&gt;style(&#039;public&#039;, $key, $attr).&#039;: &#039;;
+                    } <span style="background-color: red">e</span>lseif (0 &lt; strpos($key, &quot;\0&quot;, 1)) {
+                        $key = explode(&quot;\0&quot;, substr($key, 1), 2);
+
+                        switch ($key[0][0]) {
+                            <span style="background-color: red">c</span>ase &#039;+&#039;: // User inserted keys
+                                $attr[&#039;dynamic&#039;] = true;
+                                $this-&gt;line .= &#039;+&#039;.$bin.&#039;&quot;&#039;.$this-&gt;style(&#039;public&#039;, $key[1], $attr).&#039;&quot;: &#039;;
+                                break 2;
+                            <span style="background-color: red">c</span>ase &#039;~&#039;:
+                                $style = &#039;meta&#039;;
+                                <span style="background-color: red">i</span>f (isset($key[0][1])) {
+                                    parse_str(substr($key[0], 1), $attr);
+                                    $attr += [&#039;binary&#039; =&gt; $cursor-&gt;hashKeyIsBinary];
+                                <span style="background-color: red">}</span>
+                                break;
+                            <span style="background-color: red">c</span>ase &#039;*&#039;:
+                                $style = &#039;protected&#039;;
+                                $bin = &#039;#&#039;.$bin;
+                                break;
+                            <span style="background-color: red">d</span>efault:
+                                $attr[&#039;class&#039;] = $key[0];
+                                $style = &#039;private&#039;;
+                                $bin = &#039;-&#039;.$bin;
+                                break;
+                        <span style="background-color: red">}</span>
+
+                        <span style="background-color: red">i</span>f (isset($attr[&#039;collapse&#039;])) {
+                            <span style="background-color: red">i</span>f ($attr[&#039;collapse&#039;]) {
+                                $this-&gt;collapseNextHash = true;
+                            } <span style="background-color: red">e</span>lse {
+                                $this-&gt;expandNextHash = true;
+                            <span style="background-color: red">}</span>
+                        <span style="background-color: red">}</span>
+
+                        $this-&gt;line .= $bin.$this-&gt;style($style, $key[1], $attr).($attr[&#039;separator&#039;] ?? <span style="background-color: red">'</span>: &#039;);
+                    } <span style="background-color: red">e</span>lse {
+                        // This case should not happen
+                        $this-&gt;line .= &#039;-&#039;.$bin.&#039;&quot;&#039;.$this-&gt;style(&#039;private&#039;, $key, [&#039;class&#039; =&gt; &#039;&#039;]).&#039;&quot;: &#039;;
+                    <span style="background-color: red">}</span>
+                    break;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($cursor-&gt;hardRefTo) {
+                $this-&gt;line .= $this-&gt;style(&#039;ref&#039;, &#039;&amp;&#039;.($cursor-&gt;hardRefCount ? $cursor-&gt;hardRefTo : <span style="background-color: red">'</span>&#039;), [&#039;count&#039; =&gt; $cursor-&gt;hardRefCount]).&#039; &#039;;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Decorates a value with some style.
+     *
+     * @param string $style The type of style being applied
+     * @param string $value The value being styled
+     * @param array  $attr  Optional context information
+     */
+    <span style="background-color: red">p</span>rotected function style(string $style, string $value, array $attr = []): string
+    {
+        $this-&gt;colors ??= <span style="background-color: red">$</span>this-&gt;supportsColors();
+
+        $this-&gt;handlesHrefGracefully ??= <span style="background-color: red">'</span>JetBrains-JediTerm&#039; !== getenv(&#039;TERMINAL_EMULATOR&#039;)
+            &amp;&amp; (<span style="background-color: red">!</span>getenv(&#039;KONSOLE_VERSION&#039;) || <span style="background-color: red">(</span>int) getenv(&#039;KONSOLE_VERSION&#039;) &gt; 201100)
+            &amp;&amp; <span style="background-color: red">!</span>isset($_SERVER[&#039;IDEA_INITIAL_DIRECTORY&#039;]);
+
+        <span style="background-color: red">i</span>f (isset($attr[&#039;ellipsis&#039;], $attr[&#039;ellipsis-type&#039;])) {
+            $prefix = substr($value, 0, -$attr[&#039;ellipsis&#039;]);
+            <span style="background-color: red">i</span>f (&#039;cli&#039; === \PHP_SAPI &amp;&amp; <span style="background-color: red">'</span>path&#039; === $attr[&#039;ellipsis-type&#039;] &amp;&amp; <span style="background-color: red">i</span>sset($_SERVER[$pwd = &#039;\\&#039; === \DIRECTORY_SEPARATOR ? &#039;CD&#039; : <span style="background-color: red">'</span>PWD&#039;]) &amp;&amp; <span style="background-color: red">s</span>tr_starts_with($prefix, $_SERVER[$pwd])) {
+                $prefix = &#039;.&#039;.substr($prefix, \strlen($_SERVER[$pwd]));
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f (!empty($attr[&#039;ellipsis-tail&#039;])) {
+                $prefix .= substr($value, -$attr[&#039;ellipsis&#039;], $attr[&#039;ellipsis-tail&#039;]);
+                $value = substr($value, -$attr[&#039;ellipsis&#039;] + $attr[&#039;ellipsis-tail&#039;]);
+            } <span style="background-color: red">e</span>lse {
+                $value = substr($value, -$attr[&#039;ellipsis&#039;]);
+            <span style="background-color: red">}</span>
+
+            $value = $this-&gt;style(&#039;default&#039;, $prefix).$this-&gt;style($style, $value);
+
+            goto href;
+        <span style="background-color: red">}</span>
+
+        $map = static::$controlCharsMap;
+        $startCchr = $this-&gt;colors ? &quot;\033[m\033[{$this-&gt;styles[&#039;default&#039;]}m&quot; : <span style="background-color: red">'</span>&#039;;
+        $endCchr = $this-&gt;colors ? &quot;\033[m\033[{$this-&gt;styles[$style]}m&quot; : <span style="background-color: red">'</span>&#039;;
+        $value = preg_replace_callback(static::$controlCharsRx, <span style="background-color: red">f</span>unction ($c) use ($map, $startCchr, $endCchr) {
+            $s = $startCchr;
+            $c = $c[$i = 0];
+            <span style="background-color: red">d</span>o {
+                $s .= $map[$c[$i]] ?? <span style="background-color: red">\</span>sprintf(&#039;\x%02X&#039;, \ord($c[$i]));
+            } while (isset($c[++$i]))<span style="background-color: red">;</span>
+
+            return $s.$endCchr;
+        }, $value, -1, $cchrCount);
+
+        <span style="background-color: red">i</span>f (!($attr[&#039;binary&#039;] ?? <span style="background-color: red">f</span>alse)) {
+            $value = preg_replace_callback(static::$unicodeCharsRx, <span style="background-color: red">f</span>unction ($c) use (&amp;$cchrCount, $startCchr, $endCchr) {
+                ++$cchrCount;
+
+                return $startCchr.&#039;\u{&#039;.strtoupper(dechex(mb_ord($c[0]))).&#039;}&#039;.$endCchr;
+            }, $value);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;colors &amp;&amp; <span style="background-color: red">'</span>&#039; !== $value) {
+            <span style="background-color: red">i</span>f ($cchrCount &amp;&amp; <span style="background-color: red">"</span>\033&quot; === $value[0]) {
+                $value = substr($value, \strlen($startCchr));
+            } <span style="background-color: red">e</span>lse {
+                $value = &quot;\033[{$this-&gt;styles[$style]}m&quot;.$value;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ($cchrCount &amp;&amp; <span style="background-color: red">s</span>tr_ends_with($value, $endCchr)) {
+                $value = substr($value, 0, -\strlen($endCchr));
+            } <span style="background-color: red">e</span>lse {
+                $value .= &quot;\033[{$this-&gt;styles[&#039;default&#039;]}m&quot;;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        href<span style="background-color: red">:</span>
+        <span style="background-color: red">i</span>f ($this-&gt;colors &amp;&amp; <span style="background-color: red">$</span>this-&gt;handlesHrefGracefully) {
+            <span style="background-color: red">i</span>f (isset($attr[&#039;file&#039;]) &amp;&amp; <span style="background-color: red">$</span>href = $this-&gt;getSourceLink($attr[&#039;file&#039;], $attr[&#039;line&#039;] ?? <span style="background-color: red">0</span>)) {
+                <span style="background-color: red">i</span>f (&#039;note&#039; === $style) {
+                    $value .= &quot;\033]8;;{$href}\033\\^\033]8;;\033\\&quot;;
+                } <span style="background-color: red">e</span>lse {
+                    $attr[&#039;href&#039;] = $href;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f (isset($attr[&#039;href&#039;])) {
+                <span style="background-color: red">i</span>f (&#039;label&#039; === $style) {
+                    $value .= &#039;^&#039;;
+                <span style="background-color: red">}</span>
+                $value = &quot;\033]8;;{$attr[&#039;href&#039;]}\033\\{$value}\033]8;;\033\\&quot;;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;label&#039; === $style &amp;&amp; <span style="background-color: red">'</span>&#039; !== $value) {
+            $value .= &#039; &#039;;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f ($this-&gt;colors &amp;&amp; (<span style="background-color: red">$</span>attr[&#039;virtual&#039;] ?? <span style="background-color: red">f</span>alse)) {
+            $value = &quot;\033[{$this-&gt;styles[&#039;virtual&#039;]}m&quot;.$value;
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    <span style="background-color: red">p</span>rotected function supportsColors(): bool
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;outputStream !== static::$defaultOutput) {
+            return $this-&gt;hasColorSupport($this-&gt;outputStream);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset(static::$defaultColors)) {
+            return static::$defaultColors;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($_SERVER[&#039;argv&#039;][1])) {
+            $colors = $_SERVER[&#039;argv&#039;];
+            $i = \count($colors);
+            <span style="background-color: red">w</span>hile (--$i &gt; 0) {
+                <span style="background-color: red">i</span>f (isset($colors[$i][5])) {
+                    switch ($colors[$i]) {
+                        <span style="background-color: red">c</span>ase &#039;--ansi&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color=yes&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color=force&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color=always&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--colors=always&#039;:
+                            return static::$defaultColors = true;
+
+                        <span style="background-color: red">c</span>ase &#039;--no-ansi&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color=no&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color=none&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--color=never&#039;:
+                        <span style="background-color: red">c</span>ase &#039;--colors=never&#039;:
+                            return static::$defaultColors = false;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $h = stream_get_meta_data($this-&gt;outputStream) + [&#039;wrapper_type&#039; =&gt; null];
+        $h = &#039;Output&#039; === $h[&#039;stream_type&#039;] &amp;&amp; <span style="background-color: red">'</span>PHP&#039; === $h[&#039;wrapper_type&#039;] ? fopen(&#039;php://stdout&#039;, &#039;w&#039;) : <span style="background-color: red">$</span>this-&gt;outputStream;
+
+        return static::$defaultColors = $this-&gt;hasColorSupport($h);
+    }
+
+    <span style="background-color: red">p</span>rotected function dumpLine(int $depth, bool $endOfValue = false): void
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;colors ??= <span style="background-color: red">$</span>this-&gt;supportsColors()) {
+            $this-&gt;line = \sprintf(&quot;\033[%sm%s\033[m&quot;, $this-&gt;styles[&#039;default&#039;], $this-&gt;line);
+        <span style="background-color: red">}</span>
+        parent::dumpLine($depth);
+    }
+
+    <span style="background-color: red">p</span>rotected function endValue(Cursor $cursor): void
+    {
+        <span style="background-color: red">i</span>f (-1 === $cursor-&gt;hashType) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (Stub::ARRAY_INDEXED === $cursor-&gt;hashType || <span style="background-color: red">S</span>tub::ARRAY_ASSOC === $cursor-&gt;hashType) {
+            <span style="background-color: red">i</span>f (self::DUMP_TRAILING_COMMA &amp; $this-&gt;flags &amp;&amp; <span style="background-color: red">0</span> &lt; $cursor-&gt;depth) {
+                $this-&gt;line .= &#039;,&#039;;
+            } <span style="background-color: red">e</span>lseif (self::DUMP_COMMA_SEPARATOR &amp; $this-&gt;flags &amp;&amp; <span style="background-color: red">1</span> &lt; $cursor-&gt;hashLength - $cursor-&gt;hashIndex) {
+                $this-&gt;line .= &#039;,&#039;;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;dumpLine($cursor-&gt;depth, true);
+    }
+
+    /**
+     * Returns true if the stream supports colorization.
+     *
+     * Reference: Composer\XdebugHandler\Process::supportsColor
+     * https://github.com/composer/xdebug-handler
+     */
+    <span style="background-color: red">p</span>rivate function hasColorSupport(mixed $stream): bool
+    {
+        <span style="background-color: red">i</span>f (!\is_resource($stream) || <span style="background-color: red">'</span>stream&#039; !== get_resource_type($stream)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Follow https://no-color.org/
+        <span style="background-color: red">i</span>f (&#039;&#039; !== (($_SERVER[&#039;NO_COLOR&#039;] ?? <span style="background-color: red">g</span>etenv(&#039;NO_COLOR&#039;))[0] ?? <span style="background-color: red">'</span>&#039;)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Follow https://force-color.org/
+        <span style="background-color: red">i</span>f (&#039;&#039; !== (($_SERVER[&#039;FORCE_COLOR&#039;] ?? <span style="background-color: red">g</span>etenv(&#039;FORCE_COLOR&#039;))[0] ?? <span style="background-color: red">'</span>&#039;)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        // Detect msysgit/mingw and assume this is a tty because detection
+        // does not work correctly, see https://github.com/composer/composer/issues/9690
+        <span style="background-color: red">i</span>f (!@stream_isatty($stream) &amp;&amp; <span style="background-color: red">!</span>\in_array(strtoupper((string) getenv(&#039;MSYSTEM&#039;)), [&#039;MINGW32&#039;, &#039;MINGW64&#039;], true)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;\\&#039; === \DIRECTORY_SEPARATOR &amp;&amp; <span style="background-color: red">@</span>sapi_windows_vt100_support($stream)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;Hyper&#039; === getenv(&#039;TERM_PROGRAM&#039;)
+            || <span style="background-color: red">f</span>alse !== getenv(&#039;COLORTERM&#039;)
+            || <span style="background-color: red">f</span>alse !== getenv(&#039;ANSICON&#039;)
+            || <span style="background-color: red">'</span>ON&#039; === getenv(&#039;ConEmuANSI&#039;)
+        ) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (&#039;dumb&#039; === $term = (string) getenv(&#039;TERM&#039;)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // See https://github.com/chalk/supports-color/blob/d4f413efaf8da045c5ab440ed418ef02dbb28bf1/index.js#L157
+        return preg_match(&#039;/^((screen|xterm|vt100|vt220|putty|rxvt|ansi|cygwin|linux).*)|(.*-256(color)?(-bce)?)$/&#039;, $term);
+    }
+
+    /**
+     * Returns true if the Windows terminal supports true color.
+     *
+     * Note that this does not check an output stream, but relies on environment
+     * variables from known implementations, or a PHP and Windows version that
+     * supports true color.
+     */
+    <span style="background-color: red">p</span>rivate function isWindowsTrueColor(): bool
+    {
+        $result = 183 &lt;= getenv(&#039;ANSICON_VER&#039;)
+            || <span style="background-color: red">'</span>ON&#039; === getenv(&#039;ConEmuANSI&#039;)
+            || <span style="background-color: red">'</span>xterm&#039; === getenv(&#039;TERM&#039;)
+            || <span style="background-color: red">'</span>Hyper&#039; === getenv(&#039;TERM_PROGRAM&#039;);
+
+        <span style="background-color: red">i</span>f (!$result) {
+            $version = \sprintf(
+                &#039;%s.%s.%s&#039;,
+                PHP_WINDOWS_VERSION_MAJOR,
+                PHP_WINDOWS_VERSION_MINOR,
+                PHP_WINDOWS_VERSION_BUILD
+            );
+            $result = $version &gt;= &#039;10.0.15063&#039;;
+        <span style="background-color: red">}</span>
+
+        return $result;
+    }
+
+    <span style="background-color: red">p</span>rivate function getSourceLink(string $file, int $line): string|false
+    {
+        <span style="background-color: red">i</span>f ($fmt = $this-&gt;displayOptions[&#039;fileLinkFormat&#039;]) {
+            return \is_string($fmt) ? strtr($fmt, [&#039;%f&#039; =&gt; $file, &#039;%l&#039; =&gt; $line]) : (<span style="background-color: red">$</span>fmt-&gt;format($file, $line) ?: <span style="background-color: red">'</span>file://&#039;.$file.&#039;#L&#039;.$line);
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+}
+</pre>

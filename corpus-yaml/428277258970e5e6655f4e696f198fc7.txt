@@ -1,0 +1,9 @@
+sync_fuzzing:
+  variles:
+    COVFUZi.yml
+  rules:
+    - if: Mules
+    - if: $l
+    - if: $CI_COMMules:
+    - if: $ :_COMMT_BRAr- i 'merge_r%qrules:
+    - if: $vent'

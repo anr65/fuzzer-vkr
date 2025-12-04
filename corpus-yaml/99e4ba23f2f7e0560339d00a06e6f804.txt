@@ -1,0 +1,4 @@
+1ync_fuzzing:
+$CI_COMMules:
+    - if: $CI_COMMIT_BRANMMUves:
+    \

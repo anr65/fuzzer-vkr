@@ -1,0 +1,6 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
+  trigger:
+  Z_ADDITIONAL_ARGS: '-max_total_time=7200'MMMMMMMMMMMMMMMMMMMMMMMMIT_BRANer:
+'MMMMMMMMMue  t'

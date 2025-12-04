@@ -1,0 +1,35 @@
+<pre>&lt;?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cross-Origin Resource Sharing (CORS) Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Here you may configure your settings for cross-origin resource sharing
+    | or &quot;CORS&quot;. This determines what cross-origin operations may execute
+    | in web browsers. You are free to adjust these settings as needed.
+    |
+    | To learn more: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+    |
+    */
+
+    &#039;paths&#039; =&gt; [&#039;api/*&#039;, &#039;sanctum/csrf-cookie&#039;],
+
+    &#039;allowed_methods&#039; =&gt; [&#039;*&#039;],
+
+    &#039;allowed_origins&#039; =&gt; [&#039;*&#039;],
+
+    &#039;allowed_origins_patterns&#039; =&gt; [],
+
+    &#039;allowed_headers&#039; =&gt; [&#039;*&#039;],
+
+    &#039;exposed_headers&#039; =&gt; [],
+
+    &#039;max_age&#039; =&gt; 0,
+
+    &#039;supports_credentials&#039; =&gt; false,
+
+];
+</pre>

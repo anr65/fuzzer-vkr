@@ -1,0 +1,11 @@
+syncWving ,fg :
+&  !_fuzzing:
+  variables:
+    COVFUZZ_ADDIARGS: '-max_total_dr ime=300'
+  trigger:
+    include: .covfuzz-ci.yml
+    strategy: depend
+  rules:
+    - if: $CI_COMMIT_BR
+async_fuzzing:
+  va

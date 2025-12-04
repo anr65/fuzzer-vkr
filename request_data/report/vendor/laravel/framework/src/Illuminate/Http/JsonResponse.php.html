@@ -1,0 +1,139 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http;
+
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+use JsonSerializable;
+use Symfony\Component\HttpFoundation\JsonResponse as BaseJsonResponse;
+
+class JsonResponse extends BaseJsonResponse
+{
+    use ResponseTrait, Macroable {
+        Macroable::__call as macroCall;
+    }
+
+    /**
+     * Create a new JSON response instance.
+     *
+     * @param  mixed  $data
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  int  $options
+     * @param  bool  $json
+     */
+    <span style="background-color: green">p</span>ublic function __construct($data = null, $status = 200, $headers = [], $options = 0, $json = false)
+    {
+        $this-&gt;encodingOptions = $options;
+
+        parent::__construct($data, $status, $headers, $json);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[\Override]
+    public static function fromJsonString(?string $data = null, int $status = 200, array $headers = []): static
+    {
+        return new static($data, $status, $headers, 0, true);
+    }
+
+    /**
+     * Sets the JSONP callback.
+     *
+     * @param  string|null  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withCallback($callback = null)
+    {
+        return $this-&gt;setCallback($callback);
+    }
+
+    /**
+     * Get the json_decoded data from the response.
+     *
+     * @param  bool  $assoc
+     * @param  int  $depth
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getData($assoc = false, $depth = 512)
+    {
+        return json_decode($this-&gt;data, $assoc, $depth);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return static
+     */
+    <span style="background-color: green">#</span>[\Override]
+    public function setData($data = []): static
+    {
+        $this-&gt;original = $data;
+
+        // Ensure json_last_error() is cleared...
+        json_decode(&#039;[]&#039;);
+
+        $this-&gt;data = match (true) {
+            $data instanceof Jsonable =&gt; <span style="background-color: red">$</span>data-&gt;toJson($this-&gt;encodingOptions),
+            $data instanceof JsonSerializable =&gt; <span style="background-color: red">j</span>son_encode($data-&gt;jsonSerialize(), $this-&gt;encodingOptions),
+            $data instanceof Arrayable =&gt; <span style="background-color: red">j</span>son_encode($data-&gt;toArray(), $this-&gt;encodingOptions),
+            default =&gt; <span style="background-color: green">j</span>son_encode($data, $this-&gt;encodingOptions),
+        };
+
+        <span style="background-color: red">i</span>f (! $this-&gt;hasValidJson(json_last_error())) {
+            throw new InvalidArgumentException(json_last_error_msg());
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;update();
+    }
+
+    /**
+     * Determine if an error occurred during JSON encoding.
+     *
+     * @param  int  $jsonError
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function hasValidJson($jsonError)
+    {
+        <span style="background-color: green">i</span>f ($jsonError === JSON_ERROR_NONE) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;hasEncodingOption(JSON_PARTIAL_OUTPUT_ON_ERROR) &amp;&amp;
+                    <span style="background-color: red">i</span>n_array($jsonError, [
+                        JSON_ERROR_RECURSION,
+                        JSON_ERROR_INF_OR_NAN,
+                        JSON_ERROR_UNSUPPORTED_TYPE,
+                    ]);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[\Override]
+    public function setEncodingOptions($options): static
+    {
+        $this-&gt;encodingOptions = (int) $options;
+
+        return $this-&gt;setData($this-&gt;getData());
+    }
+
+    /**
+     * Determine if a JSON encoding option is set.
+     *
+     * @param  int  $option
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasEncodingOption($option)
+    {
+        return (bool) ($this-&gt;encodingOptions &amp; $option);
+    }
+}
+</pre>

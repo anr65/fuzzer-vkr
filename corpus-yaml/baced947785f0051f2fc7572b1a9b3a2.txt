@@ -1,0 +1,4 @@
+syel .:
+  trigger:  !n: .  RGs:
+  trigger:
+  i[[[[[[:

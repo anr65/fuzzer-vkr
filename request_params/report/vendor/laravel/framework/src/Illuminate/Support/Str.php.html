@@ -1,0 +1,2080 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use Closure;
+use Illuminate\Support\Traits\Macroable;
+use JsonException;
+use League\CommonMark\Environment\Environment;
+use League\CommonMark\Extension\GithubFlavoredMarkdownExtension;
+use League\CommonMark\Extension\InlinesOnly\InlinesOnlyExtension;
+use League\CommonMark\GithubFlavoredMarkdownConverter;
+use League\CommonMark\MarkdownConverter;
+use Ramsey\Uuid\Codec\TimestampFirstCombCodec;
+use Ramsey\Uuid\Exception\InvalidUuidStringException;
+use Ramsey\Uuid\Generator\CombGenerator;
+use Ramsey\Uuid\Rfc4122\FieldsInterface;
+use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidFactory;
+use Symfony\Component\Uid\Ulid;
+use Throwable;
+use Traversable;
+use voku\helper\ASCII;
+
+class Str
+{
+    use Macroable;
+
+    /**
+     * The cache of snake-cased words.
+     *
+     * @var array
+     */
+    protected static $snakeCache = [];
+
+    /**
+     * The cache of camel-cased words.
+     *
+     * @var array
+     */
+    protected static $camelCache = [];
+
+    /**
+     * The cache of studly-cased words.
+     *
+     * @var array
+     */
+    protected static $studlyCache = [];
+
+    /**
+     * The callback that should be used to generate UUIDs.
+     *
+     * @var callable|null
+     */
+    protected static $uuidFactory;
+
+    /**
+     * The callback that should be used to generate ULIDs.
+     *
+     * @var callable|null
+     */
+    protected static $ulidFactory;
+
+    /**
+     * The callback that should be used to generate random strings.
+     *
+     * @var callable|null
+     */
+    protected static $randomStringFactory;
+
+    /**
+     * Get a new stringable object from the given string.
+     *
+     * @param  string  $string
+     * @return \Illuminate\Support\Stringable
+     */
+    <span style="background-color: red">p</span>ublic static function of($string)
+    {
+        return new Stringable($string);
+    }
+
+    /**
+     * Return the remainder of a string after the first occurrence of a given value.
+     *
+     * @param  string  $subject
+     * @param  string  $search
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function after($subject, $search)
+    {
+        return $search === &#039;&#039; ? $subject : <span style="background-color: red">a</span>rray_reverse(explode($search, $subject, 2))[0];
+    }
+
+    /**
+     * Return the remainder of a string after the last occurrence of a given value.
+     *
+     * @param  string  $subject
+     * @param  string  $search
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function afterLast($subject, $search)
+    {
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        $position = strrpos($subject, (string) $search);
+
+        <span style="background-color: red">i</span>f ($position === false) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        return substr($subject, $position + strlen($search));
+    }
+
+    /**
+     * Transliterate a UTF-8 value to ASCII.
+     *
+     * @param  string  $value
+     * @param  string  $language
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function ascii($value, $language = &#039;en&#039;)
+    {
+        return ASCII::to_ascii((string) $value, $language, replace_single_chars_only: false);
+    }
+
+    /**
+     * Transliterate a string to its closest ASCII representation.
+     *
+     * @param  string  $string
+     * @param  string|null  $unknown
+     * @param  bool|null  $strict
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function transliterate($string, $unknown = &#039;?&#039;, $strict = false)
+    {
+        return ASCII::to_transliterate($string, $unknown, $strict);
+    }
+
+    /**
+     * Get the portion of a string before the first occurrence of a given value.
+     *
+     * @param  string  $subject
+     * @param  string  $search
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function before($subject, $search)
+    {
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        $result = strstr($subject, (string) $search, true);
+
+        return $result === false ? $subject : <span style="background-color: red">$</span>result;
+    }
+
+    /**
+     * Get the portion of a string before the last occurrence of a given value.
+     *
+     * @param  string  $subject
+     * @param  string  $search
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function beforeLast($subject, $search)
+    {
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        $pos = mb_strrpos($subject, $search);
+
+        <span style="background-color: red">i</span>f ($pos === false) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        return static::substr($subject, 0, $pos);
+    }
+
+    /**
+     * Get the portion of a string between two given values.
+     *
+     * @param  string  $subject
+     * @param  string  $from
+     * @param  string  $to
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function between($subject, $from, $to)
+    {
+        <span style="background-color: red">i</span>f ($from === &#039;&#039; || <span style="background-color: red">$</span>to === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        return static::beforeLast(static::after($subject, $from), $to);
+    }
+
+    /**
+     * Get the smallest possible portion of a string between two given values.
+     *
+     * @param  string  $subject
+     * @param  string  $from
+     * @param  string  $to
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function betweenFirst($subject, $from, $to)
+    {
+        <span style="background-color: red">i</span>f ($from === &#039;&#039; || <span style="background-color: red">$</span>to === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        return static::before(static::after($subject, $from), $to);
+    }
+
+    /**
+     * Convert a value to camel case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function camel($value)
+    {
+        <span style="background-color: red">i</span>f (isset(static::$camelCache[$value])) {
+            return static::$camelCache[$value];
+        <span style="background-color: red">}</span>
+
+        return static::$camelCache[$value] = lcfirst(static::studly($value));
+    }
+
+    /**
+     * Get the character at the specified index.
+     *
+     * @param  string  $subject
+     * @param  int  $index
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic static function charAt($subject, $index)
+    {
+        $length = mb_strlen($subject);
+
+        <span style="background-color: red">i</span>f ($index &lt; 0 ? $index &lt; -$length : <span style="background-color: red">$</span>index &gt; $length - 1) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return mb_substr($subject, $index, 1);
+    }
+
+    /**
+     * Remove the given string(s) if it exists at the start of the haystack.
+     *
+     * @param  string  $subject
+     * @param  string|array  $needle
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function chopStart($subject, $needle)
+    {
+        <span style="background-color: red">f</span>oreach ((array) $needle as $n) {
+            <span style="background-color: red">i</span>f (str_starts_with($subject, $n)) {
+                return substr($subject, strlen($n));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $subject;
+    }
+
+    /**
+     * Remove the given string(s) if it exists at the end of the haystack.
+     *
+     * @param  string  $subject
+     * @param  string|array  $needle
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function chopEnd($subject, $needle)
+    {
+        <span style="background-color: red">f</span>oreach ((array) $needle as $n) {
+            <span style="background-color: red">i</span>f (str_ends_with($subject, $n)) {
+                return substr($subject, 0, -strlen($n));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $subject;
+    }
+
+    /**
+     * Determine if a given string contains a given substring.
+     *
+     * @param  string  $haystack
+     * @param  string|iterable&lt;string&gt;  $needles
+     * @param  bool  $ignoreCase
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function contains($haystack, $needles, $ignoreCase = false)
+    {
+        <span style="background-color: red">i</span>f ($ignoreCase) {
+            $haystack = mb_strtolower($haystack);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! is_iterable($needles)) {
+            $needles = (array) $needles;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($needles as $needle) {
+            <span style="background-color: red">i</span>f ($ignoreCase) {
+                $needle = mb_strtolower($needle);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($needle !== &#039;&#039; &amp;&amp; <span style="background-color: green">s</span>tr_contains($haystack, $needle)) {
+                return true;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Determine if a given string contains all array values.
+     *
+     * @param  string  $haystack
+     * @param  iterable&lt;string&gt;  $needles
+     * @param  bool  $ignoreCase
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function containsAll($haystack, $needles, $ignoreCase = false)
+    {
+        <span style="background-color: red">f</span>oreach ($needles as $needle) {
+            <span style="background-color: red">i</span>f (! static::contains($haystack, $needle, $ignoreCase)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Determine if a given string doesn&#039;t contain a given substring.
+     *
+     * @param  string  $haystack
+     * @param  string|iterable&lt;string&gt;  $needles
+     * @param  bool  $ignoreCase
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function doesntContain($haystack, $needles, $ignoreCase = false)
+    {
+        return ! static::contains($haystack, $needles, $ignoreCase);
+    }
+
+    /**
+     * Convert the case of a string.
+     *
+     * @param  string  $string
+     * @param  int  $mode
+     * @param  string|null  $encoding
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function convertCase(string $string, int $mode = MB_CASE_FOLD, ?string $encoding = &#039;UTF-8&#039;)
+    {
+        return mb_convert_case($string, $mode, $encoding);
+    }
+
+    /**
+     * Replace consecutive instances of a given character with a single character in the given string.
+     *
+     * @param  string  $string
+     * @param  string  $character
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function deduplicate(string $string, string $character = &#039; &#039;)
+    {
+        return preg_replace(&#039;/&#039;.preg_quote($character, &#039;/&#039;).&#039;+/u&#039;, $character, $string);
+    }
+
+    /**
+     * Determine if a given string ends with a given substring.
+     *
+     * @param  string  $haystack
+     * @param  string|iterable&lt;string&gt;  $needles
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function endsWith($haystack, $needles)
+    {
+        <span style="background-color: red">i</span>f (! is_iterable($needles)) {
+            $needles = (array) $needles;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (is_null($haystack)) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($needles as $needle) {
+            <span style="background-color: red">i</span>f ((string) $needle !== &#039;&#039; &amp;&amp; <span style="background-color: green">s</span>tr_ends_with($haystack, $needle)) {
+                return true;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Extracts an excerpt from text that matches the first instance of a phrase.
+     *
+     * @param  string  $text
+     * @param  string  $phrase
+     * @param  array  $options
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic static function excerpt($text, $phrase = &#039;&#039;, $options = [])
+    {
+        $radius = $options[&#039;radius&#039;] ?? <span style="background-color: red">1</span>00;
+        $omission = $options[&#039;omission&#039;] ?? <span style="background-color: red">'</span>...&#039;;
+
+        preg_match(&#039;/^(.*?)(&#039;.preg_quote((string) $phrase, &#039;/&#039;).&#039;)(.*)$/iu&#039;, (string) $text, $matches);
+
+        <span style="background-color: red">i</span>f (empty($matches)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        $start = ltrim($matches[1]);
+
+        $start = Str::of(mb_substr($start, max(mb_strlen($start, &#039;UTF-8&#039;) - $radius, 0), $radius, &#039;UTF-8&#039;))-&gt;ltrim()-&gt;unless(
+            fn ($startWithRadius) =&gt; <span style="background-color: red">$</span>startWithRadius-&gt;exactly($start),
+            fn ($startWithRadius) =&gt; <span style="background-color: red">$</span>startWithRadius-&gt;prepend($omission),
+        );
+
+        $end = rtrim($matches[3]);
+
+        $end = Str::of(mb_substr($end, 0, $radius, &#039;UTF-8&#039;))-&gt;rtrim()-&gt;unless(
+            fn ($endWithRadius) =&gt; <span style="background-color: red">$</span>endWithRadius-&gt;exactly($end),
+            fn ($endWithRadius) =&gt; <span style="background-color: red">$</span>endWithRadius-&gt;append($omission),
+        );
+
+        return $start-&gt;append($matches[2], $end)-&gt;toString();
+    }
+
+    /**
+     * Cap a string with a single instance of a given value.
+     *
+     * @param  string  $value
+     * @param  string  $cap
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function finish($value, $cap)
+    {
+        $quoted = preg_quote($cap, &#039;/&#039;);
+
+        return preg_replace(&#039;/(?:&#039;.$quoted.&#039;)+$/u&#039;, &#039;&#039;, $value).$cap;
+    }
+
+    /**
+     * Wrap the string with the given strings.
+     *
+     * @param  string  $value
+     * @param  string  $before
+     * @param  string|null  $after
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function wrap($value, $before, $after = null)
+    {
+        return $before.$value.($after ?? <span style="background-color: red">$</span>before);
+    }
+
+    /**
+     * Unwrap the string with the given strings.
+     *
+     * @param  string  $value
+     * @param  string  $before
+     * @param  string|null  $after
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function unwrap($value, $before, $after = null)
+    {
+        <span style="background-color: red">i</span>f (static::startsWith($value, $before)) {
+            $value = static::substr($value, static::length($before));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::endsWith($value, $after ??= <span style="background-color: red">$</span>before)) {
+            $value = static::substr($value, 0, -static::length($after));
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Determine if a given string matches a given pattern.
+     *
+     * @param  string|iterable&lt;string&gt;  $pattern
+     * @param  string  $value
+     * @param  bool  $ignoreCase
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function is($pattern, $value, $ignoreCase = false)
+    {
+        $value = (string) $value;
+
+        <span style="background-color: green">i</span>f (! is_iterable($pattern)) {
+            $pattern = [$pattern];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($pattern as $pattern) {
+            $pattern = (string) $pattern;
+
+            // If the given value is an exact match we can of course return true right
+            // from the beginning. Otherwise, we will translate asterisks and do an
+            // actual pattern match against the two strings to see if they match.
+            <span style="background-color: red">i</span>f ($pattern === &#039;*&#039; || <span style="background-color: green">$</span>pattern === $value) {
+                return true;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($ignoreCase &amp;&amp; <span style="background-color: red">m</span>b_strtolower($pattern) === mb_strtolower($value)) {
+                return true;
+            <span style="background-color: green">}</span>
+
+            $pattern = preg_quote($pattern, &#039;#&#039;);
+
+            // Asterisks are translated into zero-or-more regular expression wildcards
+            // to make it convenient to check if the strings starts with the given
+            // pattern such as &quot;library/*&quot;, making any string check convenient.
+            $pattern = str_replace(&#039;\*&#039;, &#039;.*&#039;, $pattern);
+
+            <span style="background-color: red">i</span>f (preg_match(&#039;#^&#039;.$pattern.&#039;\z#&#039;.($ignoreCase ? &#039;isu&#039; : <span style="background-color: green">'</span>su&#039;), $value) === 1) {
+                return true;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Determine if a given string is 7 bit ASCII.
+     *
+     * @param  string  $value
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isAscii($value)
+    {
+        return ASCII::is_ascii((string) $value);
+    }
+
+    /**
+     * Determine if a given value is valid JSON.
+     *
+     * @param  mixed  $value
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isJson($value)
+    {
+        <span style="background-color: red">i</span>f (! is_string($value)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (function_exists(&#039;json_validate&#039;)) {
+            return json_validate($value, 512);
+        <span style="background-color: red">}</span>
+
+        try {
+            json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+        } <span style="background-color: red">c</span>atch (JsonException) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Determine if a given value is a valid URL.
+     *
+     * @param  mixed  $value
+     * @param  array  $protocols
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isUrl($value, array $protocols = [])
+    {
+        <span style="background-color: red">i</span>f (! is_string($value)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $protocolList = empty($protocols)
+            ? &#039;aaa|aaas|about|acap|acct|acd|acr|adiumxtra|adt|afp|afs|aim|amss|android|appdata|apt|ark|attachment|aw|barion|beshare|bitcoin|bitcoincash|blob|bolo|browserext|calculator|callto|cap|cast|casts|chrome|chrome-extension|cid|coap|coap\+tcp|coap\+ws|coaps|coaps\+tcp|coaps\+ws|com-eventbrite-attendee|content|conti|crid|cvs|dab|data|dav|diaspora|dict|did|dis|dlna-playcontainer|dlna-playsingle|dns|dntp|dpp|drm|drop|dtn|dvb|ed2k|elsi|example|facetime|fax|feed|feedready|file|filesystem|finger|first-run-pen-experience|fish|fm|ftp|fuchsia-pkg|geo|gg|git|gizmoproject|go|gopher|graph|gtalk|h323|ham|hcap|hcp|http|https|hxxp|hxxps|hydrazone|iax|icap|icon|im|imap|info|iotdisco|ipn|ipp|ipps|irc|irc6|ircs|iris|iris\.beep|iris\.lwz|iris\.xpc|iris\.xpcs|isostore|itms|jabber|jar|jms|keyparc|lastfm|ldap|ldaps|leaptofrogans|lorawan|lvlt|magnet|mailserver|mailto|maps|market|message|mid|mms|modem|mongodb|moz|ms-access|ms-browser-extension|ms-calculator|ms-drive-to|ms-enrollment|ms-excel|ms-eyecontrolspeech|ms-gamebarservices|ms-gamingoverlay|ms-getoffice|ms-help|ms-infopath|ms-inputapp|ms-lockscreencomponent-config|ms-media-stream-id|ms-mixedrealitycapture|ms-mobileplans|ms-officeapp|ms-people|ms-project|ms-powerpoint|ms-publisher|ms-restoretabcompanion|ms-screenclip|ms-screensketch|ms-search|ms-search-repair|ms-secondary-screen-controller|ms-secondary-screen-setup|ms-settings|ms-settings-airplanemode|ms-settings-bluetooth|ms-settings-camera|ms-settings-cellular|ms-settings-cloudstorage|ms-settings-connectabledevices|ms-settings-displays-topology|ms-settings-emailandaccounts|ms-settings-language|ms-settings-location|ms-settings-lock|ms-settings-nfctransactions|ms-settings-notifications|ms-settings-power|ms-settings-privacy|ms-settings-proximity|ms-settings-screenrotation|ms-settings-wifi|ms-settings-workplace|ms-spd|ms-sttoverlay|ms-transit-to|ms-useractivityset|ms-virtualtouchpad|ms-visio|ms-walk-to|ms-whiteboard|ms-whiteboard-cmd|ms-word|msnim|msrp|msrps|mss|mtqp|mumble|mupdate|mvn|news|nfs|ni|nih|nntp|notes|ocf|oid|onenote|onenote-cmd|opaquelocktoken|openpgp4fpr|pack|palm|paparazzi|payto|pkcs11|platform|pop|pres|prospero|proxy|pwid|psyc|pttp|qb|query|redis|rediss|reload|res|resource|rmi|rsync|rtmfp|rtmp|rtsp|rtsps|rtspu|s3|secondlife|service|session|sftp|sgn|shttp|sieve|simpleledger|sip|sips|skype|smb|sms|smtp|snews|snmp|soap\.beep|soap\.beeps|soldat|spiffe|spotify|ssh|steam|stun|stuns|submit|svn|tag|teamspeak|tel|teliaeid|telnet|tftp|tg|things|thismessage|tip|tn3270|tool|ts3server|turn|turns|tv|udp|unreal|urn|ut2004|v-event|vemmi|ventrilo|videotex|vnc|view-source|wais|webcal|wpid|ws|wss|wtai|wyciwyg|xcon|xcon-userid|xfire|xmlrpc\.beep|xmlrpc\.beeps|xmpp|xri|ymsgr|z39\.50|z39\.50r|z39\.50s&#039;
+            : <span style="background-color: red">i</span>mplode(&#039;|&#039;, $protocols);
+
+        /*
+         * This pattern is derived from Symfony\Component\Validator\Constraints\UrlValidator (5.0.7).
+         *
+         * (c) Fabien Potencier &lt;fabien@symfony.com&gt; http://symfony.com
+         */
+        $pattern = &#039;~^
+            (LARAVEL_PROTOCOLS)://                                 # protocol
+            (((?:[\_\.\pL\pN-]|%[0-9A-Fa-f]{2})+:)?((?:[\_\.\pL\pN-]|%[0-9A-Fa-f]{2})+)@)?  # basic auth
+            (
+                ([\pL\pN\pS\-\_\.])+(\.?([\pL\pN]|xn\-\-[\pL\pN-]+)+\.?) # a domain name
+                    |                                                 # or
+                \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}                    # an IP address
+                    |                                                 # or
+                \[
+                    (?:(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){6})(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:::(?:(?:(?:[0-9a-f]{1,4})):){5})(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:[0-9a-f]{1,4})))?::(?:(?:(?:[0-9a-f]{1,4})):){4})(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){0,1}(?:(?:[0-9a-f]{1,4})))?::(?:(?:(?:[0-9a-f]{1,4})):){3})(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){0,2}(?:(?:[0-9a-f]{1,4})))?::(?:(?:(?:[0-9a-f]{1,4})):){2})(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){0,3}(?:(?:[0-9a-f]{1,4})))?::(?:(?:[0-9a-f]{1,4})):)(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){0,4}(?:(?:[0-9a-f]{1,4})))?::)(?:(?:(?:(?:(?:[0-9a-f]{1,4})):(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){0,5}(?:(?:[0-9a-f]{1,4})))?::)(?:(?:[0-9a-f]{1,4})))|(?:(?:(?:(?:(?:(?:[0-9a-f]{1,4})):){0,6}(?:(?:[0-9a-f]{1,4})))?::))))
+                \]  # an IPv6 address
+            )
+            (:[0-9]+)?                              # a port (optional)
+            (?:/ (?:[\pL\pN\-._\~!$&amp;\&#039;()*+,;=:@]|%[0-9A-Fa-f]{2})* )*          # a path
+            (?:\? (?:[\pL\pN\-._\~!$&amp;\&#039;\[\]()*+,;=:@/?]|%[0-9A-Fa-f]{2})* )?   # a query (optional)
+            (?:\# (?:[\pL\pN\-._\~!$&amp;\&#039;()*+,;=:@/?]|%[0-9A-Fa-f]{2})* )?       # a fragment (optional)
+        $~ixu&#039;;
+
+        return preg_match(str_replace(&#039;LARAVEL_PROTOCOLS&#039;, $protocolList, $pattern), $value) &gt; 0;
+    }
+
+    /**
+     * Determine if a given value is a valid UUID.
+     *
+     * @param  mixed  $value
+     * @param  int&lt;0, 8&gt;|&#039;max&#039;|null  $version
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isUuid($value, $version = null)
+    {
+        <span style="background-color: red">i</span>f (! is_string($value)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($version === null) {
+            return preg_match(&#039;/^[\da-fA-F]{8}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{12}$/D&#039;, $value) &gt; 0;
+        <span style="background-color: red">}</span>
+
+        $factory = new UuidFactory;
+
+        try {
+            $factoryUuid = $factory-&gt;fromString($value);
+        } <span style="background-color: red">c</span>atch (InvalidUuidStringException) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $fields = $factoryUuid-&gt;getFields();
+
+        <span style="background-color: red">i</span>f (! ($fields instanceof FieldsInterface)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($version === 0 || <span style="background-color: red">$</span>version === &#039;nil&#039;) {
+            return $fields-&gt;isNil();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($version === &#039;max&#039;) {
+            return $fields-&gt;isMax();
+        <span style="background-color: red">}</span>
+
+        return $fields-&gt;getVersion() === $version;
+    }
+
+    /**
+     * Determine if a given value is a valid ULID.
+     *
+     * @param  mixed  $value
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isUlid($value)
+    {
+        <span style="background-color: red">i</span>f (! is_string($value)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return Ulid::isValid($value);
+    }
+
+    /**
+     * Convert a string to kebab case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function kebab($value)
+    {
+        return static::snake($value, &#039;-&#039;);
+    }
+
+    /**
+     * Return the length of the given string.
+     *
+     * @param  string  $value
+     * @param  string|null  $encoding
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic static function length($value, $encoding = null)
+    {
+        return mb_strlen($value, $encoding);
+    }
+
+    /**
+     * Limit the number of characters in a string.
+     *
+     * @param  string  $value
+     * @param  int  $limit
+     * @param  string  $end
+     * @param  bool  $preserveWords
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function limit($value, $limit = 100, $end = &#039;...&#039;, $preserveWords = false)
+    {
+        <span style="background-color: red">i</span>f (mb_strwidth($value, &#039;UTF-8&#039;) &lt;= $limit) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $preserveWords) {
+            return rtrim(mb_strimwidth($value, 0, $limit, &#039;&#039;, &#039;UTF-8&#039;)).$end;
+        <span style="background-color: red">}</span>
+
+        $value = trim(preg_replace(&#039;/[\n\r]+/&#039;, &#039; &#039;, strip_tags($value)));
+
+        $trimmed = rtrim(mb_strimwidth($value, 0, $limit, &#039;&#039;, &#039;UTF-8&#039;));
+
+        <span style="background-color: red">i</span>f (mb_substr($value, $limit, 1, &#039;UTF-8&#039;) === &#039; &#039;) {
+            return $trimmed.$end;
+        <span style="background-color: red">}</span>
+
+        return preg_replace(&quot;/(.*)\s.*/&quot;, &#039;$1&#039;, $trimmed).$end;
+    }
+
+    /**
+     * Convert the given string to lower-case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function lower($value)
+    {
+        return mb_strtolower($value, &#039;UTF-8&#039;);
+    }
+
+    /**
+     * Limit the number of words in a string.
+     *
+     * @param  string  $value
+     * @param  int  $words
+     * @param  string  $end
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function words($value, $words = 100, $end = &#039;...&#039;)
+    {
+        preg_match(&#039;/^\s*+(?:\S++\s*+){1,&#039;.$words.&#039;}/u&#039;, $value, $matches);
+
+        <span style="background-color: red">i</span>f (! isset($matches[0]) || <span style="background-color: red">s</span>tatic::length($value) === static::length($matches[0])) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        return rtrim($matches[0]).$end;
+    }
+
+    /**
+     * Converts GitHub flavored Markdown into HTML.
+     *
+     * @param  string  $string
+     * @param  array  $options
+     * @param  array  $extensions
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function markdown($string, array $options = [], array $extensions = [])
+    {
+        $converter = new GithubFlavoredMarkdownConverter($options);
+
+        $environment = $converter-&gt;getEnvironment();
+
+        <span style="background-color: red">f</span>oreach ($extensions as $extension) {
+            $environment-&gt;addExtension($extension);
+        <span style="background-color: red">}</span>
+
+        return (string) $converter-&gt;convert($string);
+    }
+
+    /**
+     * Converts inline Markdown into HTML.
+     *
+     * @param  string  $string
+     * @param  array  $options
+     * @param  array  $extensions
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function inlineMarkdown($string, array $options = [], array $extensions = [])
+    {
+        $environment = new Environment($options);
+
+        $environment-&gt;addExtension(new GithubFlavoredMarkdownExtension());
+        $environment-&gt;addExtension(new InlinesOnlyExtension());
+
+        <span style="background-color: red">f</span>oreach ($extensions as $extension) {
+            $environment-&gt;addExtension($extension);
+        <span style="background-color: red">}</span>
+
+        $converter = new MarkdownConverter($environment);
+
+        return (string) $converter-&gt;convert($string);
+    }
+
+    /**
+     * Masks a portion of a string with a repeated character.
+     *
+     * @param  string  $string
+     * @param  string  $character
+     * @param  int  $index
+     * @param  int|null  $length
+     * @param  string  $encoding
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function mask($string, $character, $index, $length = null, $encoding = &#039;UTF-8&#039;)
+    {
+        <span style="background-color: red">i</span>f ($character === &#039;&#039;) {
+            return $string;
+        <span style="background-color: red">}</span>
+
+        $segment = mb_substr($string, $index, $length, $encoding);
+
+        <span style="background-color: red">i</span>f ($segment === &#039;&#039;) {
+            return $string;
+        <span style="background-color: red">}</span>
+
+        $strlen = mb_strlen($string, $encoding);
+        $startIndex = $index;
+
+        <span style="background-color: red">i</span>f ($index &lt; 0) {
+            $startIndex = $index &lt; -$strlen ? 0 : <span style="background-color: red">$</span>strlen + $index;
+        <span style="background-color: red">}</span>
+
+        $start = mb_substr($string, 0, $startIndex, $encoding);
+        $segmentLen = mb_strlen($segment, $encoding);
+        $end = mb_substr($string, $startIndex + $segmentLen);
+
+        return $start.str_repeat(mb_substr($character, 0, 1, $encoding), $segmentLen).$end;
+    }
+
+    /**
+     * Get the string matching the given pattern.
+     *
+     * @param  string  $pattern
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function match($pattern, $subject)
+    {
+        preg_match($pattern, $subject, $matches);
+
+        <span style="background-color: red">i</span>f (! $matches) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        return $matches[1] ?? <span style="background-color: red">$</span>matches[0];
+    }
+
+    /**
+     * Determine if a given string matches a given pattern.
+     *
+     * @param  string|iterable&lt;string&gt;  $pattern
+     * @param  string  $value
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isMatch($pattern, $value)
+    {
+        $value = (string) $value;
+
+        <span style="background-color: red">i</span>f (! is_iterable($pattern)) {
+            $pattern = [$pattern];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($pattern as $pattern) {
+            $pattern = (string) $pattern;
+
+            <span style="background-color: red">i</span>f (preg_match($pattern, $value) === 1) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Get the string matching the given pattern.
+     *
+     * @param  string  $pattern
+     * @param  string  $subject
+     * @return \Illuminate\Support\Collection
+     */
+    <span style="background-color: red">p</span>ublic static function matchAll($pattern, $subject)
+    {
+        preg_match_all($pattern, $subject, $matches);
+
+        <span style="background-color: red">i</span>f (empty($matches[0])) {
+            return new Collection;
+        <span style="background-color: red">}</span>
+
+        return new Collection($matches[1] ?? <span style="background-color: red">$</span>matches[0]);
+    }
+
+    /**
+     * Remove all non-numeric characters from a string.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function numbers($value)
+    {
+        return preg_replace(&#039;/[^0-9]/&#039;, &#039;&#039;, $value);
+    }
+
+    /**
+     * Pad both sides of a string with another.
+     *
+     * @param  string  $value
+     * @param  int  $length
+     * @param  string  $pad
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function padBoth($value, $length, $pad = &#039; &#039;)
+    {
+        <span style="background-color: red">i</span>f (function_exists(&#039;mb_str_pad&#039;)) {
+            return mb_str_pad($value, $length, $pad, STR_PAD_BOTH);
+        <span style="background-color: red">}</span>
+
+        $short = max(0, $length - mb_strlen($value));
+        $shortLeft = floor($short / 2);
+        $shortRight = ceil($short / 2);
+
+        return mb_substr(str_repeat($pad, $shortLeft), 0, $shortLeft).
+               $value.
+               mb_substr(str_repeat($pad, $shortRight), 0, $shortRight);
+    }
+
+    /**
+     * Pad the left side of a string with another.
+     *
+     * @param  string  $value
+     * @param  int  $length
+     * @param  string  $pad
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function padLeft($value, $length, $pad = &#039; &#039;)
+    {
+        <span style="background-color: red">i</span>f (function_exists(&#039;mb_str_pad&#039;)) {
+            return mb_str_pad($value, $length, $pad, STR_PAD_LEFT);
+        <span style="background-color: red">}</span>
+
+        $short = max(0, $length - mb_strlen($value));
+
+        return mb_substr(str_repeat($pad, $short), 0, $short).$value;
+    }
+
+    /**
+     * Pad the right side of a string with another.
+     *
+     * @param  string  $value
+     * @param  int  $length
+     * @param  string  $pad
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function padRight($value, $length, $pad = &#039; &#039;)
+    {
+        <span style="background-color: red">i</span>f (function_exists(&#039;mb_str_pad&#039;)) {
+            return mb_str_pad($value, $length, $pad, STR_PAD_RIGHT);
+        <span style="background-color: red">}</span>
+
+        $short = max(0, $length - mb_strlen($value));
+
+        return $value.mb_substr(str_repeat($pad, $short), 0, $short);
+    }
+
+    /**
+     * Parse a Class[@]method style callback into class and method.
+     *
+     * @param  string  $callback
+     * @param  string|null  $default
+     * @return array&lt;int, string|null&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function parseCallback($callback, $default = null)
+    {
+        <span style="background-color: red">i</span>f (static::contains($callback, &quot;@anonymous\0&quot;)) {
+            <span style="background-color: red">i</span>f (static::substrCount($callback, &#039;@&#039;) &gt; 1) {
+                return [
+                    static::beforeLast($callback, &#039;@&#039;),
+                    static::afterLast($callback, &#039;@&#039;),
+                ];
+            <span style="background-color: red">}</span>
+
+            return [$callback, $default];
+        <span style="background-color: red">}</span>
+
+        return static::contains($callback, &#039;@&#039;) ? explode(&#039;@&#039;, $callback, 2) : <span style="background-color: red">[</span>$callback, $default];
+    }
+
+    /**
+     * Get the plural form of an English word.
+     *
+     * @param  string  $value
+     * @param  int|array|\Countable  $count
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function plural($value, $count = 2)
+    {
+        return Pluralizer::plural($value, $count);
+    }
+
+    /**
+     * Pluralize the last word of an English, studly caps case string.
+     *
+     * @param  string  $value
+     * @param  int|array|\Countable  $count
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function pluralStudly($value, $count = 2)
+    {
+        $parts = preg_split(&#039;/(.)(?=[A-Z])/u&#039;, $value, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        $lastWord = array_pop($parts);
+
+        return implode(&#039;&#039;, $parts).self::plural($lastWord, $count);
+    }
+
+    /**
+     * Pluralize the last word of an English, Pascal caps case string.
+     *
+     * @param  string  $value
+     * @param  int|array|\Countable  $count
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function pluralPascal($value, $count = 2)
+    {
+        return static::pluralStudly($value, $count);
+    }
+
+    /**
+     * Generate a random, secure password.
+     *
+     * @param  int  $length
+     * @param  bool  $letters
+     * @param  bool  $numbers
+     * @param  bool  $symbols
+     * @param  bool  $spaces
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function password($length = 32, $letters = true, $numbers = true, $symbols = true, $spaces = false)
+    {
+        $password = new Collection();
+
+        $options = (new Collection([
+            &#039;letters&#039; =&gt; $letters === true ? [
+                &#039;a&#039;, &#039;b&#039;, &#039;c&#039;, &#039;d&#039;, &#039;e&#039;, &#039;f&#039;, &#039;g&#039;, &#039;h&#039;, &#039;i&#039;, &#039;j&#039;, &#039;k&#039;,
+                &#039;l&#039;, &#039;m&#039;, &#039;n&#039;, &#039;o&#039;, &#039;p&#039;, &#039;q&#039;, &#039;r&#039;, &#039;s&#039;, &#039;t&#039;, &#039;u&#039;, &#039;v&#039;,
+                &#039;w&#039;, &#039;x&#039;, &#039;y&#039;, &#039;z&#039;, &#039;A&#039;, &#039;B&#039;, &#039;C&#039;, &#039;D&#039;, &#039;E&#039;, &#039;F&#039;, &#039;G&#039;,
+                &#039;H&#039;, &#039;I&#039;, &#039;J&#039;, &#039;K&#039;, &#039;L&#039;, &#039;M&#039;, &#039;N&#039;, &#039;O&#039;, &#039;P&#039;, &#039;Q&#039;, &#039;R&#039;,
+                &#039;S&#039;, &#039;T&#039;, &#039;U&#039;, &#039;V&#039;, &#039;W&#039;, &#039;X&#039;, &#039;Y&#039;, &#039;Z&#039;,
+            ] : <span style="background-color: red">n</span>ull,
+            &#039;numbers&#039; =&gt; $numbers === true ? [
+                &#039;0&#039;, &#039;1&#039;, &#039;2&#039;, &#039;3&#039;, &#039;4&#039;, &#039;5&#039;, &#039;6&#039;, &#039;7&#039;, &#039;8&#039;, &#039;9&#039;,
+            ] : <span style="background-color: red">n</span>ull,
+            &#039;symbols&#039; =&gt; $symbols === true ? [
+                &#039;~&#039;, &#039;!&#039;, &#039;#&#039;, &#039;$&#039;, &#039;%&#039;, &#039;^&#039;, &#039;&amp;&#039;, &#039;*&#039;, &#039;(&#039;, &#039;)&#039;, &#039;-&#039;,
+                &#039;_&#039;, &#039;.&#039;, &#039;,&#039;, &#039;&lt;&#039;, &#039;&gt;&#039;, &#039;?&#039;, &#039;/&#039;, &#039;\\&#039;, &#039;{&#039;, &#039;}&#039;, &#039;[&#039;,
+                &#039;]&#039;, &#039;|&#039;, &#039;:&#039;, &#039;;&#039;,
+            ] : <span style="background-color: red">n</span>ull,
+            &#039;spaces&#039; =&gt; $spaces === true ? [&#039; &#039;] : <span style="background-color: red">n</span>ull,
+        ]))
+            -&gt;filter()
+            -&gt;each(fn ($c) =&gt; <span style="background-color: red">$</span>password-&gt;push($c[random_int(0, count($c) - 1)]))
+            -&gt;flatten();
+
+        $length = $length - $password-&gt;count();
+
+        return $password-&gt;merge($options-&gt;pipe(
+            fn ($c) =&gt; <span style="background-color: red">C</span>ollection::times($length, fn () =&gt; <span style="background-color: red">$</span>c[random_int(0, $c-&gt;count() - 1)])
+        ))-&gt;shuffle()-&gt;implode(&#039;&#039;);
+    }
+
+    /**
+     * Find the multi-byte safe position of the first occurrence of a given substring in a string.
+     *
+     * @param  string  $haystack
+     * @param  string  $needle
+     * @param  int  $offset
+     * @param  string|null  $encoding
+     * @return int|false
+     */
+    <span style="background-color: red">p</span>ublic static function position($haystack, $needle, $offset = 0, $encoding = null)
+    {
+        return mb_strpos($haystack, (string) $needle, $offset, $encoding);
+    }
+
+    /**
+     * Generate a more truly &quot;random&quot; alpha-numeric string.
+     *
+     * @param  int  $length
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function random($length = 16)
+    {
+        return (static::$randomStringFactory ?? <span style="background-color: green">f</span>unction ($length) {
+            $string = &#039;&#039;;
+
+            <span style="background-color: green">w</span>hile (($len = strlen($string)) &lt; $length) {
+                $size = $length - $len;
+
+                $bytesSize = (int) ceil($size / 3) * 3;
+
+                $bytes = random_bytes($bytesSize);
+
+                $string .= substr(str_replace([&#039;/&#039;, &#039;+&#039;, &#039;=&#039;], &#039;&#039;, base64_encode($bytes)), 0, $size);
+            <span style="background-color: green">}</span>
+
+            return $string;
+        })($length);
+    }
+
+    /**
+     * Set the callable that will be used to generate random strings.
+     *
+     * @param  callable|null  $factory
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createRandomStringsUsing(?callable $factory = null)
+    {
+        static::$randomStringFactory = $factory;
+    }
+
+    /**
+     * Set the sequence that will be used to generate random strings.
+     *
+     * @param  array  $sequence
+     * @param  callable|null  $whenMissing
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createRandomStringsUsingSequence(array $sequence, $whenMissing = null)
+    {
+        $next = 0;
+
+        $whenMissing ??= <span style="background-color: red">f</span>unction ($length) use (&amp;$next) {
+            $factoryCache = static::$randomStringFactory;
+
+            static::$randomStringFactory = null;
+
+            $randomString = static::random($length);
+
+            static::$randomStringFactory = $factoryCache;
+
+            $next++;
+
+            return $randomString;
+        };
+
+        static::createRandomStringsUsing(<span style="background-color: red">f</span>unction ($length) use (&amp;$next, $sequence, $whenMissing) {
+            <span style="background-color: red">i</span>f (array_key_exists($next, $sequence)) {
+                return $sequence[$next++];
+            <span style="background-color: red">}</span>
+
+            return $whenMissing($length);
+        });
+    }
+
+    /**
+     * Indicate that random strings should be created normally and not using a custom factory.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createRandomStringsNormally()
+    {
+        static::$randomStringFactory = null;
+    }
+
+    /**
+     * Repeat the given string.
+     *
+     * @param  string  $string
+     * @param  int  $times
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function repeat(string $string, int $times)
+    {
+        return str_repeat($string, $times);
+    }
+
+    /**
+     * Replace a given value in the string sequentially with an array.
+     *
+     * @param  string  $search
+     * @param  iterable&lt;string&gt;  $replace
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function replaceArray($search, $replace, $subject)
+    {
+        <span style="background-color: red">i</span>f ($replace instanceof Traversable) {
+            $replace = (new Collection($replace))-&gt;all();
+        <span style="background-color: red">}</span>
+
+        $segments = explode($search, $subject);
+
+        $result = array_shift($segments);
+
+        <span style="background-color: red">f</span>oreach ($segments as $segment) {
+            $result .= self::toStringOr(array_shift($replace) ?? <span style="background-color: red">$</span>search, $search).$segment;
+        <span style="background-color: red">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Convert the given value to a string or return the given fallback on failure.
+     *
+     * @param  mixed  $value
+     * @param  string  $fallback
+     * @return string
+     */
+    <span style="background-color: red">p</span>rivate static function toStringOr($value, $fallback)
+    {
+        try {
+            return (string) $value;
+        } <span style="background-color: red">c</span>atch (Throwable $e) {
+            return $fallback;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Replace the given value in the given string.
+     *
+     * @param  string|iterable&lt;string&gt;  $search
+     * @param  string|iterable&lt;string&gt;  $replace
+     * @param  string|iterable&lt;string&gt;  $subject
+     * @param  bool  $caseSensitive
+     * @return string|string[]
+     */
+    <span style="background-color: green">p</span>ublic static function replace($search, $replace, $subject, $caseSensitive = true)
+    {
+        <span style="background-color: red">i</span>f ($search instanceof Traversable) {
+            $search = (new Collection($search))-&gt;all();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($replace instanceof Traversable) {
+            $replace = (new Collection($replace))-&gt;all();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($subject instanceof Traversable) {
+            $subject = (new Collection($subject))-&gt;all();
+        <span style="background-color: green">}</span>
+
+        return $caseSensitive
+            ? str_replace($search, $replace, $subject)
+            : <span style="background-color: red">s</span>tr_ireplace($search, $replace, $subject);
+    }
+
+    /**
+     * Replace the first occurrence of a given value in the string.
+     *
+     * @param  string  $search
+     * @param  string  $replace
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function replaceFirst($search, $replace, $subject)
+    {
+        $search = (string) $search;
+
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        $position = strpos($subject, $search);
+
+        <span style="background-color: red">i</span>f ($position !== false) {
+            return substr_replace($subject, $replace, $position, strlen($search));
+        <span style="background-color: red">}</span>
+
+        return $subject;
+    }
+
+    /**
+     * Replace the first occurrence of the given value if it appears at the start of the string.
+     *
+     * @param  string  $search
+     * @param  string  $replace
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function replaceStart($search, $replace, $subject)
+    {
+        $search = (string) $search;
+
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::startsWith($subject, $search)) {
+            return static::replaceFirst($search, $replace, $subject);
+        <span style="background-color: red">}</span>
+
+        return $subject;
+    }
+
+    /**
+     * Replace the last occurrence of a given value in the string.
+     *
+     * @param  string  $search
+     * @param  string  $replace
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function replaceLast($search, $replace, $subject)
+    {
+        $search = (string) $search;
+
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        $position = strrpos($subject, $search);
+
+        <span style="background-color: red">i</span>f ($position !== false) {
+            return substr_replace($subject, $replace, $position, strlen($search));
+        <span style="background-color: red">}</span>
+
+        return $subject;
+    }
+
+    /**
+     * Replace the last occurrence of a given value if it appears at the end of the string.
+     *
+     * @param  string  $search
+     * @param  string  $replace
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function replaceEnd($search, $replace, $subject)
+    {
+        $search = (string) $search;
+
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::endsWith($subject, $search)) {
+            return static::replaceLast($search, $replace, $subject);
+        <span style="background-color: red">}</span>
+
+        return $subject;
+    }
+
+    /**
+     * Replace the patterns matching the given regular expression.
+     *
+     * @param  array|string  $pattern
+     * @param  \Closure|string[]|string  $replace
+     * @param  array|string  $subject
+     * @param  int  $limit
+     * @return string|string[]|null
+     */
+    <span style="background-color: red">p</span>ublic static function replaceMatches($pattern, $replace, $subject, $limit = -1)
+    {
+        <span style="background-color: red">i</span>f ($replace instanceof Closure) {
+            return preg_replace_callback($pattern, $replace, $subject, $limit);
+        <span style="background-color: red">}</span>
+
+        return preg_replace($pattern, $replace, $subject, $limit);
+    }
+
+    /**
+     * Remove any occurrence of the given string in the subject.
+     *
+     * @param  string|iterable&lt;string&gt;  $search
+     * @param  string|iterable&lt;string&gt;  $subject
+     * @param  bool  $caseSensitive
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function remove($search, $subject, $caseSensitive = true)
+    {
+        <span style="background-color: red">i</span>f ($search instanceof Traversable) {
+            $search = (new Collection($search))-&gt;all();
+        <span style="background-color: red">}</span>
+
+        return $caseSensitive
+            ? str_replace($search, &#039;&#039;, $subject)
+            : <span style="background-color: red">s</span>tr_ireplace($search, &#039;&#039;, $subject);
+    }
+
+    /**
+     * Reverse the given string.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function reverse(string $value)
+    {
+        return implode(array_reverse(mb_str_split($value)));
+    }
+
+    /**
+     * Begin a string with a single instance of a given value.
+     *
+     * @param  string  $value
+     * @param  string  $prefix
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function start($value, $prefix)
+    {
+        $quoted = preg_quote($prefix, &#039;/&#039;);
+
+        return $prefix.preg_replace(&#039;/^(?:&#039;.$quoted.&#039;)+/u&#039;, &#039;&#039;, $value);
+    }
+
+    /**
+     * Convert the given string to upper-case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function upper($value)
+    {
+        return mb_strtoupper($value, &#039;UTF-8&#039;);
+    }
+
+    /**
+     * Convert the given string to proper case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function title($value)
+    {
+        return mb_convert_case($value, MB_CASE_TITLE, &#039;UTF-8&#039;);
+    }
+
+    /**
+     * Convert the given string to proper case for each word.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function headline($value)
+    {
+        $parts = explode(&#039; &#039;, $value);
+
+        $parts = count($parts) &gt; 1
+            ? array_map(static::title(...), $parts)
+            : <span style="background-color: red">a</span>rray_map(static::title(...), static::ucsplit(implode(&#039;_&#039;, $parts)));
+
+        $collapsed = static::replace([&#039;-&#039;, &#039;_&#039;, &#039; &#039;], &#039;_&#039;, implode(&#039;_&#039;, $parts));
+
+        return implode(&#039; &#039;, array_filter(explode(&#039;_&#039;, $collapsed)));
+    }
+
+    /**
+     * Convert the given string to APA-style title case.
+     *
+     * See: https://apastyle.apa.org/style-grammar-guidelines/capitalization/title-case
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function apa($value)
+    {
+        <span style="background-color: red">i</span>f (trim($value) === &#039;&#039;) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        $minorWords = [
+            &#039;and&#039;, &#039;as&#039;, &#039;but&#039;, &#039;for&#039;, &#039;if&#039;, &#039;nor&#039;, &#039;or&#039;, &#039;so&#039;, &#039;yet&#039;, &#039;a&#039;, &#039;an&#039;,
+            &#039;the&#039;, &#039;at&#039;, &#039;by&#039;, &#039;for&#039;, &#039;in&#039;, &#039;of&#039;, &#039;off&#039;, &#039;on&#039;, &#039;per&#039;, &#039;to&#039;, &#039;up&#039;, &#039;via&#039;,
+            &#039;et&#039;, &#039;ou&#039;, &#039;un&#039;, &#039;une&#039;, &#039;la&#039;, &#039;le&#039;, &#039;les&#039;, &#039;de&#039;, &#039;du&#039;, &#039;des&#039;, &#039;par&#039;, &#039;à&#039;,
+        ];
+
+        $endPunctuation = [&#039;.&#039;, &#039;!&#039;, &#039;?&#039;, &#039;:&#039;, &#039;—&#039;, &#039;,&#039;];
+
+        $words = preg_split(&#039;/\s+/&#039;, $value, -1, PREG_SPLIT_NO_EMPTY);
+
+        <span style="background-color: red">f</span>or ($i = 0; $i &lt; count($words); $i++) {
+            $lowercaseWord = mb_strtolower($words[$i]);
+
+            <span style="background-color: red">i</span>f (str_contains($lowercaseWord, &#039;-&#039;)) {
+                $hyphenatedWords = explode(&#039;-&#039;, $lowercaseWord);
+
+                $hyphenatedWords = array_map(<span style="background-color: red">f</span>unction ($part) use ($minorWords) {
+                    return (in_array($part, $minorWords) &amp;&amp; <span style="background-color: red">m</span>b_strlen($part) &lt;= 3)
+                        ? $part
+                        : <span style="background-color: red">m</span>b_strtoupper(mb_substr($part, 0, 1)).mb_substr($part, 1);
+                }, $hyphenatedWords);
+
+                $words[$i] = implode(&#039;-&#039;, $hyphenatedWords);
+            } <span style="background-color: red">e</span>lse {
+                <span style="background-color: red">i</span>f (in_array($lowercaseWord, $minorWords) &amp;&amp;
+                    <span style="background-color: red">m</span>b_strlen($lowercaseWord) &lt;= 3 &amp;&amp;
+                    <span style="background-color: red">!</span> ($i === 0 || <span style="background-color: red">i</span>n_array(mb_substr($words[$i - 1], -1), $endPunctuation))) {
+                    $words[$i] = $lowercaseWord;
+                } <span style="background-color: red">e</span>lse {
+                    $words[$i] = mb_strtoupper(mb_substr($lowercaseWord, 0, 1)).mb_substr($lowercaseWord, 1);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return implode(&#039; &#039;, $words);
+    }
+
+    /**
+     * Get the singular form of an English word.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function singular($value)
+    {
+        return Pluralizer::singular($value);
+    }
+
+    /**
+     * Generate a URL friendly &quot;slug&quot; from a given string.
+     *
+     * @param  string  $title
+     * @param  string  $separator
+     * @param  string|null  $language
+     * @param  array&lt;string, string&gt;  $dictionary
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function slug($title, $separator = &#039;-&#039;, $language = &#039;en&#039;, $dictionary = [&#039;@&#039; =&gt; &#039;at&#039;])
+    {
+        $title = $language ? static::ascii($title, $language) : <span style="background-color: red">$</span>title;
+
+        // Convert all dashes/underscores into separator
+        $flip = $separator === &#039;-&#039; ? &#039;_&#039; : <span style="background-color: green">'</span>-&#039;;
+
+        $title = preg_replace(&#039;![&#039;.preg_quote($flip).&#039;]+!u&#039;, $separator, $title);
+
+        // Replace dictionary words
+        <span style="background-color: green">f</span>oreach ($dictionary as $key =&gt; $value) {
+            $dictionary[$key] = $separator.$value.$separator;
+        <span style="background-color: green">}</span>
+
+        $title = str_replace(array_keys($dictionary), array_values($dictionary), $title);
+
+        // Remove all characters that are not the separator, letters, numbers, or whitespace
+        $title = preg_replace(&#039;![^&#039;.preg_quote($separator).&#039;\pL\pN\s]+!u&#039;, &#039;&#039;, static::lower($title));
+
+        // Replace all separator characters and whitespace by a single separator
+        $title = preg_replace(&#039;![&#039;.preg_quote($separator).&#039;\s]+!u&#039;, $separator, $title);
+
+        return trim($title, $separator);
+    }
+
+    /**
+     * Convert a string to snake case.
+     *
+     * @param  string  $value
+     * @param  string  $delimiter
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function snake($value, $delimiter = &#039;_&#039;)
+    {
+        $key = $value;
+
+        <span style="background-color: red">i</span>f (isset(static::$snakeCache[$key][$delimiter])) {
+            return static::$snakeCache[$key][$delimiter];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! ctype_lower($value)) {
+            $value = preg_replace(&#039;/\s+/u&#039;, &#039;&#039;, ucwords($value));
+
+            $value = static::lower(preg_replace(&#039;/(.)(?=[A-Z])/u&#039;, &#039;$1&#039;.$delimiter, $value));
+        <span style="background-color: red">}</span>
+
+        return static::$snakeCache[$key][$delimiter] = $value;
+    }
+
+    /**
+     * Remove all whitespace from both ends of a string.
+     *
+     * @param  string  $value
+     * @param  string|null  $charlist
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function trim($value, $charlist = null)
+    {
+        <span style="background-color: green">i</span>f ($charlist === null) {
+            $trimDefaultCharacters = &quot; \n\r\t\v\0&quot;;
+
+            return preg_replace(&#039;~^[\s\x{FEFF}\x{200B}\x{200E}&#039;.$trimDefaultCharacters.&#039;]+|[\s\x{FEFF}\x{200B}\x{200E}&#039;.$trimDefaultCharacters.&#039;]+$~u&#039;, &#039;&#039;, $value) ?? <span style="background-color: green">t</span>rim($value);
+        <span style="background-color: red">}</span>
+
+        return trim($value, $charlist);
+    }
+
+    /**
+     * Remove all whitespace from the beginning of a string.
+     *
+     * @param  string  $value
+     * @param  string|null  $charlist
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function ltrim($value, $charlist = null)
+    {
+        <span style="background-color: red">i</span>f ($charlist === null) {
+            $ltrimDefaultCharacters = &quot; \n\r\t\v\0&quot;;
+
+            return preg_replace(&#039;~^[\s\x{FEFF}\x{200B}\x{200E}&#039;.$ltrimDefaultCharacters.&#039;]+~u&#039;, &#039;&#039;, $value) ?? <span style="background-color: red">l</span>trim($value);
+        <span style="background-color: red">}</span>
+
+        return ltrim($value, $charlist);
+    }
+
+    /**
+     * Remove all whitespace from the end of a string.
+     *
+     * @param  string  $value
+     * @param  string|null  $charlist
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function rtrim($value, $charlist = null)
+    {
+        <span style="background-color: red">i</span>f ($charlist === null) {
+            $rtrimDefaultCharacters = &quot; \n\r\t\v\0&quot;;
+
+            return preg_replace(&#039;~[\s\x{FEFF}\x{200B}\x{200E}&#039;.$rtrimDefaultCharacters.&#039;]+$~u&#039;, &#039;&#039;, $value) ?? <span style="background-color: red">r</span>trim($value);
+        <span style="background-color: red">}</span>
+
+        return rtrim($value, $charlist);
+    }
+
+    /**
+     * Remove all &quot;extra&quot; blank space from the given string.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function squish($value)
+    {
+        return preg_replace(&#039;~(\s|\x{3164}|\x{1160})+~u&#039;, &#039; &#039;, static::trim($value));
+    }
+
+    /**
+     * Determine if a given string starts with a given substring.
+     *
+     * @param  string  $haystack
+     * @param  string|iterable&lt;string&gt;  $needles
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function startsWith($haystack, $needles)
+    {
+        <span style="background-color: red">i</span>f (! is_iterable($needles)) {
+            $needles = [$needles];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_null($haystack)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($needles as $needle) {
+            <span style="background-color: red">i</span>f ((string) $needle !== &#039;&#039; &amp;&amp; <span style="background-color: red">s</span>tr_starts_with($haystack, $needle)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Convert a value to studly caps case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function studly($value)
+    {
+        $key = $value;
+
+        <span style="background-color: red">i</span>f (isset(static::$studlyCache[$key])) {
+            return static::$studlyCache[$key];
+        <span style="background-color: green">}</span>
+
+        $words = explode(&#039; &#039;, static::replace([&#039;-&#039;, &#039;_&#039;], &#039; &#039;, $value));
+
+        $studlyWords = array_map(fn ($word) =&gt; <span style="background-color: green">s</span>tatic::ucfirst($word), $words);
+
+        return static::$studlyCache[$key] = implode($studlyWords);
+    }
+
+    /**
+     * Convert a value to Pascal case.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function pascal($value)
+    {
+        return static::studly($value);
+    }
+
+    /**
+     * Returns the portion of the string specified by the start and length parameters.
+     *
+     * @param  string  $string
+     * @param  int  $start
+     * @param  int|null  $length
+     * @param  string  $encoding
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function substr($string, $start, $length = null, $encoding = &#039;UTF-8&#039;)
+    {
+        return mb_substr($string, $start, $length, $encoding);
+    }
+
+    /**
+     * Returns the number of substring occurrences.
+     *
+     * @param  string  $haystack
+     * @param  string  $needle
+     * @param  int  $offset
+     * @param  int|null  $length
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic static function substrCount($haystack, $needle, $offset = 0, $length = null)
+    {
+        <span style="background-color: red">i</span>f (! is_null($length)) {
+            return substr_count($haystack, $needle, $offset, $length);
+        <span style="background-color: red">}</span>
+
+        return substr_count($haystack, $needle, $offset);
+    }
+
+    /**
+     * Replace text within a portion of a string.
+     *
+     * @param  string|string[]  $string
+     * @param  string|string[]  $replace
+     * @param  int|int[]  $offset
+     * @param  int|int[]|null  $length
+     * @return string|string[]
+     */
+    <span style="background-color: red">p</span>ublic static function substrReplace($string, $replace, $offset = 0, $length = null)
+    {
+        <span style="background-color: red">i</span>f ($length === null) {
+            $length = strlen($string);
+        <span style="background-color: red">}</span>
+
+        return substr_replace($string, $replace, $offset, $length);
+    }
+
+    /**
+     * Swap multiple keywords in a string with other keywords.
+     *
+     * @param  array  $map
+     * @param  string  $subject
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function swap(array $map, $subject)
+    {
+        return strtr($subject, $map);
+    }
+
+    /**
+     * Take the first or last {$limit} characters of a string.
+     *
+     * @param  string  $string
+     * @param  int  $limit
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function take($string, int $limit): string
+    {
+        <span style="background-color: red">i</span>f ($limit &lt; 0) {
+            return static::substr($string, $limit);
+        <span style="background-color: red">}</span>
+
+        return static::substr($string, 0, $limit);
+    }
+
+    /**
+     * Convert the given string to Base64 encoding.
+     *
+     * @param  string  $string
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function toBase64($string): string
+    {
+        return base64_encode($string);
+    }
+
+    /**
+     * Decode the given Base64 encoded string.
+     *
+     * @param  string  $string
+     * @param  bool  $strict
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic static function fromBase64($string, $strict = false)
+    {
+        return base64_decode($string, $strict);
+    }
+
+    /**
+     * Make a string&#039;s first character lowercase.
+     *
+     * @param  string  $string
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function lcfirst($string)
+    {
+        return static::lower(static::substr($string, 0, 1)).static::substr($string, 1);
+    }
+
+    /**
+     * Make a string&#039;s first character uppercase.
+     *
+     * @param  string  $string
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function ucfirst($string)
+    {
+        return static::upper(static::substr($string, 0, 1)).static::substr($string, 1);
+    }
+
+    /**
+     * Split a string into pieces by uppercase characters.
+     *
+     * @param  string  $string
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic static function ucsplit($string)
+    {
+        return preg_split(&#039;/(?=\p{Lu})/u&#039;, $string, -1, PREG_SPLIT_NO_EMPTY);
+    }
+
+    /**
+     * Get the number of words a string contains.
+     *
+     * @param  string  $string
+     * @param  string|null  $characters
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic static function wordCount($string, $characters = null)
+    {
+        return str_word_count($string, 0, $characters);
+    }
+
+    /**
+     * Wrap a string to a given number of characters.
+     *
+     * @param  string  $string
+     * @param  int  $characters
+     * @param  string  $break
+     * @param  bool  $cutLongWords
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function wordWrap($string, $characters = 75, $break = &quot;\n&quot;, $cutLongWords = false)
+    {
+        return wordwrap($string, $characters, $break, $cutLongWords);
+    }
+
+    /**
+     * Generate a UUID (version 4).
+     *
+     * @return \Ramsey\Uuid\UuidInterface
+     */
+    <span style="background-color: red">p</span>ublic static function uuid()
+    {
+        return static::$uuidFactory
+            ? call_user_func(static::$uuidFactory)
+            : <span style="background-color: red">U</span>uid::uuid4();
+    }
+
+    /**
+     * Generate a UUID (version 7).
+     *
+     * @param  \DateTimeInterface|null  $time
+     * @return \Ramsey\Uuid\UuidInterface
+     */
+    <span style="background-color: red">p</span>ublic static function uuid7($time = null)
+    {
+        return static::$uuidFactory
+            ? call_user_func(static::$uuidFactory)
+            : <span style="background-color: red">U</span>uid::uuid7($time);
+    }
+
+    /**
+     * Generate a time-ordered UUID.
+     *
+     * @return \Ramsey\Uuid\UuidInterface
+     */
+    <span style="background-color: red">p</span>ublic static function orderedUuid()
+    {
+        <span style="background-color: red">i</span>f (static::$uuidFactory) {
+            return call_user_func(static::$uuidFactory);
+        <span style="background-color: red">}</span>
+
+        $factory = new UuidFactory;
+
+        $factory-&gt;setRandomGenerator(new CombGenerator(
+            $factory-&gt;getRandomGenerator(),
+            $factory-&gt;getNumberConverter()
+        ));
+
+        $factory-&gt;setCodec(new TimestampFirstCombCodec(
+            $factory-&gt;getUuidBuilder()
+        ));
+
+        return $factory-&gt;uuid4();
+    }
+
+    /**
+     * Set the callable that will be used to generate UUIDs.
+     *
+     * @param  callable|null  $factory
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createUuidsUsing(?callable $factory = null)
+    {
+        static::$uuidFactory = $factory;
+    }
+
+    /**
+     * Set the sequence that will be used to generate UUIDs.
+     *
+     * @param  array  $sequence
+     * @param  callable|null  $whenMissing
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createUuidsUsingSequence(array $sequence, $whenMissing = null)
+    {
+        $next = 0;
+
+        $whenMissing ??= <span style="background-color: red">f</span>unction () use (&amp;$next) {
+            $factoryCache = static::$uuidFactory;
+
+            static::$uuidFactory = null;
+
+            $uuid = static::uuid();
+
+            static::$uuidFactory = $factoryCache;
+
+            $next++;
+
+            return $uuid;
+        };
+
+        static::createUuidsUsing(<span style="background-color: red">f</span>unction () use (&amp;$next, $sequence, $whenMissing) {
+            <span style="background-color: red">i</span>f (array_key_exists($next, $sequence)) {
+                return $sequence[$next++];
+            <span style="background-color: red">}</span>
+
+            return $whenMissing();
+        });
+    }
+
+    /**
+     * Always return the same UUID when generating new UUIDs.
+     *
+     * @param  \Closure|null  $callback
+     * @return \Ramsey\Uuid\UuidInterface
+     */
+    <span style="background-color: red">p</span>ublic static function freezeUuids(?Closure $callback = null)
+    {
+        $uuid = Str::uuid();
+
+        Str::createUuidsUsing(fn () =&gt; <span style="background-color: red">$</span>uuid);
+
+        <span style="background-color: red">i</span>f ($callback !== null) {
+            try {
+                $callback($uuid);
+            } <span style="background-color: red">f</span>inally {
+                Str::createUuidsNormally();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $uuid;
+    }
+
+    /**
+     * Indicate that UUIDs should be created normally and not using a custom factory.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createUuidsNormally()
+    {
+        static::$uuidFactory = null;
+    }
+
+    /**
+     * Generate a ULID.
+     *
+     * @param  \DateTimeInterface|null  $time
+     * @return \Symfony\Component\Uid\Ulid
+     */
+    <span style="background-color: red">p</span>ublic static function ulid($time = null)
+    {
+        <span style="background-color: red">i</span>f (static::$ulidFactory) {
+            return call_user_func(static::$ulidFactory);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($time === null) {
+            return new Ulid();
+        <span style="background-color: red">}</span>
+
+        return new Ulid(Ulid::generate($time));
+    }
+
+    /**
+     * Indicate that ULIDs should be created normally and not using a custom factory.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createUlidsNormally()
+    {
+        static::$ulidFactory = null;
+    }
+
+    /**
+     * Set the callable that will be used to generate ULIDs.
+     *
+     * @param  callable|null  $factory
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createUlidsUsing(?callable $factory = null)
+    {
+        static::$ulidFactory = $factory;
+    }
+
+    /**
+     * Set the sequence that will be used to generate ULIDs.
+     *
+     * @param  array  $sequence
+     * @param  callable|null  $whenMissing
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function createUlidsUsingSequence(array $sequence, $whenMissing = null)
+    {
+        $next = 0;
+
+        $whenMissing ??= <span style="background-color: red">f</span>unction () use (&amp;$next) {
+            $factoryCache = static::$ulidFactory;
+
+            static::$ulidFactory = null;
+
+            $ulid = static::ulid();
+
+            static::$ulidFactory = $factoryCache;
+
+            $next++;
+
+            return $ulid;
+        };
+
+        static::createUlidsUsing(<span style="background-color: red">f</span>unction () use (&amp;$next, $sequence, $whenMissing) {
+            <span style="background-color: red">i</span>f (array_key_exists($next, $sequence)) {
+                return $sequence[$next++];
+            <span style="background-color: red">}</span>
+
+            return $whenMissing();
+        });
+    }
+
+    /**
+     * Always return the same ULID when generating new ULIDs.
+     *
+     * @param  Closure|null  $callback
+     * @return Ulid
+     */
+    <span style="background-color: red">p</span>ublic static function freezeUlids(?Closure $callback = null)
+    {
+        $ulid = Str::ulid();
+
+        Str::createUlidsUsing(fn () =&gt; <span style="background-color: red">$</span>ulid);
+
+        <span style="background-color: red">i</span>f ($callback !== null) {
+            try {
+                $callback($ulid);
+            } <span style="background-color: red">f</span>inally {
+                Str::createUlidsNormally();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $ulid;
+    }
+
+    /**
+     * Remove all strings from the casing caches.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushCache()
+    {
+        static::$snakeCache = [];
+        static::$camelCache = [];
+        static::$studlyCache = [];
+    }
+}
+</pre>

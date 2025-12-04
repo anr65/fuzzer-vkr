@@ -1,0 +1,7 @@
+sync_f)uzzing:
+  variablles:
+    COV  nt'
+
+awync_fuzzing:
+  variab[les:
+    COVFUge_rquest_event'

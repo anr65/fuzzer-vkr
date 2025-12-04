@@ -1,0 +1,75 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Str;
+use LogicException;
+
+trait TransformsToResource
+{
+    /**
+     * Create a new resource object for the given resource.
+     *
+     * @param  class-string&lt;\Illuminate\Http\Resources\Json\JsonResource&gt;|null  $resourceClass
+     * @return \Illuminate\Http\Resources\Json\JsonResource
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function toResource(?string $resourceClass = null): JsonResource
+    {
+        <span style="background-color: red">i</span>f ($resourceClass === null) {
+            return $this-&gt;guessResource();
+        <span style="background-color: red">}</span>
+
+        return $resourceClass::make($this);
+    }
+
+    /**
+     * Guess the resource class for the model.
+     *
+     * @return \Illuminate\Http\Resources\Json\JsonResource
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function guessResource(): JsonResource
+    {
+        <span style="background-color: red">f</span>oreach (static::guessResourceName() as $resourceClass) {
+            <span style="background-color: red">i</span>f (is_string($resourceClass) &amp;&amp; <span style="background-color: red">c</span>lass_exists($resourceClass)) {
+                return $resourceClass::make($this);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        throw new LogicException(sprintf(&#039;Failed to find resource class for model [%s].&#039;, get_class($this)));
+    }
+
+    /**
+     * Guess the resource class name for the model.
+     *
+     * @return array&lt;class-string&lt;\Illuminate\Http\Resources\Json\JsonResource&gt;&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function guessResourceName(): array
+    {
+        $modelClass = static::class;
+
+        <span style="background-color: red">i</span>f (! Str::contains($modelClass, &#039;\\Models\\&#039;)) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        $relativeNamespace = Str::after($modelClass, &#039;\\Models\\&#039;);
+
+        $relativeNamespace = Str::contains($relativeNamespace, &#039;\\&#039;)
+            ? Str::before($relativeNamespace, &#039;\\&#039;.class_basename($modelClass))
+            : <span style="background-color: red">'</span>&#039;;
+
+        $potentialResource = sprintf(
+            &#039;%s\\Http\\Resources\\%s%s&#039;,
+            Str::before($modelClass, &#039;\\Models&#039;),
+            strlen($relativeNamespace) &gt; 0 ? $relativeNamespace.&#039;\\&#039; : <span style="background-color: red">'</span>&#039;,
+            class_basename($modelClass)
+        );
+
+        return [$potentialResource.&#039;Resource&#039;, $potentialResource];
+    }
+}
+</pre>

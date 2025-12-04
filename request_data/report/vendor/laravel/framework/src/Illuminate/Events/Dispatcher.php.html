@@ -1,0 +1,779 @@
+<pre>&lt;?php
+
+namespace Illuminate\Events;
+
+use Closure;
+use Exception;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Broadcasting\Factory as BroadcastFactory;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Container\Container as ContainerContract;
+use Illuminate\Contracts\Events\Dispatcher as DispatcherContract;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
+use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\ReflectsClosures;
+use ReflectionClass;
+
+class Dispatcher implements DispatcherContract
+{
+    use Macroable, ReflectsClosures;
+
+    /**
+     * The IoC container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+    protected $container;
+
+    /**
+     * The registered event listeners.
+     *
+     * @var array
+     */
+    protected $listeners = [];
+
+    /**
+     * The wildcard listeners.
+     *
+     * @var array
+     */
+    protected $wildcards = [];
+
+    /**
+     * The cached wildcard listeners.
+     *
+     * @var array
+     */
+    protected $wildcardsCache = [];
+
+    /**
+     * The queue resolver instance.
+     *
+     * @var callable
+     */
+    protected $queueResolver;
+
+    /**
+     * The database transaction manager resolver instance.
+     *
+     * @var callable
+     */
+    protected $transactionManagerResolver;
+
+    /**
+     * Create a new event dispatcher instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container|null  $container
+     */
+    <span style="background-color: red">p</span>ublic function __construct(?ContainerContract $container = null)
+    {
+        $this-&gt;container = $container ?: <span style="background-color: red">n</span>ew Container;
+    }
+
+    /**
+     * Register an event listener with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string|string  $events
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string|null  $listener
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function listen($events, $listener = null)
+    {
+        <span style="background-color: green">i</span>f ($events instanceof Closure) {
+            return (new Collection($this-&gt;firstClosureParameterTypes($events)))
+                -&gt;each(<span style="background-color: green">f</span>unction ($event) use ($events) {
+                    $this-&gt;listen($event, $events);
+                });
+        } <span style="background-color: red">e</span>lseif ($events instanceof QueuedClosure) {
+            return (new Collection($this-&gt;firstClosureParameterTypes($events-&gt;closure)))
+                -&gt;each(<span style="background-color: red">f</span>unction ($event) use ($events) {
+                    $this-&gt;listen($event, $events-&gt;resolve());
+                });
+        } <span style="background-color: red">e</span>lseif ($listener instanceof QueuedClosure) {
+            $listener = $listener-&gt;resolve();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ((array) $events as $event) {
+            <span style="background-color: red">i</span>f (str_contains($event, &#039;*&#039;)) {
+                $this-&gt;setupWildcardListen($event, $listener);
+            } <span style="background-color: green">e</span>lse {
+                $this-&gt;listeners[$event][] = $listener;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Setup a wildcard listener callback.
+     *
+     * @param  string  $event
+     * @param  \Closure|string  $listener
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function setupWildcardListen($event, $listener)
+    {
+        $this-&gt;wildcards[$event][] = $listener;
+
+        $this-&gt;wildcardsCache = [];
+    }
+
+    /**
+     * Determine if a given event has listeners.
+     *
+     * @param  string  $eventName
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasListeners($eventName)
+    {
+        return isset($this-&gt;listeners[$eventName]) ||
+               <span style="background-color: red">i</span>sset($this-&gt;wildcards[$eventName]) ||
+               <span style="background-color: red">$</span>this-&gt;hasWildcardListeners($eventName);
+    }
+
+    /**
+     * Determine if the given event has any wildcard listeners.
+     *
+     * @param  string  $eventName
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasWildcardListeners($eventName)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;wildcards as $key =&gt; $listeners) {
+            <span style="background-color: red">i</span>f (Str::is($key, $eventName)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Register an event and payload to be fired later.
+     *
+     * @param  string  $event
+     * @param  object|array  $payload
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function push($event, $payload = [])
+    {
+        $this-&gt;listen($event.&#039;_pushed&#039;, <span style="background-color: red">f</span>unction () use ($event, $payload) {
+            $this-&gt;dispatch($event, $payload);
+        });
+    }
+
+    /**
+     * Flush a set of pushed events.
+     *
+     * @param  string  $event
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flush($event)
+    {
+        $this-&gt;dispatch($event.&#039;_pushed&#039;);
+    }
+
+    /**
+     * Register an event subscriber with the dispatcher.
+     *
+     * @param  object|string  $subscriber
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function subscribe($subscriber)
+    {
+        $subscriber = $this-&gt;resolveSubscriber($subscriber);
+
+        $events = $subscriber-&gt;subscribe($this);
+
+        <span style="background-color: red">i</span>f (is_array($events)) {
+            <span style="background-color: red">f</span>oreach ($events as $event =&gt; $listeners) {
+                <span style="background-color: red">f</span>oreach (Arr::wrap($listeners) as $listener) {
+                    <span style="background-color: red">i</span>f (is_string($listener) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($subscriber, $listener)) {
+                        $this-&gt;listen($event, [get_class($subscriber), $listener]);
+
+                        continue;
+                    <span style="background-color: red">}</span>
+
+                    $this-&gt;listen($event, $listener);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Resolve the subscriber instance.
+     *
+     * @param  object|string  $subscriber
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function resolveSubscriber($subscriber)
+    {
+        <span style="background-color: red">i</span>f (is_string($subscriber)) {
+            return $this-&gt;container-&gt;make($subscriber);
+        <span style="background-color: red">}</span>
+
+        return $subscriber;
+    }
+
+    /**
+     * Fire an event until the first non-null response is returned.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function until($event, $payload = [])
+    {
+        return $this-&gt;dispatch($event, $payload, true);
+    }
+
+    /**
+     * Fire an event and call the listeners.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @param  bool  $halt
+     * @return array|null
+     */
+    <span style="background-color: green">p</span>ublic function dispatch($event, $payload = [], $halt = false)
+    {
+        // When the given &quot;event&quot; is actually an object we will assume it is an event
+        // object and use the class as the event name and this event itself as the
+        // payload to the handler, which makes object based events quite simple.
+        [$isEventObject, $event, $payload] = [
+            is_object($event),
+            ...$this-&gt;parseEventAndPayload($event, $payload),
+        ];
+
+        // If the event is not intended to be dispatched unless the current database
+        // transaction is successful, we&#039;ll register a callback which will handle
+        // dispatching this event on the next successful DB transaction commit.
+        <span style="background-color: red">i</span>f ($isEventObject &amp;&amp;
+            <span style="background-color: green">$</span>payload[0] instanceof ShouldDispatchAfterCommit &amp;&amp;
+            <span style="background-color: red">!</span> is_null($transactions = $this-&gt;resolveTransactionManager())) {
+            $transactions-&gt;addCallback(
+                fn () =&gt; <span style="background-color: red">$</span>this-&gt;invokeListeners($event, $payload, $halt)
+            );
+
+            return null;
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;invokeListeners($event, $payload, $halt);
+    }
+
+    /**
+     * Broadcast an event and call its listeners.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @param  bool  $halt
+     * @return array|null
+     */
+    <span style="background-color: green">p</span>rotected function invokeListeners($event, $payload, $halt = false)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;shouldBroadcast($payload)) {
+            $this-&gt;broadcastEvent($payload[0]);
+        <span style="background-color: green">}</span>
+
+        $responses = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;getListeners($event) as $listener) {
+            $response = $listener($event, $payload);
+
+            // If a response is returned from the listener and event halting is enabled
+            // we will just return this response, and not call the rest of the event
+            // listeners. Otherwise we will add the response on the response list.
+            <span style="background-color: red">i</span>f ($halt &amp;&amp; <span style="background-color: red">!</span> is_null($response)) {
+                return $response;
+            <span style="background-color: red">}</span>
+
+            // If a boolean false is returned from a listener, we will stop propagating
+            // the event to any further listeners down in the chain, else we keep on
+            // looping through the listeners and firing every one in our sequence.
+            <span style="background-color: red">i</span>f ($response === false) {
+                break;
+            <span style="background-color: red">}</span>
+
+            $responses[] = $response;
+        <span style="background-color: green">}</span>
+
+        return $halt ? null : <span style="background-color: green">$</span>responses;
+    }
+
+    /**
+     * Parse the given event and payload and prepare them for dispatching.
+     *
+     * @param  mixed  $event
+     * @param  mixed  $payload
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function parseEventAndPayload($event, $payload)
+    {
+        <span style="background-color: green">i</span>f (is_object($event)) {
+            [$payload, $event] = [[$event], get_class($event)];
+        <span style="background-color: green">}</span>
+
+        return [$event, Arr::wrap($payload)];
+    }
+
+    /**
+     * Determine if the payload has a broadcastable event.
+     *
+     * @param  array  $payload
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function shouldBroadcast(array $payload)
+    {
+        return isset($payload[0]) &amp;&amp;
+               <span style="background-color: green">$</span>payload[0] instanceof ShouldBroadcast &amp;&amp;
+               <span style="background-color: red">$</span>this-&gt;broadcastWhen($payload[0]);
+    }
+
+    /**
+     * Check if the event should be broadcasted by the condition.
+     *
+     * @param  mixed  $event
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function broadcastWhen($event)
+    {
+        return method_exists($event, &#039;broadcastWhen&#039;)
+            ? $event-&gt;broadcastWhen()
+            : <span style="background-color: red">t</span>rue;
+    }
+
+    /**
+     * Broadcast the given event class.
+     *
+     * @param  \Illuminate\Contracts\Broadcasting\ShouldBroadcast  $event
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function broadcastEvent($event)
+    {
+        $this-&gt;container-&gt;make(BroadcastFactory::class)-&gt;queue($event);
+    }
+
+    /**
+     * Get all of the listeners for a given event name.
+     *
+     * @param  string  $eventName
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function getListeners($eventName)
+    {
+        $listeners = array_merge(
+            $this-&gt;prepareListeners($eventName),
+            $this-&gt;wildcardsCache[$eventName] ?? <span style="background-color: green">$</span>this-&gt;getWildcardListeners($eventName)
+        );
+
+        return class_exists($eventName, false)
+            ? $this-&gt;addInterfaceListeners($eventName, $listeners)
+            : <span style="background-color: green">$</span>listeners;
+    }
+
+    /**
+     * Get the wildcard listeners for the event.
+     *
+     * @param  string  $eventName
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function getWildcardListeners($eventName)
+    {
+        $wildcards = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;wildcards as $key =&gt; $listeners) {
+            <span style="background-color: red">i</span>f (Str::is($key, $eventName)) {
+                <span style="background-color: red">f</span>oreach ($listeners as $listener) {
+                    $wildcards[] = $this-&gt;makeListener($listener, true);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;wildcardsCache[$eventName] = $wildcards;
+    }
+
+    /**
+     * Add the listeners for the event&#039;s interfaces to the given array.
+     *
+     * @param  string  $eventName
+     * @param  array  $listeners
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function addInterfaceListeners($eventName, array $listeners = [])
+    {
+        <span style="background-color: red">f</span>oreach (class_implements($eventName) as $interface) {
+            <span style="background-color: red">i</span>f (isset($this-&gt;listeners[$interface])) {
+                <span style="background-color: red">f</span>oreach ($this-&gt;prepareListeners($interface) as $names) {
+                    $listeners = array_merge($listeners, (array) $names);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return $listeners;
+    }
+
+    /**
+     * Prepare the listeners for a given event.
+     *
+     * @param  string  $eventName
+     * @return \Closure[]
+     */
+    <span style="background-color: green">p</span>rotected function prepareListeners(string $eventName)
+    {
+        $listeners = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;listeners[$eventName] ?? <span style="background-color: green">[</span>] as $listener) {
+            $listeners[] = $this-&gt;makeListener($listener);
+        <span style="background-color: green">}</span>
+
+        return $listeners;
+    }
+
+    /**
+     * Register an event listener with the dispatcher.
+     *
+     * @param  \Closure|string|array  $listener
+     * @param  bool  $wildcard
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>ublic function makeListener($listener, $wildcard = false)
+    {
+        <span style="background-color: red">i</span>f (is_string($listener)) {
+            return $this-&gt;createClassListener($listener, $wildcard);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_array($listener) &amp;&amp; <span style="background-color: red">i</span>sset($listener[0]) &amp;&amp; <span style="background-color: red">i</span>s_string($listener[0])) {
+            return $this-&gt;createClassListener($listener, $wildcard);
+        <span style="background-color: red">}</span>
+
+        return <span style="background-color: red">f</span>unction ($event, $payload) use ($listener, $wildcard) {
+            <span style="background-color: red">i</span>f ($wildcard) {
+                return $listener($event, $payload);
+            <span style="background-color: red">}</span>
+
+            return $listener(...array_values($payload));
+        };
+    }
+
+    /**
+     * Create a class based listener using the IoC container.
+     *
+     * @param  string  $listener
+     * @param  bool  $wildcard
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>ublic function createClassListener($listener, $wildcard = false)
+    {
+        return <span style="background-color: red">f</span>unction ($event, $payload) use ($listener, $wildcard) {
+            <span style="background-color: red">i</span>f ($wildcard) {
+                return call_user_func($this-&gt;createClassCallable($listener), $event, $payload);
+            <span style="background-color: red">}</span>
+
+            $callable = $this-&gt;createClassCallable($listener);
+
+            return $callable(...array_values($payload));
+        };
+    }
+
+    /**
+     * Create the class based event callable.
+     *
+     * @param  array|string  $listener
+     * @return callable
+     */
+    <span style="background-color: red">p</span>rotected function createClassCallable($listener)
+    {
+        [$class, $method] = is_array($listener)
+            ? $listener
+            : <span style="background-color: red">$</span>this-&gt;parseClassCallable($listener);
+
+        <span style="background-color: red">i</span>f (! method_exists($class, $method)) {
+            $method = &#039;__invoke&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;handlerShouldBeQueued($class)) {
+            return $this-&gt;createQueuedHandlerCallable($class, $method);
+        <span style="background-color: red">}</span>
+
+        $listener = $this-&gt;container-&gt;make($class);
+
+        return $this-&gt;handlerShouldBeDispatchedAfterDatabaseTransactions($listener)
+            ? $this-&gt;createCallbackForListenerRunningAfterCommits($listener, $method)
+            : <span style="background-color: red">[</span>$listener, $method];
+    }
+
+    /**
+     * Parse the class listener into class and method.
+     *
+     * @param  string  $listener
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function parseClassCallable($listener)
+    {
+        return Str::parseCallback($listener, &#039;handle&#039;);
+    }
+
+    /**
+     * Determine if the event handler class should be queued.
+     *
+     * @param  string  $class
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function handlerShouldBeQueued($class)
+    {
+        try {
+            return (new ReflectionClass($class))-&gt;implementsInterface(
+                ShouldQueue::class
+            );
+        } <span style="background-color: red">c</span>atch (Exception) {
+            return false;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a callable for putting an event handler on the queue.
+     *
+     * @param  string  $class
+     * @param  string  $method
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function createQueuedHandlerCallable($class, $method)
+    {
+        return <span style="background-color: red">f</span>unction () use ($class, $method) {
+            $arguments = array_map(<span style="background-color: red">f</span>unction ($a) {
+                return is_object($a) ? clone $a : <span style="background-color: red">$</span>a;
+            }, func_get_args());
+
+            <span style="background-color: red">i</span>f ($this-&gt;handlerWantsToBeQueued($class, $arguments)) {
+                $this-&gt;queueHandler($class, $method, $arguments);
+            <span style="background-color: red">}</span>
+        };
+    }
+
+    /**
+     * Determine if the given event handler should be dispatched after all database transactions have committed.
+     *
+     * @param  object|mixed  $listener
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function handlerShouldBeDispatchedAfterDatabaseTransactions($listener)
+    {
+        return (($listener-&gt;afterCommit ?? <span style="background-color: red">n</span>ull) ||
+                <span style="background-color: red">$</span>listener instanceof ShouldHandleEventsAfterCommit) &amp;&amp;
+                <span style="background-color: red">$</span>this-&gt;resolveTransactionManager();
+    }
+
+    /**
+     * Create a callable for dispatching a listener after database transactions.
+     *
+     * @param  mixed  $listener
+     * @param  string  $method
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function createCallbackForListenerRunningAfterCommits($listener, $method)
+    {
+        return <span style="background-color: red">f</span>unction () use ($method, $listener) {
+            $payload = func_get_args();
+
+            $this-&gt;resolveTransactionManager()-&gt;addCallback(
+                <span style="background-color: red">f</span>unction () use ($listener, $method, $payload) {
+                    $listener-&gt;$method(...$payload);
+                }
+            );
+        };
+    }
+
+    /**
+     * Determine if the event handler wants to be queued.
+     *
+     * @param  string  $class
+     * @param  array  $arguments
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function handlerWantsToBeQueued($class, $arguments)
+    {
+        $instance = $this-&gt;container-&gt;make($class);
+
+        <span style="background-color: red">i</span>f (method_exists($instance, &#039;shouldQueue&#039;)) {
+            return $instance-&gt;shouldQueue($arguments[0]);
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Queue the handler class.
+     *
+     * @param  string  $class
+     * @param  string  $method
+     * @param  array  $arguments
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function queueHandler($class, $method, $arguments)
+    {
+        [$listener, $job] = $this-&gt;createListenerAndJob($class, $method, $arguments);
+
+        $connection = $this-&gt;resolveQueue()-&gt;connection(method_exists($listener, &#039;viaConnection&#039;)
+            ? (isset($arguments[0]) ? $listener-&gt;viaConnection($arguments[0]) : <span style="background-color: red">$</span>listener-&gt;viaConnection())
+            : <span style="background-color: red">$</span>listener-&gt;connection ?? <span style="background-color: red">n</span>ull);
+
+        $queue = method_exists($listener, &#039;viaQueue&#039;)
+            ? (isset($arguments[0]) ? $listener-&gt;viaQueue($arguments[0]) : <span style="background-color: red">$</span>listener-&gt;viaQueue())
+            : <span style="background-color: red">$</span>listener-&gt;queue ?? <span style="background-color: red">n</span>ull;
+
+        $delay = method_exists($listener, &#039;withDelay&#039;)
+            ? (isset($arguments[0]) ? $listener-&gt;withDelay($arguments[0]) : <span style="background-color: red">$</span>listener-&gt;withDelay())
+            : <span style="background-color: red">$</span>listener-&gt;delay ?? <span style="background-color: red">n</span>ull;
+
+        is_null($delay)
+            ? $connection-&gt;pushOn($queue, $job)
+            : <span style="background-color: red">$</span>connection-&gt;laterOn($queue, $delay, $job);
+    }
+
+    /**
+     * Create the listener and job for a queued listener.
+     *
+     * @param  string  $class
+     * @param  string  $method
+     * @param  array  $arguments
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function createListenerAndJob($class, $method, $arguments)
+    {
+        $listener = (new ReflectionClass($class))-&gt;newInstanceWithoutConstructor();
+
+        return [$listener, $this-&gt;propagateListenerOptions(
+            $listener, new CallQueuedListener($class, $method, $arguments)
+        )];
+    }
+
+    /**
+     * Propagate listener options to the job.
+     *
+     * @param  mixed  $listener
+     * @param  \Illuminate\Events\CallQueuedListener  $job
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function propagateListenerOptions($listener, $job)
+    {
+        return tap($job, <span style="background-color: red">f</span>unction ($job) use ($listener) {
+            $data = array_values($job-&gt;data);
+
+            <span style="background-color: red">i</span>f ($listener instanceof ShouldQueueAfterCommit) {
+                $job-&gt;afterCommit = true;
+            } <span style="background-color: red">e</span>lse {
+                $job-&gt;afterCommit = property_exists($listener, &#039;afterCommit&#039;) ? $listener-&gt;afterCommit : <span style="background-color: red">n</span>ull;
+            <span style="background-color: red">}</span>
+
+            $job-&gt;backoff = method_exists($listener, &#039;backoff&#039;) ? $listener-&gt;backoff(...$data) : (<span style="background-color: red">$</span>listener-&gt;backoff ?? <span style="background-color: red">n</span>ull);
+            $job-&gt;maxExceptions = $listener-&gt;maxExceptions ?? <span style="background-color: red">n</span>ull;
+            $job-&gt;retryUntil = method_exists($listener, &#039;retryUntil&#039;) ? $listener-&gt;retryUntil(...$data) : <span style="background-color: red">n</span>ull;
+            $job-&gt;shouldBeEncrypted = $listener instanceof ShouldBeEncrypted;
+            $job-&gt;timeout = $listener-&gt;timeout ?? <span style="background-color: red">n</span>ull;
+            $job-&gt;failOnTimeout = $listener-&gt;failOnTimeout ?? <span style="background-color: red">f</span>alse;
+            $job-&gt;tries = $listener-&gt;tries ?? <span style="background-color: red">n</span>ull;
+
+            $job-&gt;through(array_merge(
+                method_exists($listener, &#039;middleware&#039;) ? $listener-&gt;middleware(...$data) : <span style="background-color: red">[</span>],
+                $listener-&gt;middleware ?? <span style="background-color: red">[</span>]
+            ));
+        });
+    }
+
+    /**
+     * Remove a set of listeners from the dispatcher.
+     *
+     * @param  string  $event
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forget($event)
+    {
+        <span style="background-color: red">i</span>f (str_contains($event, &#039;*&#039;)) {
+            unset($this-&gt;wildcards[$event]);
+        } <span style="background-color: red">e</span>lse {
+            unset($this-&gt;listeners[$event]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;wildcardsCache as $key =&gt; $listeners) {
+            <span style="background-color: red">i</span>f (Str::is($event, $key)) {
+                unset($this-&gt;wildcardsCache[$key]);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Forget all of the pushed listeners.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forgetPushed()
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;listeners as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (str_ends_with($key, &#039;_pushed&#039;)) {
+                $this-&gt;forget($key);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the queue implementation from the resolver.
+     *
+     * @return \Illuminate\Contracts\Queue\Queue
+     */
+    <span style="background-color: red">p</span>rotected function resolveQueue()
+    {
+        return call_user_func($this-&gt;queueResolver);
+    }
+
+    /**
+     * Set the queue resolver implementation.
+     *
+     * @param  callable  $resolver
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setQueueResolver(callable $resolver)
+    {
+        $this-&gt;queueResolver = $resolver;
+
+        return $this;
+    }
+
+    /**
+     * Get the database transaction manager implementation from the resolver.
+     *
+     * @return \Illuminate\Database\DatabaseTransactionsManager|null
+     */
+    <span style="background-color: red">p</span>rotected function resolveTransactionManager()
+    {
+        return call_user_func($this-&gt;transactionManagerResolver);
+    }
+
+    /**
+     * Set the database transaction manager resolver implementation.
+     *
+     * @param  callable  $resolver
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setTransactionManagerResolver(callable $resolver)
+    {
+        $this-&gt;transactionManagerResolver = $resolver;
+
+        return $this;
+    }
+
+    /**
+     * Gets the raw, unprepared listeners.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getRawListeners()
+    {
+        return $this-&gt;listeners;
+    }
+}
+</pre>

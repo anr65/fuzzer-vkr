@@ -1,0 +1,39 @@
+<pre>&lt;?php
+
+namespace Illuminate\Testing;
+
+use Illuminate\Contracts\Support\DeferrableProvider;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Testing\Concerns\TestDatabases;
+
+class ParallelTestingServiceProvider extends ServiceProvider implements DeferrableProvider
+{
+    use TestDatabases;
+
+    /**
+     * Boot the application&#039;s service providers.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;runningInConsole()) {
+            $this-&gt;bootTestDatabase();
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;runningInConsole()) {
+            $this-&gt;app-&gt;singleton(ParallelTesting::class, <span style="background-color: green">f</span>unction () {
+                return new ParallelTesting($this-&gt;app);
+            });
+        <span style="background-color: green">}</span>
+    }
+}
+</pre>

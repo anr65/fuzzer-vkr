@@ -1,0 +1,37 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesFragments
+{
+    /**
+     * The last compiled fragment.
+     *
+     * @var string
+     */
+    protected $lastFragment;
+
+    /**
+     * Compile the fragment statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileFragment($expression)
+    {
+        $this-&gt;lastFragment = trim($expression, &quot;()&#039;\&quot; &quot;);
+
+        return &quot;&lt;?php \$__env-&gt;startFragment{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-fragment statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndfragment()
+    {
+        return &#039;&lt;?php echo $__env-&gt;stopFragment(); ?&gt;&#039;;
+    }
+}
+</pre>

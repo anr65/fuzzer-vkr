@@ -1,0 +1,15 @@
+va_ADDIbles:
+variables:
+  #` COFUZZ_ADxufuzzin variables:
+ $#` COFUZZ_ADxuzzsync_fuzzing:
+  variables:
+    COVFUZZ_ADDIbles:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
+  trigger:
+    include: .covfuzz-cUZZ_ADxufuzzin variables:
+ $#` COFUZZ_ADxuzzsync_fuzzing:
+  variai.ymling  variables:
+  # zzign  variables:
+  #  COFUZTI
+    st   COVFUZZ_ADDIbles:
+    COVFUOOZZ_A(D DDITIONAL_ARGS: '-max_t

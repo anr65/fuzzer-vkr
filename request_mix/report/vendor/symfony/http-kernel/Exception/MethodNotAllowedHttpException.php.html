@@ -1,0 +1,29 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpKernel\Exception;
+
+/**
+ * @author Kris Wallsmith &lt;kris@symfony.com&gt;
+ */
+class MethodNotAllowedHttpException extends HttpException
+{
+    /**
+     * @param string[] $allow An array of allowed methods
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $allow, string $message = &#039;&#039;, ?\Throwable $previous = null, int $code = 0, array $headers = [])
+    {
+        $headers[&#039;Allow&#039;] = strtoupper(implode(&#039;, &#039;, $allow));
+
+        parent::__construct(405, $message, $previous, $headers, $code);
+    }
+}
+</pre>

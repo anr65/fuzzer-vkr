@@ -1,0 +1,30 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Bootstrap;
+
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\AliasLoader;
+use Illuminate\Foundation\PackageManifest;
+use Illuminate\Support\Facades\Facade;
+
+class RegisterFacades
+{
+    /**
+     * Bootstrap the given application.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function bootstrap(Application $app)
+    {
+        Facade::clearResolvedInstances();
+
+        Facade::setFacadeApplication($app);
+
+        AliasLoader::getInstance(array_merge(
+            $app-&gt;make(&#039;config&#039;)-&gt;get(&#039;app.aliases&#039;, []),
+            $app-&gt;make(PackageManifest::class)-&gt;aliases()
+        ))-&gt;register();
+    }
+}
+</pre>

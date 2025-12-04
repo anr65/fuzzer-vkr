@@ -1,0 +1,195 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Illuminate\Contracts\View\ViewCompilationException;
+
+trait CompilesLoops
+{
+    /**
+     * Counter to keep track of nested forelse statements.
+     *
+     * @var int
+     */
+    protected $forElseCounter = 0;
+
+    /**
+     * Compile the for-else statements into valid PHP.
+     *
+     * @param  string|null  $expression
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\View\ViewCompilationException
+     */
+    <span style="background-color: red">p</span>rotected function compileForelse($expression)
+    {
+        $empty = &#039;$__empty_&#039;.++$this-&gt;forElseCounter;
+
+        preg_match(&#039;/\( *(.+) +as +(.+)\)$/is&#039;, $expression ?? <span style="background-color: red">'</span>&#039;, $matches);
+
+        <span style="background-color: red">i</span>f (count($matches) === 0) {
+            throw new ViewCompilationException(&#039;Malformed @forelse statement.&#039;);
+        <span style="background-color: red">}</span>
+
+        $iteratee = trim($matches[1]);
+
+        $iteration = trim($matches[2]);
+
+        $initLoop = &quot;\$__currentLoopData = {$iteratee}; \$__env-&gt;addLoop(\$__currentLoopData);&quot;;
+
+        $iterateLoop = &#039;$__env-&gt;incrementLoopIndices(); $loop = $__env-&gt;getLastLoop();&#039;;
+
+        return &quot;&lt;?php {$empty} = true; {$initLoop} foreach(\$__currentLoopData as {$iteration}): {$iterateLoop} {$empty} = false; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the for-else-empty and empty statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEmpty($expression)
+    {
+        <span style="background-color: red">i</span>f ($expression) {
+            return &quot;&lt;?php if(empty{$expression}): ?&gt;&quot;;
+        <span style="background-color: red">}</span>
+
+        $empty = &#039;$__empty_&#039;.$this-&gt;forElseCounter--;
+
+        return &quot;&lt;?php endforeach; \$__env-&gt;popLoop(); \$loop = \$__env-&gt;getLastLoop(); if ({$empty}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-for-else statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndforelse()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-empty statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndEmpty()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the for statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileFor($expression)
+    {
+        return &quot;&lt;?php for{$expression}: ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the for-each statements into valid PHP.
+     *
+     * @param  string|null  $expression
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\View\ViewCompilationException
+     */
+    <span style="background-color: red">p</span>rotected function compileForeach($expression)
+    {
+        preg_match(&#039;/\( *(.+) +as +(.*)\)$/is&#039;, $expression ?? <span style="background-color: red">'</span>&#039;, $matches);
+
+        <span style="background-color: red">i</span>f (count($matches) === 0) {
+            throw new ViewCompilationException(&#039;Malformed @foreach statement.&#039;);
+        <span style="background-color: red">}</span>
+
+        $iteratee = trim($matches[1]);
+
+        $iteration = trim($matches[2]);
+
+        $initLoop = &quot;\$__currentLoopData = {$iteratee}; \$__env-&gt;addLoop(\$__currentLoopData);&quot;;
+
+        $iterateLoop = &#039;$__env-&gt;incrementLoopIndices(); $loop = $__env-&gt;getLastLoop();&#039;;
+
+        return &quot;&lt;?php {$initLoop} foreach(\$__currentLoopData as {$iteration}): {$iterateLoop} ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the break statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileBreak($expression)
+    {
+        <span style="background-color: red">i</span>f ($expression) {
+            preg_match(&#039;/\(\s*(-?\d+)\s*\)$/&#039;, $expression, $matches);
+
+            return $matches ? &#039;&lt;?php break &#039;.max(1, $matches[1]).&#039;; ?&gt;&#039; : <span style="background-color: red">"</span>&lt;?php if{$expression} break; ?&gt;&quot;;
+        <span style="background-color: red">}</span>
+
+        return &#039;&lt;?php break; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the continue statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileContinue($expression)
+    {
+        <span style="background-color: red">i</span>f ($expression) {
+            preg_match(&#039;/\(\s*(-?\d+)\s*\)$/&#039;, $expression, $matches);
+
+            return $matches ? &#039;&lt;?php continue &#039;.max(1, $matches[1]).&#039;; ?&gt;&#039; : <span style="background-color: red">"</span>&lt;?php if{$expression} continue; ?&gt;&quot;;
+        <span style="background-color: red">}</span>
+
+        return &#039;&lt;?php continue; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-for statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndfor()
+    {
+        return &#039;&lt;?php endfor; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-for-each statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndforeach()
+    {
+        return &#039;&lt;?php endforeach; $__env-&gt;popLoop(); $loop = $__env-&gt;getLastLoop(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the while statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileWhile($expression)
+    {
+        return &quot;&lt;?php while{$expression}: ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-while statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndwhile()
+    {
+        return &#039;&lt;?php endwhile; ?&gt;&#039;;
+    }
+}
+</pre>

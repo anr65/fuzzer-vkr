@@ -1,0 +1,290 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session;
+
+use Illuminate\Support\Manager;
+
+/**
+ * @mixin \Illuminate\Session\Store
+ */
+class SessionManager extends Manager
+{
+    /**
+     * Call a custom driver creator.
+     *
+     * @param  string  $driver
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function callCustomCreator($driver)
+    {
+        return $this-&gt;buildSession(parent::callCustomCreator($driver));
+    }
+
+    /**
+     * Create an instance of the &quot;null&quot; session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createNullDriver()
+    {
+        return $this-&gt;buildSession(new NullSessionHandler);
+    }
+
+    /**
+     * Create an instance of the &quot;array&quot; session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createArrayDriver()
+    {
+        return $this-&gt;buildSession(new ArraySessionHandler(
+            $this-&gt;config-&gt;get(&#039;session.lifetime&#039;)
+        ));
+    }
+
+    /**
+     * Create an instance of the &quot;cookie&quot; session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createCookieDriver()
+    {
+        return $this-&gt;buildSession(new CookieSessionHandler(
+            $this-&gt;container-&gt;make(&#039;cookie&#039;),
+            $this-&gt;config-&gt;get(&#039;session.lifetime&#039;),
+            $this-&gt;config-&gt;get(&#039;session.expire_on_close&#039;)
+        ));
+    }
+
+    /**
+     * Create an instance of the file session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createFileDriver()
+    {
+        return $this-&gt;createNativeDriver();
+    }
+
+    /**
+     * Create an instance of the file session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createNativeDriver()
+    {
+        $lifetime = $this-&gt;config-&gt;get(&#039;session.lifetime&#039;);
+
+        return $this-&gt;buildSession(new FileSessionHandler(
+            $this-&gt;container-&gt;make(&#039;files&#039;), $this-&gt;config-&gt;get(&#039;session.files&#039;), $lifetime
+        ));
+    }
+
+    /**
+     * Create an instance of the database session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: green">p</span>rotected function createDatabaseDriver()
+    {
+        $table = $this-&gt;config-&gt;get(&#039;session.table&#039;);
+
+        $lifetime = $this-&gt;config-&gt;get(&#039;session.lifetime&#039;);
+
+        return $this-&gt;buildSession(new DatabaseSessionHandler(
+            $this-&gt;getDatabaseConnection(), $table, $lifetime, $this-&gt;container
+        ));
+    }
+
+    /**
+     * Get the database connection for the database driver.
+     *
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>rotected function getDatabaseConnection()
+    {
+        $connection = $this-&gt;config-&gt;get(&#039;session.connection&#039;);
+
+        return $this-&gt;container-&gt;make(&#039;db&#039;)-&gt;connection($connection);
+    }
+
+    /**
+     * Create an instance of the APC session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createApcDriver()
+    {
+        return $this-&gt;createCacheBased(&#039;apc&#039;);
+    }
+
+    /**
+     * Create an instance of the Memcached session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createMemcachedDriver()
+    {
+        return $this-&gt;createCacheBased(&#039;memcached&#039;);
+    }
+
+    /**
+     * Create an instance of the Redis session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createRedisDriver()
+    {
+        $handler = $this-&gt;createCacheHandler(&#039;redis&#039;);
+
+        $handler-&gt;getCache()-&gt;getStore()-&gt;setConnection(
+            $this-&gt;config-&gt;get(&#039;session.connection&#039;)
+        );
+
+        return $this-&gt;buildSession($handler);
+    }
+
+    /**
+     * Create an instance of the DynamoDB session driver.
+     *
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createDynamodbDriver()
+    {
+        return $this-&gt;createCacheBased(&#039;dynamodb&#039;);
+    }
+
+    /**
+     * Create an instance of a cache driven driver.
+     *
+     * @param  string  $driver
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: red">p</span>rotected function createCacheBased($driver)
+    {
+        return $this-&gt;buildSession($this-&gt;createCacheHandler($driver));
+    }
+
+    /**
+     * Create the cache based session handler instance.
+     *
+     * @param  string  $driver
+     * @return \Illuminate\Session\CacheBasedSessionHandler
+     */
+    <span style="background-color: red">p</span>rotected function createCacheHandler($driver)
+    {
+        $store = $this-&gt;config-&gt;get(&#039;session.store&#039;) ?: <span style="background-color: red">$</span>driver;
+
+        return new CacheBasedSessionHandler(
+            clone $this-&gt;container-&gt;make(&#039;cache&#039;)-&gt;store($store),
+            $this-&gt;config-&gt;get(&#039;session.lifetime&#039;)
+        );
+    }
+
+    /**
+     * Build the session instance.
+     *
+     * @param  \SessionHandlerInterface  $handler
+     * @return \Illuminate\Session\Store
+     */
+    <span style="background-color: green">p</span>rotected function buildSession($handler)
+    {
+        return $this-&gt;config-&gt;get(&#039;session.encrypt&#039;)
+            ? $this-&gt;buildEncryptedSession($handler)
+            : <span style="background-color: green">n</span>ew Store(
+                $this-&gt;config-&gt;get(&#039;session.cookie&#039;),
+                $handler,
+                $id = null,
+                $this-&gt;config-&gt;get(&#039;session.serialization&#039;, &#039;php&#039;)
+            );
+    }
+
+    /**
+     * Build the encrypted session instance.
+     *
+     * @param  \SessionHandlerInterface  $handler
+     * @return \Illuminate\Session\EncryptedStore
+     */
+    <span style="background-color: red">p</span>rotected function buildEncryptedSession($handler)
+    {
+        return new EncryptedStore(
+            $this-&gt;config-&gt;get(&#039;session.cookie&#039;),
+            $handler,
+            $this-&gt;container[&#039;encrypter&#039;],
+            $id = null,
+            $this-&gt;config-&gt;get(&#039;session.serialization&#039;, &#039;php&#039;),
+        );
+    }
+
+    /**
+     * Determine if requests for the same session should wait for each to finish before executing.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function shouldBlock()
+    {
+        return $this-&gt;config-&gt;get(&#039;session.block&#039;, false);
+    }
+
+    /**
+     * Get the name of the cache store / driver that should be used to acquire session locks.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function blockDriver()
+    {
+        return $this-&gt;config-&gt;get(&#039;session.block_store&#039;);
+    }
+
+    /**
+     * Get the maximum number of seconds the session lock should be held for.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function defaultRouteBlockLockSeconds()
+    {
+        return $this-&gt;config-&gt;get(&#039;session.block_lock_seconds&#039;, 10);
+    }
+
+    /**
+     * Get the maximum number of seconds to wait while attempting to acquire a route block session lock.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function defaultRouteBlockWaitSeconds()
+    {
+        return $this-&gt;config-&gt;get(&#039;session.block_wait_seconds&#039;, 10);
+    }
+
+    /**
+     * Get the session configuration.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getSessionConfig()
+    {
+        return $this-&gt;config-&gt;get(&#039;session&#039;);
+    }
+
+    /**
+     * Get the default session driver name.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getDefaultDriver()
+    {
+        return $this-&gt;config-&gt;get(&#039;session.driver&#039;);
+    }
+
+    /**
+     * Set the default session driver name.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setDefaultDriver($name)
+    {
+        $this-&gt;config-&gt;set(&#039;session.driver&#039;, $name);
+    }
+}
+</pre>

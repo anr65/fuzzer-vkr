@@ -1,0 +1,396 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Caster;
+
+use Symfony\Component\ErrorHandler\Exception\FlattenException;
+use Symfony\Component\ErrorHandler\Exception\SilencedErrorContext;
+use Symfony\Component\VarDumper\Cloner\Stub;
+use Symfony\Component\VarDumper\Exception\ThrowingCasterException;
+
+/**
+ * Casts common Exception classes to array representation.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ *
+ * @final
+ */
+class ExceptionCaster
+{
+    public static int $srcContext = 1;
+    public static bool $traceArgs = true;
+    public static array $errorTypes = [
+        \E_DEPRECATED =&gt; &#039;E_DEPRECATED&#039;,
+        \E_USER_DEPRECATED =&gt; &#039;E_USER_DEPRECATED&#039;,
+        \E_RECOVERABLE_ERROR =&gt; &#039;E_RECOVERABLE_ERROR&#039;,
+        \E_ERROR =&gt; &#039;E_ERROR&#039;,
+        \E_WARNING =&gt; &#039;E_WARNING&#039;,
+        \E_PARSE =&gt; &#039;E_PARSE&#039;,
+        \E_NOTICE =&gt; &#039;E_NOTICE&#039;,
+        \E_CORE_ERROR =&gt; &#039;E_CORE_ERROR&#039;,
+        \E_CORE_WARNING =&gt; &#039;E_CORE_WARNING&#039;,
+        \E_COMPILE_ERROR =&gt; &#039;E_COMPILE_ERROR&#039;,
+        \E_COMPILE_WARNING =&gt; &#039;E_COMPILE_WARNING&#039;,
+        \E_USER_ERROR =&gt; &#039;E_USER_ERROR&#039;,
+        \E_USER_WARNING =&gt; &#039;E_USER_WARNING&#039;,
+        \E_USER_NOTICE =&gt; &#039;E_USER_NOTICE&#039;,
+        2048 =&gt; &#039;E_STRICT&#039;,
+    ];
+
+    private static array $framesCache = [];
+
+    <span style="background-color: red">p</span>ublic static function castError(\Error $e, array $a, Stub $stub, bool $isNested, int $filter = 0): array
+    {
+        return self::filterExceptionArray($stub-&gt;class, $a, &quot;\0Error\0&quot;, $filter);
+    }
+
+    <span style="background-color: green">p</span>ublic static function castException(\Exception $e, array $a, Stub $stub, bool $isNested, int $filter = 0): array
+    {
+        return self::filterExceptionArray($stub-&gt;class, $a, &quot;\0Exception\0&quot;, $filter);
+    }
+
+    <span style="background-color: red">p</span>ublic static function castErrorException(\ErrorException $e, array $a, Stub $stub, bool $isNested): array
+    {
+        <span style="background-color: red">i</span>f (isset($a[$s = Caster::PREFIX_PROTECTED.&#039;severity&#039;], self::$errorTypes[$a[$s]])) {
+            $a[$s] = new ConstStub(self::$errorTypes[$a[$s]], $a[$s]);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castThrowingCasterException(ThrowingCasterException $e, array $a, Stub $stub, bool $isNested): array
+    {
+        $trace = Caster::PREFIX_VIRTUAL.&#039;trace&#039;;
+        $prefix = Caster::PREFIX_PROTECTED;
+        $xPrefix = &quot;\0Exception\0&quot;;
+
+        <span style="background-color: red">i</span>f (isset($a[$xPrefix.&#039;previous&#039;], $a[$trace]) &amp;&amp; <span style="background-color: red">$</span>a[$xPrefix.&#039;previous&#039;] instanceof \Exception) {
+            $b = (array) $a[$xPrefix.&#039;previous&#039;];
+            $class = get_debug_type($a[$xPrefix.&#039;previous&#039;]);
+            self::traceUnshift($b[$xPrefix.&#039;trace&#039;], $class, $b[$prefix.&#039;file&#039;], $b[$prefix.&#039;line&#039;]);
+            $a[$trace] = new TraceStub($b[$xPrefix.&#039;trace&#039;], false, 0, -\count($a[$trace]-&gt;value));
+        <span style="background-color: red">}</span>
+
+        unset($a[$xPrefix.&#039;previous&#039;], $a[$prefix.&#039;code&#039;], $a[$prefix.&#039;file&#039;], $a[$prefix.&#039;line&#039;]);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castSilencedErrorContext(SilencedErrorContext $e, array $a, Stub $stub, bool $isNested): array
+    {
+        $sPrefix = &quot;\0&quot;.SilencedErrorContext::class.&quot;\0&quot;;
+
+        <span style="background-color: red">i</span>f (!isset($a[$s = $sPrefix.&#039;severity&#039;])) {
+            return $a;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset(self::$errorTypes[$a[$s]])) {
+            $a[$s] = new ConstStub(self::$errorTypes[$a[$s]], $a[$s]);
+        <span style="background-color: red">}</span>
+
+        $trace = [[
+            &#039;file&#039; =&gt; $a[$sPrefix.&#039;file&#039;],
+            &#039;line&#039; =&gt; $a[$sPrefix.&#039;line&#039;],
+        ]];
+
+        <span style="background-color: red">i</span>f (isset($a[$sPrefix.&#039;trace&#039;])) {
+            $trace = array_merge($trace, $a[$sPrefix.&#039;trace&#039;]);
+        <span style="background-color: red">}</span>
+
+        unset($a[$sPrefix.&#039;file&#039;], $a[$sPrefix.&#039;line&#039;], $a[$sPrefix.&#039;trace&#039;]);
+        $a[Caster::PREFIX_VIRTUAL.&#039;trace&#039;] = new TraceStub($trace, self::$traceArgs);
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castTraceStub(TraceStub $trace, array $a, Stub $stub, bool $isNested): array
+    {
+        <span style="background-color: red">i</span>f (!$isNested) {
+            return $a;
+        <span style="background-color: red">}</span>
+        $stub-&gt;class = &#039;&#039;;
+        $stub-&gt;handle = 0;
+        $frames = $trace-&gt;value;
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        $a = [];
+        $j = \count($frames);
+        <span style="background-color: red">i</span>f (0 &gt; $i = $trace-&gt;sliceOffset) {
+            $i = max(0, $j + $i);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (!isset($trace-&gt;value[$i])) {
+            return [];
+        <span style="background-color: red">}</span>
+        $lastCall = isset($frames[$i][&#039;function&#039;]) ? (isset($frames[$i][&#039;class&#039;]) ? $frames[0][&#039;class&#039;].$frames[$i][&#039;type&#039;] : <span style="background-color: red">'</span>&#039;).$frames[$i][&#039;function&#039;].&#039;()&#039; : <span style="background-color: red">'</span>&#039;;
+        $frames[] = [&#039;function&#039; =&gt; &#039;&#039;];
+        $collapse = false;
+
+        <span style="background-color: red">f</span>or ($j += $trace-&gt;numberingOffset - $i++; isset($frames[$i]); ++$i, --$j) {
+            $f = $frames[$i];
+            $call = isset($f[&#039;function&#039;]) ? (isset($f[&#039;class&#039;]) ? $f[&#039;class&#039;].$f[&#039;type&#039;] : <span style="background-color: red">'</span>&#039;).$f[&#039;function&#039;] : <span style="background-color: red">'</span>???&#039;;
+
+            $frame = new FrameStub(
+                [
+                    &#039;object&#039; =&gt; $f[&#039;object&#039;] ?? <span style="background-color: red">n</span>ull,
+                    &#039;class&#039; =&gt; $f[&#039;class&#039;] ?? <span style="background-color: red">n</span>ull,
+                    &#039;type&#039; =&gt; $f[&#039;type&#039;] ?? <span style="background-color: red">n</span>ull,
+                    &#039;function&#039; =&gt; $f[&#039;function&#039;] ?? <span style="background-color: red">n</span>ull,
+                ] + $frames[$i - 1],
+                false,
+                true
+            );
+            $f = self::castFrameStub($frame, [], $frame, true);
+            <span style="background-color: red">i</span>f (isset($f[$prefix.&#039;src&#039;])) {
+                <span style="background-color: red">f</span>oreach ($f[$prefix.&#039;src&#039;]-&gt;value as $label =&gt; $frame) {
+                    <span style="background-color: red">i</span>f (str_starts_with($label, &quot;\0~collapse=0&quot;)) {
+                        <span style="background-color: red">i</span>f ($collapse) {
+                            $label = substr_replace($label, &#039;1&#039;, 11, 1);
+                        } <span style="background-color: red">e</span>lse {
+                            $collapse = true;
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                    $label = substr_replace($label, &quot;title=Stack level $j.&amp;&quot;, 2, 0);
+                <span style="background-color: red">}</span>
+                $f = $frames[$i - 1];
+                <span style="background-color: red">i</span>f ($trace-&gt;keepArgs &amp;&amp; <span style="background-color: red">!</span>empty($f[&#039;args&#039;]) &amp;&amp; <span style="background-color: red">$</span>frame instanceof EnumStub) {
+                    $frame-&gt;value[&#039;arguments&#039;] = new ArgsStub($f[&#039;args&#039;], $f[&#039;function&#039;] ?? <span style="background-color: red">n</span>ull, $f[&#039;class&#039;] ?? <span style="background-color: red">n</span>ull);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif (&#039;???&#039; !== $lastCall) {
+                $label = new ClassStub($lastCall);
+                <span style="background-color: red">i</span>f (isset($label-&gt;attr[&#039;ellipsis&#039;])) {
+                    $label-&gt;attr[&#039;ellipsis&#039;] += 2;
+                    $label = substr_replace($prefix, &quot;ellipsis-type=class&amp;ellipsis={$label-&gt;attr[&#039;ellipsis&#039;]}&amp;ellipsis-tail=1&amp;title=Stack level $j.&quot;, 2, 0).$label-&gt;value.&#039;()&#039;;
+                } <span style="background-color: red">e</span>lse {
+                    $label = substr_replace($prefix, &quot;title=Stack level $j.&quot;, 2, 0).$label-&gt;value.&#039;()&#039;;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                $label = substr_replace($prefix, &quot;title=Stack level $j.&quot;, 2, 0).$lastCall;
+            <span style="background-color: red">}</span>
+            $a[substr_replace($label, \sprintf(&#039;separator=%s&amp;&#039;, $frame instanceof EnumStub ? &#039; &#039; : <span style="background-color: red">'</span>:&#039;), 2, 0)] = $frame;
+
+            $lastCall = $call;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (null !== $trace-&gt;sliceLength) {
+            $a = \array_slice($a, 0, $trace-&gt;sliceLength, true);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castFrameStub(FrameStub $frame, array $a, Stub $stub, bool $isNested): array
+    {
+        <span style="background-color: red">i</span>f (!$isNested) {
+            return $a;
+        <span style="background-color: red">}</span>
+        $f = $frame-&gt;value;
+        $prefix = Caster::PREFIX_VIRTUAL;
+
+        <span style="background-color: red">i</span>f (isset($f[&#039;file&#039;], $f[&#039;line&#039;])) {
+            $cacheKey = $f;
+            unset($cacheKey[&#039;object&#039;], $cacheKey[&#039;args&#039;]);
+            $cacheKey[] = self::$srcContext;
+            $cacheKey = implode(&#039;-&#039;, $cacheKey);
+
+            <span style="background-color: red">i</span>f (isset(self::$framesCache[$cacheKey])) {
+                $a[$prefix.&#039;src&#039;] = self::$framesCache[$cacheKey];
+            } <span style="background-color: red">e</span>lse {
+                <span style="background-color: red">i</span>f (preg_match(&#039;/\((\d+)\)(?:\([\da-f]{32}\))? : (?:eval\(\)\&#039;d code|runtime-created function)$/&#039;, $f[&#039;file&#039;], $match)) {
+                    $f[&#039;file&#039;] = substr($f[&#039;file&#039;], 0, -\strlen($match[0]));
+                    $f[&#039;line&#039;] = (int) $match[1];
+                <span style="background-color: red">}</span>
+                $src = $f[&#039;line&#039;];
+                $srcKey = $f[&#039;file&#039;];
+                $ellipsis = new LinkStub($srcKey, 0);
+                $srcAttr = &#039;collapse=&#039;.(int) $ellipsis-&gt;inVendor;
+                $ellipsisTail = $ellipsis-&gt;attr[&#039;ellipsis-tail&#039;] ?? <span style="background-color: red">0</span>;
+                $ellipsis = $ellipsis-&gt;attr[&#039;ellipsis&#039;] ?? <span style="background-color: red">0</span>;
+
+                <span style="background-color: red">i</span>f (is_file($f[&#039;file&#039;]) &amp;&amp; <span style="background-color: red">0</span> &lt;= self::$srcContext) {
+                    <span style="background-color: red">i</span>f (!empty($f[&#039;class&#039;]) &amp;&amp; <span style="background-color: red">i</span>s_subclass_of($f[&#039;class&#039;], &#039;Twig\Template&#039;)) {
+                        $template = null;
+                        <span style="background-color: red">i</span>f (isset($f[&#039;object&#039;])) {
+                            $template = $f[&#039;object&#039;];
+                        } <span style="background-color: red">e</span>lseif ((new \ReflectionClass($f[&#039;class&#039;]))-&gt;isInstantiable()) {
+                            $template = unserialize(\sprintf(&#039;O:%d:&quot;%s&quot;:0:{}&#039;, \strlen($f[&#039;class&#039;]), $f[&#039;class&#039;]));
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (null !== $template) {
+                            $ellipsis = 0;
+                            $templateSrc = method_exists($template, &#039;getSourceContext&#039;) ? $template-&gt;getSourceContext()-&gt;getCode() : (<span style="background-color: red">m</span>ethod_exists($template, &#039;getSource&#039;) ? $template-&gt;getSource() : <span style="background-color: red">'</span>&#039;);
+                            $templateInfo = $template-&gt;getDebugInfo();
+                            <span style="background-color: red">i</span>f (isset($templateInfo[$f[&#039;line&#039;]])) {
+                                <span style="background-color: red">i</span>f (!method_exists($template, &#039;getSourceContext&#039;) || <span style="background-color: red">!</span>is_file($templatePath = $template-&gt;getSourceContext()-&gt;getPath())) {
+                                    $templatePath = null;
+                                <span style="background-color: red">}</span>
+                                <span style="background-color: red">i</span>f ($templateSrc) {
+                                    $src = self::extractSource($templateSrc, $templateInfo[$f[&#039;line&#039;]], self::$srcContext, &#039;twig&#039;, $templatePath, $f);
+                                    $srcKey = ($templatePath ?: <span style="background-color: red">$</span>template-&gt;getTemplateName()).&#039;:&#039;.$templateInfo[$f[&#039;line&#039;]];
+                                <span style="background-color: red">}</span>
+                            <span style="background-color: red">}</span>
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                    <span style="background-color: red">i</span>f ($srcKey == $f[&#039;file&#039;]) {
+                        $src = self::extractSource(file_get_contents($f[&#039;file&#039;]), $f[&#039;line&#039;], self::$srcContext, &#039;php&#039;, $f[&#039;file&#039;], $f);
+                        $srcKey .= &#039;:&#039;.$f[&#039;line&#039;];
+                        <span style="background-color: red">i</span>f ($ellipsis) {
+                            $ellipsis += 1 + \strlen($f[&#039;line&#039;]);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                    $srcAttr .= \sprintf(&#039;&amp;separator= &amp;file=%s&amp;line=%d&#039;, rawurlencode($f[&#039;file&#039;]), $f[&#039;line&#039;]);
+                } <span style="background-color: red">e</span>lse {
+                    $srcAttr .= &#039;&amp;separator=:&#039;;
+                <span style="background-color: red">}</span>
+                $srcAttr .= $ellipsis ? &#039;&amp;ellipsis-type=path&amp;ellipsis=&#039;.$ellipsis.&#039;&amp;ellipsis-tail=&#039;.$ellipsisTail : <span style="background-color: red">'</span>&#039;;
+                self::$framesCache[$cacheKey] = $a[$prefix.&#039;src&#039;] = new EnumStub([&quot;\0~$srcAttr\0$srcKey&quot; =&gt; $src]);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        unset($a[$prefix.&#039;args&#039;], $a[$prefix.&#039;line&#039;], $a[$prefix.&#039;file&#039;]);
+        <span style="background-color: red">i</span>f ($frame-&gt;inTraceStub) {
+            unset($a[$prefix.&#039;class&#039;], $a[$prefix.&#039;type&#039;], $a[$prefix.&#039;function&#039;]);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">f</span>oreach ($a as $k =&gt; $v) {
+            <span style="background-color: red">i</span>f (!$v) {
+                unset($a[$k]);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f ($frame-&gt;keepArgs &amp;&amp; <span style="background-color: red">!</span>empty($f[&#039;args&#039;])) {
+            $a[$prefix.&#039;arguments&#039;] = new ArgsStub($f[&#039;args&#039;], $f[&#039;function&#039;], $f[&#039;class&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castFlattenException(FlattenException $e, array $a, Stub $stub, bool $isNested): array
+    {
+        <span style="background-color: red">i</span>f ($isNested) {
+            $k = \sprintf(Caster::PATTERN_PRIVATE, FlattenException::class, &#039;traceAsString&#039;);
+            $a[$k] = new CutStub($a[$k]);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: green">p</span>rivate static function filterExceptionArray(string $xClass, array $a, string $xPrefix, int $filter): array
+    {
+        <span style="background-color: red">i</span>f (isset($a[$xPrefix.&#039;trace&#039;])) {
+            $trace = $a[$xPrefix.&#039;trace&#039;];
+            unset($a[$xPrefix.&#039;trace&#039;]); // Ensures the trace is always last
+        } <span style="background-color: green">e</span>lse {
+            $trace = [];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (!($filter &amp; Caster::EXCLUDE_VERBOSE) &amp;&amp; <span style="background-color: green">$</span>trace) {
+            <span style="background-color: red">i</span>f (isset($a[Caster::PREFIX_PROTECTED.&#039;file&#039;], $a[Caster::PREFIX_PROTECTED.&#039;line&#039;])) {
+                self::traceUnshift($trace, $xClass, $a[Caster::PREFIX_PROTECTED.&#039;file&#039;], $a[Caster::PREFIX_PROTECTED.&#039;line&#039;]);
+            <span style="background-color: red">}</span>
+            $a[Caster::PREFIX_VIRTUAL.&#039;trace&#039;] = new TraceStub($trace, self::$traceArgs);
+        <span style="background-color: green">}</span>
+        <span style="background-color: green">i</span>f (empty($a[$xPrefix.&#039;previous&#039;])) {
+            unset($a[$xPrefix.&#039;previous&#039;]);
+        <span style="background-color: green">}</span>
+        unset($a[$xPrefix.&#039;string&#039;], $a[Caster::PREFIX_DYNAMIC.&#039;xdebug_message&#039;]);
+
+        <span style="background-color: red">i</span>f (isset($a[Caster::PREFIX_PROTECTED.&#039;message&#039;]) &amp;&amp; <span style="background-color: red">s</span>tr_contains($a[Caster::PREFIX_PROTECTED.&#039;message&#039;], &quot;@anonymous\0&quot;)) {
+            $a[Caster::PREFIX_PROTECTED.&#039;message&#039;] = preg_replace_callback(&#039;/[a-zA-Z_\x7f-\xff][\\\\a-zA-Z0-9_\x7f-\xff]*+@anonymous\x00.*?\.php(?:0x?|:[0-9]++\$)?[0-9a-fA-F]++/&#039;, fn ($m) =&gt; <span style="background-color: red">c</span>lass_exists($m[0], false) ? (get_parent_class($m[0]) ?: <span style="background-color: red">k</span>ey(class_implements($m[0])) ?: <span style="background-color: red">'</span>class&#039;).&#039;@anonymous&#039; : <span style="background-color: red">$</span>m[0], $a[Caster::PREFIX_PROTECTED.&#039;message&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($a[Caster::PREFIX_PROTECTED.&#039;file&#039;], $a[Caster::PREFIX_PROTECTED.&#039;line&#039;])) {
+            $a[Caster::PREFIX_PROTECTED.&#039;file&#039;] = new LinkStub($a[Caster::PREFIX_PROTECTED.&#039;file&#039;], $a[Caster::PREFIX_PROTECTED.&#039;line&#039;]);
+        <span style="background-color: green">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>rivate static function traceUnshift(array &amp;$trace, ?string $class, string $file, int $line): void
+    {
+        <span style="background-color: red">i</span>f (isset($trace[0][&#039;file&#039;], $trace[0][&#039;line&#039;]) &amp;&amp; <span style="background-color: red">$</span>trace[0][&#039;file&#039;] === $file &amp;&amp; <span style="background-color: red">$</span>trace[0][&#039;line&#039;] === $line) {
+            return;
+        <span style="background-color: red">}</span>
+        array_unshift($trace, [
+            &#039;function&#039; =&gt; $class ? &#039;new &#039;.$class : <span style="background-color: red">n</span>ull,
+            &#039;file&#039; =&gt; $file,
+            &#039;line&#039; =&gt; $line,
+        ]);
+    }
+
+    <span style="background-color: red">p</span>rivate static function extractSource(string $srcLines, int $line, int $srcContext, string $lang, ?string $file, array $frame): EnumStub
+    {
+        $srcLines = explode(&quot;\n&quot;, $srcLines);
+        $src = [];
+
+        <span style="background-color: red">f</span>or ($i = $line - 1 - $srcContext; $i &lt;= $line - 1 + $srcContext; ++$i) {
+            $src[] = ($srcLines[$i] ?? <span style="background-color: red">'</span>&#039;).&quot;\n&quot;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($frame[&#039;function&#039;] ?? <span style="background-color: red">f</span>alse) {
+            $stub = new CutStub(new \stdClass());
+            $stub-&gt;class = (isset($frame[&#039;class&#039;]) ? $frame[&#039;class&#039;].$frame[&#039;type&#039;] : <span style="background-color: red">'</span>&#039;).$frame[&#039;function&#039;];
+            $stub-&gt;type = Stub::TYPE_OBJECT;
+            $stub-&gt;attr[&#039;cut_hash&#039;] = true;
+            $stub-&gt;attr[&#039;file&#039;] = $frame[&#039;file&#039;];
+            $stub-&gt;attr[&#039;line&#039;] = $frame[&#039;line&#039;];
+
+            try {
+                $caller = isset($frame[&#039;class&#039;]) ? new \ReflectionMethod($frame[&#039;class&#039;], $frame[&#039;function&#039;]) : <span style="background-color: red">n</span>ew \ReflectionFunction($frame[&#039;function&#039;]);
+                $stub-&gt;class .= ReflectionCaster::getSignature(ReflectionCaster::castFunctionAbstract($caller, [], $stub, true, Caster::EXCLUDE_VERBOSE));
+
+                <span style="background-color: red">i</span>f ($f = $caller-&gt;getFileName()) {
+                    $stub-&gt;attr[&#039;file&#039;] = $f;
+                    $stub-&gt;attr[&#039;line&#039;] = $caller-&gt;getStartLine();
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">c</span>atch (\ReflectionException) {
+                // ignore fake class/function
+            <span style="background-color: red">}</span>
+
+            $srcLines = [&quot;\0~separator=\0&quot; =&gt; $stub];
+        } <span style="background-color: red">e</span>lse {
+            $stub = null;
+            $srcLines = [];
+        <span style="background-color: red">}</span>
+
+        $ltrim = 0;
+        <span style="background-color: red">d</span>o {
+            $pad = null;
+            <span style="background-color: red">f</span>or ($i = $srcContext &lt;&lt; 1; $i &gt;= 0; --$i) {
+                <span style="background-color: red">i</span>f (isset($src[$i][$ltrim]) &amp;&amp; <span style="background-color: red">"</span>\r&quot; !== ($c = $src[$i][$ltrim]) &amp;&amp; <span style="background-color: red">"</span>\n&quot; !== $c) {
+                    $pad ??= <span style="background-color: red">$</span>c;
+                    <span style="background-color: red">i</span>f ((&#039; &#039; !== $c &amp;&amp; <span style="background-color: red">"</span>\t&quot; !== $c) || <span style="background-color: red">$</span>pad !== $c) {
+                        break;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            ++$ltrim;
+        } while (0 &gt; $i &amp;&amp; <span style="background-color: red">n</span>ull !== $pad)<span style="background-color: red">;</span>
+
+        --$ltrim;
+
+        <span style="background-color: red">f</span>oreach ($src as $i =&gt; $c) {
+            <span style="background-color: red">i</span>f ($ltrim) {
+                $c = isset($c[$ltrim]) &amp;&amp; <span style="background-color: red">"</span>\r&quot; !== $c[$ltrim] ? substr($c, $ltrim) : <span style="background-color: red">l</span>trim($c, &quot; \t&quot;);
+            <span style="background-color: red">}</span>
+            $c = substr($c, 0, -1);
+            <span style="background-color: red">i</span>f ($i !== $srcContext) {
+                $c = new ConstStub(&#039;default&#039;, $c);
+            } <span style="background-color: red">e</span>lse {
+                $c = new ConstStub($c, $stub ? &#039;in &#039;.$stub-&gt;class : <span style="background-color: red">'</span>&#039;);
+                <span style="background-color: red">i</span>f (null !== $file) {
+                    $c-&gt;attr[&#039;file&#039;] = $file;
+                    $c-&gt;attr[&#039;line&#039;] = $line;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            $c-&gt;attr[&#039;lang&#039;] = $lang;
+            $srcLines[\sprintf(&quot;\0~separator=› &amp;%d\0&quot;, $i + $line - $srcContext)] = $c;
+        <span style="background-color: red">}</span>
+
+        return new EnumStub($srcLines);
+    }
+}
+</pre>

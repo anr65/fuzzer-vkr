@@ -1,0 +1,117 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Support\Arr;
+
+class RouteParameterBinder
+{
+    /**
+     * The route instance.
+     *
+     * @var \Illuminate\Routing\Route
+     */
+    protected $route;
+
+    /**
+     * Create a new Route parameter binder instance.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     */
+    <span style="background-color: green">p</span>ublic function __construct($route)
+    {
+        $this-&gt;route = $route;
+    }
+
+    /**
+     * Get the parameters for the route.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function parameters($request)
+    {
+        $parameters = $this-&gt;bindPathParameters($request);
+
+        // If the route has a regular expression for the host part of the URI, we will
+        // compile that and get the parameter matches for this domain. We will then
+        // merge them into this parameters array so that this array is completed.
+        <span style="background-color: red">i</span>f (! is_null($this-&gt;route-&gt;compiled-&gt;getHostRegex())) {
+            $parameters = $this-&gt;bindHostParameters(
+                $request, $parameters
+            );
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;replaceDefaults($parameters);
+    }
+
+    /**
+     * Get the parameter matches for the path portion of the URI.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function bindPathParameters($request)
+    {
+        $path = &#039;/&#039;.ltrim($request-&gt;decodedPath(), &#039;/&#039;);
+
+        preg_match($this-&gt;route-&gt;compiled-&gt;getRegex(), $path, $matches);
+
+        return $this-&gt;matchToKeys(array_slice($matches, 1));
+    }
+
+    /**
+     * Extract the parameter list from the host part of the request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $parameters
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function bindHostParameters($request, $parameters)
+    {
+        preg_match($this-&gt;route-&gt;compiled-&gt;getHostRegex(), $request-&gt;getHost(), $matches);
+
+        return array_merge($this-&gt;matchToKeys(array_slice($matches, 1)), $parameters);
+    }
+
+    /**
+     * Combine a set of parameter matches with the route&#039;s keys.
+     *
+     * @param  array  $matches
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function matchToKeys(array $matches)
+    {
+        <span style="background-color: green">i</span>f (empty($parameterNames = $this-&gt;route-&gt;parameterNames())) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        $parameters = array_intersect_key($matches, array_flip($parameterNames));
+
+        return array_filter($parameters, <span style="background-color: red">f</span>unction ($value) {
+            return is_string($value) &amp;&amp; <span style="background-color: red">s</span>trlen($value) &gt; 0;
+        });
+    }
+
+    /**
+     * Replace null parameters with their defaults.
+     *
+     * @param  array  $parameters
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function replaceDefaults(array $parameters)
+    {
+        <span style="background-color: red">f</span>oreach ($parameters as $key =&gt; $value) {
+            $parameters[$key] = $value ?? <span style="background-color: red">A</span>rr::get($this-&gt;route-&gt;defaults, $key);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;route-&gt;defaults as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (! isset($parameters[$key])) {
+                $parameters[$key] = $value;
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return $parameters;
+    }
+}
+</pre>

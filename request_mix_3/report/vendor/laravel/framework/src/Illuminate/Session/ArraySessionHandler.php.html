@@ -1,0 +1,139 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session;
+
+use Illuminate\Support\InteractsWithTime;
+use SessionHandlerInterface;
+
+class ArraySessionHandler implements SessionHandlerInterface
+{
+    use InteractsWithTime;
+
+    /**
+     * The array of stored values.
+     *
+     * @var array
+     */
+    protected $storage = [];
+
+    /**
+     * The number of minutes the session should be valid.
+     *
+     * @var int
+     */
+    protected $minutes;
+
+    /**
+     * Create a new array driven handler instance.
+     *
+     * @param  int  $minutes
+     */
+    <span style="background-color: green">p</span>ublic function __construct($minutes)
+    {
+        $this-&gt;minutes = $minutes;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function open($savePath, $sessionName): bool
+    {
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function close(): bool
+    {
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function read($sessionId): string|false
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;storage[$sessionId])) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        $session = $this-&gt;storage[$sessionId];
+
+        $expiration = $this-&gt;calculateExpiration($this-&gt;minutes * 60);
+
+        <span style="background-color: red">i</span>f (isset($session[&#039;time&#039;]) &amp;&amp; <span style="background-color: red">$</span>session[&#039;time&#039;] &gt;= $expiration) {
+            return $session[&#039;data&#039;];
+        <span style="background-color: red">}</span>
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function write($sessionId, $data): bool
+    {
+        $this-&gt;storage[$sessionId] = [
+            &#039;data&#039; =&gt; $data,
+            &#039;time&#039; =&gt; $this-&gt;currentTime(),
+        ];
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function destroy($sessionId): bool
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;storage[$sessionId])) {
+            unset($this-&gt;storage[$sessionId]);
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function gc($lifetime): int
+    {
+        $expiration = $this-&gt;calculateExpiration($lifetime);
+
+        $deletedSessions = 0;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;storage as $sessionId =&gt; $session) {
+            <span style="background-color: red">i</span>f ($session[&#039;time&#039;] &lt; $expiration) {
+                unset($this-&gt;storage[$sessionId]);
+                $deletedSessions++;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $deletedSessions;
+    }
+
+    /**
+     * Get the expiration time of the session.
+     *
+     * @param  int  $seconds
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function calculateExpiration($seconds)
+    {
+        return $this-&gt;currentTime() - $seconds;
+    }
+}
+</pre>

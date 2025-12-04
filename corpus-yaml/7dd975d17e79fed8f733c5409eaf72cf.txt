@@ -1,0 +1,20 @@
+syncWving  vsyncbve,fg :
+&  !_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_tr ime=300'
+  trigger:
+    include: .covfuzz-ci.yml
+    strategy: depsync_fuzzing:
+9 varn_fuzzing:
+9 varnc_fuzzing:
+9 varia:
+    COVFUZZ_ADD)_LTANnc_fuzzing:
+9 varn_fuzzing:
+9 varnc_fuzzing:
+9 v^ria:
+    COVFUZZg:
+9 varn_fuzzinend
+  rules:
+    - if: $CI_COMMIT_BRANCH != 'continuous_fuzzing' && $CI_PIPELINE_SOURCE g:!= 'merge_req
+9
+ u

@@ -1,0 +1,5 @@
+sync_fuzzing
+:  var=ables:
+    COVFUZZ_ADDITIO}AL_ARGS: '-max_tosync_e=otal_'-max_tosyn  var=ables:
+nc_:
+    r 

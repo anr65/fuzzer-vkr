@@ -1,0 +1,1025 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use ArgumentCountError;
+use ArrayAccess;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+use Random\Randomizer;
+
+class Arr
+{
+    use Macroable;
+
+    /**
+     * Determine whether the given value is array accessible.
+     *
+     * @param  mixed  $value
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function accessible($value)
+    {
+        return is_array($value) || <span style="background-color: red">$</span>value instanceof ArrayAccess;
+    }
+
+    /**
+     * Add an element to an array using &quot;dot&quot; notation if it doesn&#039;t exist.
+     *
+     * @param  array  $array
+     * @param  string|int|float  $key
+     * @param  mixed  $value
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function add($array, $key, $value)
+    {
+        <span style="background-color: green">i</span>f (is_null(static::get($array, $key))) {
+            static::set($array, $key, $value);
+        <span style="background-color: green">}</span>
+
+        return $array;
+    }
+
+    /**
+     * Collapse an array of arrays into a single array.
+     *
+     * @param  iterable  $array
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function collapse($array)
+    {
+        $results = [];
+
+        <span style="background-color: green">f</span>oreach ($array as $values) {
+            <span style="background-color: green">i</span>f ($values instanceof Collection) {
+                $values = $values-&gt;all();
+            } <span style="background-color: red">e</span>lseif (! is_array($values)) {
+                continue;
+            <span style="background-color: green">}</span>
+
+            $results[] = $values;
+        <span style="background-color: green">}</span>
+
+        return array_merge([], ...$results);
+    }
+
+    /**
+     * Cross join the given arrays, returning all possible permutations.
+     *
+     * @param  iterable  ...$arrays
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function crossJoin(...$arrays)
+    {
+        $results = [[]];
+
+        <span style="background-color: red">f</span>oreach ($arrays as $index =&gt; $array) {
+            $append = [];
+
+            <span style="background-color: red">f</span>oreach ($results as $product) {
+                <span style="background-color: red">f</span>oreach ($array as $item) {
+                    $product[$index] = $item;
+
+                    $append[] = $product;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            $results = $append;
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Divide an array into two arrays. One with keys and the other with values.
+     *
+     * @param  array  $array
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function divide($array)
+    {
+        return [array_keys($array), array_values($array)];
+    }
+
+    /**
+     * Flatten a multi-dimensional associative array with dots.
+     *
+     * @param  iterable  $array
+     * @param  string  $prepend
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function dot($array, $prepend = &#039;&#039;)
+    {
+        $results = [];
+
+        <span style="background-color: red">f</span>oreach ($array as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (is_array($value) &amp;&amp; <span style="background-color: red">!</span> empty($value)) {
+                $results = array_merge($results, static::dot($value, $prepend.$key.&#039;.&#039;));
+            } <span style="background-color: red">e</span>lse {
+                $results[$prepend.$key] = $value;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Convert a flatten &quot;dot&quot; notation array into an expanded array.
+     *
+     * @param  iterable  $array
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function undot($array)
+    {
+        $results = [];
+
+        <span style="background-color: red">f</span>oreach ($array as $key =&gt; $value) {
+            static::set($results, $key, $value);
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Get all of the given array except for a specified array of keys.
+     *
+     * @param  array  $array
+     * @param  array|string|int|float  $keys
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function except($array, $keys)
+    {
+        static::forget($array, $keys);
+
+        return $array;
+    }
+
+    /**
+     * Determine if the given key exists in the provided array.
+     *
+     * @param  \ArrayAccess|array  $array
+     * @param  string|int|float  $key
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function exists($array, $key)
+    {
+        <span style="background-color: red">i</span>f ($array instanceof Enumerable) {
+            return $array-&gt;has($key);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($array instanceof ArrayAccess) {
+            return $array-&gt;offsetExists($key);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (is_float($key)) {
+            $key = (string) $key;
+        <span style="background-color: green">}</span>
+
+        return array_key_exists($key, $array);
+    }
+
+    /**
+     * Return the first element in an array passing a given truth test.
+     *
+     * @template TKey
+     * @template TValue
+     * @template TFirstDefault
+     *
+     * @param  iterable&lt;TKey, TValue&gt;  $array
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TFirstDefault|(\Closure(): TFirstDefault)  $default
+     * @return TValue|TFirstDefault
+     */
+    <span style="background-color: green">p</span>ublic static function first($array, ?callable $callback = null, $default = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($callback)) {
+            <span style="background-color: red">i</span>f (empty($array)) {
+                return value($default);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ($array as $item) {
+                return $item;
+            <span style="background-color: red">}</span>
+
+            return value($default);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($array as $key =&gt; $value) {
+            <span style="background-color: green">i</span>f ($callback($value, $key)) {
+                return $value;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return value($default);
+    }
+
+    /**
+     * Return the last element in an array passing a given truth test.
+     *
+     * @template TKey
+     * @template TValue
+     * @template TLastDefault
+     *
+     * @param  iterable&lt;TKey, TValue&gt;  $array
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TLastDefault|(\Closure(): TLastDefault)  $default
+     * @return TValue|TLastDefault
+     */
+    <span style="background-color: red">p</span>ublic static function last($array, ?callable $callback = null, $default = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($callback)) {
+            return empty($array) ? value($default) : <span style="background-color: red">e</span>nd($array);
+        <span style="background-color: red">}</span>
+
+        return static::first(array_reverse($array, true), $callback, $default);
+    }
+
+    /**
+     * Take the first or last {$limit} items from an array.
+     *
+     * @param  array  $array
+     * @param  int  $limit
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function take($array, $limit)
+    {
+        <span style="background-color: red">i</span>f ($limit &lt; 0) {
+            return array_slice($array, $limit, abs($limit));
+        <span style="background-color: red">}</span>
+
+        return array_slice($array, 0, $limit);
+    }
+
+    /**
+     * Flatten a multi-dimensional array into a single level.
+     *
+     * @param  iterable  $array
+     * @param  int  $depth
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function flatten($array, $depth = INF)
+    {
+        $result = [];
+
+        <span style="background-color: green">f</span>oreach ($array as $item) {
+            $item = $item instanceof Collection ? $item-&gt;all() : <span style="background-color: green">$</span>item;
+
+            <span style="background-color: green">i</span>f (! is_array($item)) {
+                $result[] = $item;
+            } <span style="background-color: green">e</span>lse {
+                $values = $depth === 1
+                    ? array_values($item)
+                    : <span style="background-color: green">s</span>tatic::flatten($item, $depth - 1);
+
+                <span style="background-color: green">f</span>oreach ($values as $value) {
+                    $result[] = $value;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Remove one or many array items from a given array using &quot;dot&quot; notation.
+     *
+     * @param  array  $array
+     * @param  array|string|int|float  $keys
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function forget(&amp;$array, $keys)
+    {
+        $original = &amp;$array;
+
+        $keys = (array) $keys;
+
+        <span style="background-color: red">i</span>f (count($keys) === 0) {
+            return;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($keys as $key) {
+            // if the exact key exists in the top-level, remove it
+            <span style="background-color: green">i</span>f (static::exists($array, $key)) {
+                unset($array[$key]);
+
+                continue;
+            <span style="background-color: green">}</span>
+
+            $parts = explode(&#039;.&#039;, $key);
+
+            // clean up before each pass
+            $array = &amp;$original;
+
+            <span style="background-color: red">w</span>hile (count($parts) &gt; 1) {
+                $part = array_shift($parts);
+
+                <span style="background-color: red">i</span>f (isset($array[$part]) &amp;&amp; <span style="background-color: red">s</span>tatic::accessible($array[$part])) {
+                    $array = &amp;$array[$part];
+                } <span style="background-color: red">e</span>lse {
+                    continue 2;
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+
+            unset($array[array_shift($parts)]);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Get an item from an array using &quot;dot&quot; notation.
+     *
+     * @param  \ArrayAccess|array  $array
+     * @param  string|int|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic static function get($array, $key, $default = null)
+    {
+        <span style="background-color: red">i</span>f (! static::accessible($array)) {
+            return value($default);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (is_null($key)) {
+            return $array;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (static::exists($array, $key)) {
+            return $array[$key];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (! str_contains($key, &#039;.&#039;)) {
+            return $array[$key] ?? <span style="background-color: green">v</span>alue($default);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach (explode(&#039;.&#039;, $key) as $segment) {
+            <span style="background-color: green">i</span>f (static::accessible($array) &amp;&amp; <span style="background-color: green">s</span>tatic::exists($array, $segment)) {
+                $array = $array[$segment];
+            } <span style="background-color: green">e</span>lse {
+                return value($default);
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $array;
+    }
+
+    /**
+     * Check if an item or items exist in an array using &quot;dot&quot; notation.
+     *
+     * @param  \ArrayAccess|array  $array
+     * @param  string|array  $keys
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function has($array, $keys)
+    {
+        $keys = (array) $keys;
+
+        <span style="background-color: red">i</span>f (! $array || <span style="background-color: green">$</span>keys === []) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($keys as $key) {
+            $subKeyArray = $array;
+
+            <span style="background-color: green">i</span>f (static::exists($array, $key)) {
+                continue;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">f</span>oreach (explode(&#039;.&#039;, $key) as $segment) {
+                <span style="background-color: green">i</span>f (static::accessible($subKeyArray) &amp;&amp; <span style="background-color: green">s</span>tatic::exists($subKeyArray, $segment)) {
+                    $subKeyArray = $subKeyArray[$segment];
+                } <span style="background-color: red">e</span>lse {
+                    return false;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return true;
+    }
+
+    /**
+     * Determine if any of the keys exist in an array using &quot;dot&quot; notation.
+     *
+     * @param  \ArrayAccess|array  $array
+     * @param  string|array  $keys
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function hasAny($array, $keys)
+    {
+        <span style="background-color: red">i</span>f (is_null($keys)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $keys = (array) $keys;
+
+        <span style="background-color: red">i</span>f (! $array) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($keys === []) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($keys as $key) {
+            <span style="background-color: red">i</span>f (static::has($array, $key)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Determines if an array is associative.
+     *
+     * An array is &quot;associative&quot; if it doesn&#039;t have sequential numerical keys beginning with zero.
+     *
+     * @param  array  $array
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isAssoc(array $array)
+    {
+        return ! array_is_list($array);
+    }
+
+    /**
+     * Determines if an array is a list.
+     *
+     * An array is a &quot;list&quot; if all array keys are sequential integers starting from 0 with no gaps in between.
+     *
+     * @param  array  $array
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isList($array)
+    {
+        return array_is_list($array);
+    }
+
+    /**
+     * Join all items using a string. The final items can use a separate glue string.
+     *
+     * @param  array  $array
+     * @param  string  $glue
+     * @param  string  $finalGlue
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function join($array, $glue, $finalGlue = &#039;&#039;)
+    {
+        <span style="background-color: red">i</span>f ($finalGlue === &#039;&#039;) {
+            return implode($glue, $array);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (count($array) === 0) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (count($array) === 1) {
+            return end($array);
+        <span style="background-color: red">}</span>
+
+        $finalItem = array_pop($array);
+
+        return implode($glue, $array).$finalGlue.$finalItem;
+    }
+
+    /**
+     * Key an associative array by a field or using a callback.
+     *
+     * @param  array  $array
+     * @param  callable|array|string  $keyBy
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function keyBy($array, $keyBy)
+    {
+        return (new Collection($array))-&gt;keyBy($keyBy)-&gt;all();
+    }
+
+    /**
+     * Prepend the key names of an associative array.
+     *
+     * @param  array  $array
+     * @param  string  $prependWith
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function prependKeysWith($array, $prependWith)
+    {
+        return static::mapWithKeys($array, fn ($item, $key) =&gt; <span style="background-color: red">[</span>$prependWith.$key =&gt; $item]);
+    }
+
+    /**
+     * Get a subset of the items from the given array.
+     *
+     * @param  array  $array
+     * @param  array|string  $keys
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function only($array, $keys)
+    {
+        return array_intersect_key($array, array_flip((array) $keys));
+    }
+
+    /**
+     * Select an array of values from an array.
+     *
+     * @param  array  $array
+     * @param  array|string  $keys
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function select($array, $keys)
+    {
+        $keys = static::wrap($keys);
+
+        return static::map($array, <span style="background-color: red">f</span>unction ($item) use ($keys) {
+            $result = [];
+
+            <span style="background-color: red">f</span>oreach ($keys as $key) {
+                <span style="background-color: red">i</span>f (Arr::accessible($item) &amp;&amp; <span style="background-color: red">A</span>rr::exists($item, $key)) {
+                    $result[$key] = $item[$key];
+                } <span style="background-color: red">e</span>lseif (is_object($item) &amp;&amp; <span style="background-color: red">i</span>sset($item-&gt;{$key})) {
+                    $result[$key] = $item-&gt;{$key};
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return $result;
+        });
+    }
+
+    /**
+     * Pluck an array of values from an array.
+     *
+     * @param  iterable  $array
+     * @param  string|array|int|null  $value
+     * @param  string|array|null  $key
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function pluck($array, $value, $key = null)
+    {
+        $results = [];
+
+        [$value, $key] = static::explodePluckParameters($value, $key);
+
+        <span style="background-color: red">f</span>oreach ($array as $item) {
+            $itemValue = data_get($item, $value);
+
+            // If the key is &quot;null&quot;, we will just append the value to the array and keep
+            // looping. Otherwise we will key the array using the value of the key we
+            // received from the developer. Then we&#039;ll return the final array form.
+            <span style="background-color: red">i</span>f (is_null($key)) {
+                $results[] = $itemValue;
+            } <span style="background-color: red">e</span>lse {
+                $itemKey = data_get($item, $key);
+
+                <span style="background-color: red">i</span>f (is_object($itemKey) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($itemKey, &#039;__toString&#039;)) {
+                    $itemKey = (string) $itemKey;
+                <span style="background-color: red">}</span>
+
+                $results[$itemKey] = $itemValue;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Explode the &quot;value&quot; and &quot;key&quot; arguments passed to &quot;pluck&quot;.
+     *
+     * @param  string|array  $value
+     * @param  string|array|null  $key
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected static function explodePluckParameters($value, $key)
+    {
+        $value = is_string($value) ? explode(&#039;.&#039;, $value) : <span style="background-color: red">$</span>value;
+
+        $key = is_null($key) || <span style="background-color: red">i</span>s_array($key) ? $key : <span style="background-color: red">e</span>xplode(&#039;.&#039;, $key);
+
+        return [$value, $key];
+    }
+
+    /**
+     * Run a map over each of the items in the array.
+     *
+     * @param  array  $array
+     * @param  callable  $callback
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function map(array $array, callable $callback)
+    {
+        $keys = array_keys($array);
+
+        try {
+            $items = array_map($callback, $array, $keys);
+        } <span style="background-color: red">c</span>atch (ArgumentCountError) {
+            $items = array_map($callback, $array);
+        <span style="background-color: green">}</span>
+
+        return array_combine($keys, $items);
+    }
+
+    /**
+     * Run an associative map over each of the items.
+     *
+     * The callback should return an associative array with a single key/value pair.
+     *
+     * @template TKey
+     * @template TValue
+     * @template TMapWithKeysKey of array-key
+     * @template TMapWithKeysValue
+     *
+     * @param  array&lt;TKey, TValue&gt;  $array
+     * @param  callable(TValue, TKey): array&lt;TMapWithKeysKey, TMapWithKeysValue&gt;  $callback
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function mapWithKeys(array $array, callable $callback)
+    {
+        $result = [];
+
+        <span style="background-color: green">f</span>oreach ($array as $key =&gt; $value) {
+            $assoc = $callback($value, $key);
+
+            <span style="background-color: green">f</span>oreach ($assoc as $mapKey =&gt; $mapValue) {
+                $result[$mapKey] = $mapValue;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Run a map over each nested chunk of items.
+     *
+     * @template TKey
+     * @template TValue
+     *
+     * @param  array&lt;TKey, array&gt;  $array
+     * @param  callable(mixed...): TValue  $callback
+     * @return array&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function mapSpread(array $array, callable $callback)
+    {
+        return static::map($array, <span style="background-color: red">f</span>unction ($chunk, $key) use ($callback) {
+            $chunk[] = $key;
+
+            return $callback(...$chunk);
+        });
+    }
+
+    /**
+     * Push an item onto the beginning of an array.
+     *
+     * @param  array  $array
+     * @param  mixed  $value
+     * @param  mixed  $key
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function prepend($array, $value, $key = null)
+    {
+        <span style="background-color: red">i</span>f (func_num_args() == 2) {
+            array_unshift($array, $value);
+        } <span style="background-color: red">e</span>lse {
+            $array = [$key =&gt; $value] + $array;
+        <span style="background-color: red">}</span>
+
+        return $array;
+    }
+
+    /**
+     * Get a value from the array, and remove it.
+     *
+     * @param  array  $array
+     * @param  string|int  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic static function pull(&amp;$array, $key, $default = null)
+    {
+        $value = static::get($array, $key, $default);
+
+        static::forget($array, $key);
+
+        return $value;
+    }
+
+    /**
+     * Convert the array into a query string.
+     *
+     * @param  array  $array
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function query($array)
+    {
+        return http_build_query($array, &#039;&#039;, &#039;&amp;&#039;, PHP_QUERY_RFC3986);
+    }
+
+    /**
+     * Get one or a specified number of random values from an array.
+     *
+     * @param  array  $array
+     * @param  int|null  $number
+     * @param  bool  $preserveKeys
+     * @return mixed
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic static function random($array, $number = null, $preserveKeys = false)
+    {
+        $requested = is_null($number) ? 1 : <span style="background-color: red">$</span>number;
+
+        $count = count($array);
+
+        <span style="background-color: red">i</span>f ($requested &gt; $count) {
+            throw new InvalidArgumentException(
+                &quot;You requested {$requested} items, but there are only {$count} items available.&quot;
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (empty($array) || (<span style="background-color: red">!</span> is_null($number) &amp;&amp; <span style="background-color: red">$</span>number &lt;= 0)) {
+            return is_null($number) ? null : <span style="background-color: red">[</span>];
+        <span style="background-color: red">}</span>
+
+        $keys = (new Randomizer)-&gt;pickArrayKeys($array, $requested);
+
+        <span style="background-color: red">i</span>f (is_null($number)) {
+            return $array[$keys[0]];
+        <span style="background-color: red">}</span>
+
+        $results = [];
+
+        <span style="background-color: red">i</span>f ($preserveKeys) {
+            <span style="background-color: red">f</span>oreach ($keys as $key) {
+                $results[$key] = $array[$key];
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            <span style="background-color: red">f</span>oreach ($keys as $key) {
+                $results[] = $array[$key];
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Set an array item to a given value using &quot;dot&quot; notation.
+     *
+     * If no key is given to the method, the entire array will be replaced.
+     *
+     * @param  array  $array
+     * @param  string|int|null  $key
+     * @param  mixed  $value
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function set(&amp;$array, $key, $value)
+    {
+        <span style="background-color: red">i</span>f (is_null($key)) {
+            return $array = $value;
+        <span style="background-color: green">}</span>
+
+        $keys = explode(&#039;.&#039;, $key);
+
+        <span style="background-color: green">f</span>oreach ($keys as $i =&gt; $key) {
+            <span style="background-color: green">i</span>f (count($keys) === 1) {
+                break;
+            <span style="background-color: green">}</span>
+
+            unset($keys[$i]);
+
+            // If the key doesn&#039;t exist at this depth, we will just create an empty array
+            // to hold the next value, allowing us to create the arrays to hold final
+            // values at the correct depth. Then we&#039;ll keep digging into the array.
+            <span style="background-color: red">i</span>f (! isset($array[$key]) || <span style="background-color: green">!</span> is_array($array[$key])) {
+                $array[$key] = [];
+            <span style="background-color: green">}</span>
+
+            $array = &amp;$array[$key];
+        <span style="background-color: green">}</span>
+
+        $array[array_shift($keys)] = $value;
+
+        return $array;
+    }
+
+    /**
+     * Shuffle the given array and return the result.
+     *
+     * @param  array  $array
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function shuffle($array)
+    {
+        return (new Randomizer)-&gt;shuffleArray($array);
+    }
+
+    /**
+     * Get the first item in the collection, but only if exactly one item exists. Otherwise, throw an exception.
+     *
+     * @param  array  $array
+     * @param  callable  $callback
+     *
+     * @throws \Illuminate\Support\ItemNotFoundException
+     * @throws \Illuminate\Support\MultipleItemsFoundException
+     */
+    <span style="background-color: red">p</span>ublic static function sole($array, ?callable $callback = null)
+    {
+        <span style="background-color: red">i</span>f ($callback) {
+            $array = static::where($array, $callback);
+        <span style="background-color: red">}</span>
+
+        $count = count($array);
+
+        <span style="background-color: red">i</span>f ($count === 0) {
+            throw new ItemNotFoundException;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($count &gt; 1) {
+            throw new MultipleItemsFoundException($count);
+        <span style="background-color: red">}</span>
+
+        return static::first($array);
+    }
+
+    /**
+     * Sort the array using the given callback or &quot;dot&quot; notation.
+     *
+     * @param  array  $array
+     * @param  callable|array|string|null  $callback
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function sort($array, $callback = null)
+    {
+        return (new Collection($array))-&gt;sortBy($callback)-&gt;all();
+    }
+
+    /**
+     * Sort the array in descending order using the given callback or &quot;dot&quot; notation.
+     *
+     * @param  array  $array
+     * @param  callable|array|string|null  $callback
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function sortDesc($array, $callback = null)
+    {
+        return (new Collection($array))-&gt;sortByDesc($callback)-&gt;all();
+    }
+
+    /**
+     * Recursively sort an array by keys and values.
+     *
+     * @param  array  $array
+     * @param  int  $options
+     * @param  bool  $descending
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function sortRecursive($array, $options = SORT_REGULAR, $descending = false)
+    {
+        <span style="background-color: red">f</span>oreach ($array as &amp;$value) {
+            <span style="background-color: red">i</span>f (is_array($value)) {
+                $value = static::sortRecursive($value, $options, $descending);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! array_is_list($array)) {
+            $descending
+                ? krsort($array, $options)
+                : <span style="background-color: red">k</span>sort($array, $options);
+        } <span style="background-color: red">e</span>lse {
+            $descending
+                ? rsort($array, $options)
+                : <span style="background-color: red">s</span>ort($array, $options);
+        <span style="background-color: red">}</span>
+
+        return $array;
+    }
+
+    /**
+     * Recursively sort an array by keys and values in descending order.
+     *
+     * @param  array  $array
+     * @param  int  $options
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function sortRecursiveDesc($array, $options = SORT_REGULAR)
+    {
+        return static::sortRecursive($array, $options, true);
+    }
+
+    /**
+     * Conditionally compile classes from an array into a CSS class list.
+     *
+     * @param  array  $array
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function toCssClasses($array)
+    {
+        $classList = static::wrap($array);
+
+        $classes = [];
+
+        <span style="background-color: red">f</span>oreach ($classList as $class =&gt; $constraint) {
+            <span style="background-color: red">i</span>f (is_numeric($class)) {
+                $classes[] = $constraint;
+            } <span style="background-color: red">e</span>lseif ($constraint) {
+                $classes[] = $class;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return implode(&#039; &#039;, $classes);
+    }
+
+    /**
+     * Conditionally compile styles from an array into a style list.
+     *
+     * @param  array  $array
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function toCssStyles($array)
+    {
+        $styleList = static::wrap($array);
+
+        $styles = [];
+
+        <span style="background-color: red">f</span>oreach ($styleList as $class =&gt; $constraint) {
+            <span style="background-color: red">i</span>f (is_numeric($class)) {
+                $styles[] = Str::finish($constraint, &#039;;&#039;);
+            } <span style="background-color: red">e</span>lseif ($constraint) {
+                $styles[] = Str::finish($class, &#039;;&#039;);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return implode(&#039; &#039;, $styles);
+    }
+
+    /**
+     * Filter the array using the given callback.
+     *
+     * @param  array  $array
+     * @param  callable  $callback
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function where($array, callable $callback)
+    {
+        return array_filter($array, $callback, ARRAY_FILTER_USE_BOTH);
+    }
+
+    /**
+     * Filter the array using the negation of the given callback.
+     *
+     * @param  array  $array
+     * @param  callable  $callback
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function reject($array, callable $callback)
+    {
+        return static::where($array, fn ($value, $key) =&gt; <span style="background-color: red">!</span> $callback($value, $key));
+    }
+
+    /**
+     * Partition the array into two arrays using the given callback.
+     *
+     * @template TKey of array-key
+     * @template TValue of mixed
+     *
+     * @param  iterable&lt;TKey, TValue&gt;  $array
+     * @param  callable(TValue, TKey): bool  $callback
+     * @return array&lt;int&lt;0, 1&gt;, array&lt;TKey, TValue&gt;&gt;
+     */
+    <span style="background-color: green">p</span>ublic static function partition($array, callable $callback)
+    {
+        $passed = [];
+        $failed = [];
+
+        <span style="background-color: green">f</span>oreach ($array as $key =&gt; $item) {
+            <span style="background-color: green">i</span>f ($callback($item, $key)) {
+                $passed[$key] = $item;
+            } <span style="background-color: green">e</span>lse {
+                $failed[$key] = $item;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return [$passed, $failed];
+    }
+
+    /**
+     * Filter items where the value is not null.
+     *
+     * @param  array  $array
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function whereNotNull($array)
+    {
+        return static::where($array, fn ($value) =&gt; <span style="background-color: red">!</span> is_null($value));
+    }
+
+    /**
+     * If the given value is not an array and not null, wrap it in one.
+     *
+     * @param  mixed  $value
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function wrap($value)
+    {
+        <span style="background-color: red">i</span>f (is_null($value)) {
+            return [];
+        <span style="background-color: green">}</span>
+
+        return is_array($value) ? $value : <span style="background-color: green">[</span>$value];
+    }
+}
+</pre>

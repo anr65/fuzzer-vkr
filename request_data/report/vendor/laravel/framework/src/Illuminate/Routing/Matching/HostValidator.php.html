@@ -1,0 +1,28 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing\Matching;
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+
+class HostValidator implements ValidatorInterface
+{
+    /**
+     * Validate a given rule against a route and request.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function matches(Route $route, Request $request)
+    {
+        $hostRegex = $route-&gt;getCompiled()-&gt;getHostRegex();
+
+        <span style="background-color: red">i</span>f (is_null($hostRegex)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return preg_match($hostRegex, $request-&gt;getHost());
+    }
+}
+</pre>

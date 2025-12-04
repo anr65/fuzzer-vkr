@@ -1,0 +1,21 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_tosync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_sync_Fuzzing:
+9 varnc_fuzzing:
+> varia:
+ IIg:
+9 vanc_fZZ_ADDITIONAL_sync_Fuzzing:
+9 varnc_fuzzing:
+> varia:
+ IIg:
+9 vanc_fuzzing:
+9 varia:
+ing:
+9 varia*:
+ II_`TANIOARGS: '-max_ARGS: '-max__ARGS: '-m^^^in:aigbles:
+ _Lotal_time=300tal_time=TANIOARGS300'
+  tri'
+ x_s:
+  gger   r 

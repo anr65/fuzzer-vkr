@@ -1,0 +1,462 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Events\NullDispatcher;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use InvalidArgumentException;
+use ReflectionClass;
+
+trait HasEvents
+{
+    /**
+     * The event map for the model.
+     *
+     * Allows for object-based events for native Eloquent events.
+     *
+     * @var array
+     */
+    protected $dispatchesEvents = [];
+
+    /**
+     * User exposed observable events.
+     *
+     * These are extra user-defined events observers may subscribe to.
+     *
+     * @var array
+     */
+    protected $observables = [];
+
+    /**
+     * Boot the has event trait for a model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function bootHasEvents()
+    {
+        static::whenBooted(fn () =&gt; <span style="background-color: red">s</span>tatic::observe(static::resolveObserveAttributes()));
+    }
+
+    /**
+     * Resolve the observe class names from the attributes.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function resolveObserveAttributes()
+    {
+        $reflectionClass = new ReflectionClass(static::class);
+
+        $isEloquentGrandchild = is_subclass_of(static::class, Model::class)
+            &amp;&amp; <span style="background-color: red">g</span>et_parent_class(static::class) !== Model::class;
+
+        return (new Collection($reflectionClass-&gt;getAttributes(ObservedBy::class)))
+            -&gt;map(fn ($attribute) =&gt; <span style="background-color: red">$</span>attribute-&gt;getArguments())
+            -&gt;flatten()
+            -&gt;when($isEloquentGrandchild, <span style="background-color: red">f</span>unction (Collection $attributes) {
+                return (new Collection(get_parent_class(static::class)::resolveObserveAttributes()))
+                    -&gt;merge($attributes);
+            })
+            -&gt;all();
+    }
+
+    /**
+     * Register observers with the model.
+     *
+     * @param  object|array|string  $classes
+     * @return void
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic static function observe($classes)
+    {
+        $instance = new static;
+
+        <span style="background-color: red">f</span>oreach (Arr::wrap($classes) as $class) {
+            $instance-&gt;registerObserver($class);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Register a single observer with the model.
+     *
+     * @param  object|string  $class
+     * @return void
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rotected function registerObserver($class)
+    {
+        $className = $this-&gt;resolveObserverClassName($class);
+
+        // When registering a model observer, we will spin through the possible events
+        // and determine if this observer has that method. If it does, we will hook
+        // it into the model&#039;s event system, making it convenient to watch these.
+        <span style="background-color: red">f</span>oreach ($this-&gt;getObservableEvents() as $event) {
+            <span style="background-color: red">i</span>f (method_exists($class, $event)) {
+                static::registerModelEvent($event, $className.&#039;@&#039;.$event);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Resolve the observer&#039;s class name from an object or string.
+     *
+     * @param  object|string  $class
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>rivate function resolveObserverClassName($class)
+    {
+        <span style="background-color: red">i</span>f (is_object($class)) {
+            return get_class($class);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (class_exists($class)) {
+            return $class;
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&#039;Unable to find observer: &#039;.$class);
+    }
+
+    /**
+     * Get the observable event names.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getObservableEvents()
+    {
+        return array_merge(
+            [
+                &#039;retrieved&#039;, &#039;creating&#039;, &#039;created&#039;, &#039;updating&#039;, &#039;updated&#039;,
+                &#039;saving&#039;, &#039;saved&#039;, &#039;restoring&#039;, &#039;restored&#039;, &#039;replicating&#039;,
+                &#039;trashed&#039;, &#039;deleting&#039;, &#039;deleted&#039;, &#039;forceDeleting&#039;, &#039;forceDeleted&#039;,
+            ],
+            $this-&gt;observables
+        );
+    }
+
+    /**
+     * Set the observable event names.
+     *
+     * @param  array  $observables
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setObservableEvents(array $observables)
+    {
+        $this-&gt;observables = $observables;
+
+        return $this;
+    }
+
+    /**
+     * Add an observable event name.
+     *
+     * @param  array|mixed  $observables
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addObservableEvents($observables)
+    {
+        $this-&gt;observables = array_unique(array_merge(
+            $this-&gt;observables, is_array($observables) ? $observables : <span style="background-color: red">f</span>unc_get_args()
+        ));
+    }
+
+    /**
+     * Remove an observable event name.
+     *
+     * @param  array|mixed  $observables
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function removeObservableEvents($observables)
+    {
+        $this-&gt;observables = array_diff(
+            $this-&gt;observables, is_array($observables) ? $observables : <span style="background-color: red">f</span>unc_get_args()
+        );
+    }
+
+    /**
+     * Register a model event with the dispatcher.
+     *
+     * @param  string  $event
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected static function registerModelEvent($event, $callback)
+    {
+        <span style="background-color: red">i</span>f (isset(static::$dispatcher)) {
+            $name = static::class;
+
+            static::$dispatcher-&gt;listen(&quot;eloquent.{$event}: {$name}&quot;, $callback);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Fire the given event for the model.
+     *
+     * @param  string  $event
+     * @param  bool  $halt
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function fireModelEvent($event, $halt = true)
+    {
+        <span style="background-color: red">i</span>f (! isset(static::$dispatcher)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        // First, we will get the proper method to call on the event dispatcher, and then we
+        // will attempt to fire a custom, object based event for the given event. If that
+        // returns a result we can return that result, or we&#039;ll call the string events.
+        $method = $halt ? &#039;until&#039; : <span style="background-color: red">'</span>dispatch&#039;;
+
+        $result = $this-&gt;filterModelEventResults(
+            $this-&gt;fireCustomModelEvent($event, $method)
+        );
+
+        <span style="background-color: red">i</span>f ($result === false) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return ! empty($result) ? $result : <span style="background-color: red">s</span>tatic::$dispatcher-&gt;{$method}(
+            &quot;eloquent.{$event}: &quot;.static::class, $this
+        );
+    }
+
+    /**
+     * Fire a custom model event for the given event.
+     *
+     * @param  string  $event
+     * @param  string  $method
+     * @return mixed|null
+     */
+    <span style="background-color: red">p</span>rotected function fireCustomModelEvent($event, $method)
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;dispatchesEvents[$event])) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $result = static::$dispatcher-&gt;$method(new $this-&gt;dispatchesEvents[$event]($this));
+
+        <span style="background-color: red">i</span>f (! is_null($result)) {
+            return $result;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Filter the model event results.
+     *
+     * @param  mixed  $result
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function filterModelEventResults($result)
+    {
+        <span style="background-color: red">i</span>f (is_array($result)) {
+            $result = array_filter($result, <span style="background-color: red">f</span>unction ($response) {
+                return ! is_null($response);
+            });
+        <span style="background-color: red">}</span>
+
+        return $result;
+    }
+
+    /**
+     * Register a retrieved model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function retrieved($callback)
+    {
+        static::registerModelEvent(&#039;retrieved&#039;, $callback);
+    }
+
+    /**
+     * Register a saving model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function saving($callback)
+    {
+        static::registerModelEvent(&#039;saving&#039;, $callback);
+    }
+
+    /**
+     * Register a saved model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function saved($callback)
+    {
+        static::registerModelEvent(&#039;saved&#039;, $callback);
+    }
+
+    /**
+     * Register an updating model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function updating($callback)
+    {
+        static::registerModelEvent(&#039;updating&#039;, $callback);
+    }
+
+    /**
+     * Register an updated model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function updated($callback)
+    {
+        static::registerModelEvent(&#039;updated&#039;, $callback);
+    }
+
+    /**
+     * Register a creating model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function creating($callback)
+    {
+        static::registerModelEvent(&#039;creating&#039;, $callback);
+    }
+
+    /**
+     * Register a created model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function created($callback)
+    {
+        static::registerModelEvent(&#039;created&#039;, $callback);
+    }
+
+    /**
+     * Register a replicating model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function replicating($callback)
+    {
+        static::registerModelEvent(&#039;replicating&#039;, $callback);
+    }
+
+    /**
+     * Register a deleting model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function deleting($callback)
+    {
+        static::registerModelEvent(&#039;deleting&#039;, $callback);
+    }
+
+    /**
+     * Register a deleted model event with the dispatcher.
+     *
+     * @param  \Illuminate\Events\QueuedClosure|callable|array|class-string  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function deleted($callback)
+    {
+        static::registerModelEvent(&#039;deleted&#039;, $callback);
+    }
+
+    /**
+     * Remove all the event listeners for the model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushEventListeners()
+    {
+        <span style="background-color: red">i</span>f (! isset(static::$dispatcher)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $instance = new static;
+
+        <span style="background-color: red">f</span>oreach ($instance-&gt;getObservableEvents() as $event) {
+            static::$dispatcher-&gt;forget(&quot;eloquent.{$event}: &quot;.static::class);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($instance-&gt;dispatchesEvents as $event) {
+            static::$dispatcher-&gt;forget($event);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the event map for the model.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function dispatchesEvents()
+    {
+        return $this-&gt;dispatchesEvents;
+    }
+
+    /**
+     * Get the event dispatcher instance.
+     *
+     * @return \Illuminate\Contracts\Events\Dispatcher|null
+     */
+    <span style="background-color: red">p</span>ublic static function getEventDispatcher()
+    {
+        return static::$dispatcher;
+    }
+
+    /**
+     * Set the event dispatcher instance.
+     *
+     * @param  \Illuminate\Contracts\Events\Dispatcher  $dispatcher
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function setEventDispatcher(Dispatcher $dispatcher)
+    {
+        static::$dispatcher = $dispatcher;
+    }
+
+    /**
+     * Unset the event dispatcher for models.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function unsetEventDispatcher()
+    {
+        static::$dispatcher = null;
+    }
+
+    /**
+     * Execute a callback without firing any model events for any model type.
+     *
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function withoutEvents(callable $callback)
+    {
+        $dispatcher = static::getEventDispatcher();
+
+        <span style="background-color: red">i</span>f ($dispatcher) {
+            static::setEventDispatcher(new NullDispatcher($dispatcher));
+        <span style="background-color: red">}</span>
+
+        try {
+            return $callback();
+        } <span style="background-color: red">f</span>inally {
+            <span style="background-color: red">i</span>f ($dispatcher) {
+                static::setEventDispatcher($dispatcher);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

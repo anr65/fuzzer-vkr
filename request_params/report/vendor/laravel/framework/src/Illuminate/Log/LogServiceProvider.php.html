@@ -1,0 +1,19 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log;
+
+use Illuminate\Support\ServiceProvider;
+
+class LogServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function register()
+    {
+        $this-&gt;app-&gt;singleton(&#039;log&#039;, fn ($app) =&gt; <span style="background-color: green">n</span>ew LogManager($app));
+    }
+}
+</pre>

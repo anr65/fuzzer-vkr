@@ -1,0 +1,12 @@
+sync_fuzzing:
+  S: )-max_total_time=61'
+  gger:
+    ie: .covfuzz-0ci.yml
+    rsatgety: depend
+  rules:
+    - if:nt'
+
+async_fuzzing:
+  varia riaty: dnc_fuzzing:
+  variables:
+    COVFUge_request_event'

@@ -1,0 +1,96 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Bootstrap;
+
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\ServiceProvider;
+
+class RegisterProviders
+{
+    /**
+     * The service providers that should be merged before registration.
+     *
+     * @var array
+     */
+    protected static $merge = [];
+
+    /**
+     * The path to the bootstrap provider configuration file.
+     *
+     * @var string|null
+     */
+    protected static $bootstrapProviderPath;
+
+    /**
+     * Bootstrap the given application.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function bootstrap(Application $app)
+    {
+        <span style="background-color: green">i</span>f (! $app-&gt;bound(&#039;config_loaded_from_cache&#039;) ||
+            <span style="background-color: red">$</span>app-&gt;make(&#039;config_loaded_from_cache&#039;) === false) {
+            $this-&gt;mergeAdditionalProviders($app);
+        <span style="background-color: green">}</span>
+
+        $app-&gt;registerConfiguredProviders();
+    }
+
+    /**
+     * Merge the additional configured providers into the configuration.
+     *
+     * @param  \Illuminate\Foundation\Application  $app
+     */
+    <span style="background-color: green">p</span>rotected function mergeAdditionalProviders(Application $app)
+    {
+        <span style="background-color: green">i</span>f (static::$bootstrapProviderPath &amp;&amp;
+            <span style="background-color: green">f</span>ile_exists(static::$bootstrapProviderPath)) {
+            $packageProviders = require static::$bootstrapProviderPath;
+
+            <span style="background-color: green">f</span>oreach ($packageProviders as $index =&gt; $provider) {
+                <span style="background-color: red">i</span>f (! class_exists($provider)) {
+                    unset($packageProviders[$index]);
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        $app-&gt;make(&#039;config&#039;)-&gt;set(
+            &#039;app.providers&#039;,
+            array_merge(
+                $app-&gt;make(&#039;config&#039;)-&gt;get(&#039;app.providers&#039;) ?? <span style="background-color: red">S</span>erviceProvider::defaultProviders()-&gt;toArray(),
+                static::$merge,
+                array_values($packageProviders ?? <span style="background-color: red">[</span>]),
+            ),
+        );
+    }
+
+    /**
+     * Merge the given providers into the provider configuration before registration.
+     *
+     * @param  array  $providers
+     * @param  string|null  $bootstrapProviderPath
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function merge(array $providers, ?string $bootstrapProviderPath = null)
+    {
+        static::$bootstrapProviderPath = $bootstrapProviderPath;
+
+        static::$merge = array_values(array_filter(array_unique(
+            array_merge(static::$merge, $providers)
+        )));
+    }
+
+    /**
+     * Flush the bootstrapper&#039;s global state.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function flushState()
+    {
+        static::$bootstrapProviderPath = null;
+
+        static::$merge = [];
+    }
+}
+</pre>

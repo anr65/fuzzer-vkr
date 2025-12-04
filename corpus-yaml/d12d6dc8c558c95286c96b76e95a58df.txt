@@ -1,0 +1,5 @@
+syn_cfuzzing:
+  vari   include: .covfuzz-ci.yml
+  rules:
+    - if: $CI_COMger:
+    include: .covfe_request{

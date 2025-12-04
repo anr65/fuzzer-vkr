@@ -1,0 +1,136 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Console;
+
+use Illuminate\Foundation\Concerns\ResolvesDumpSource;
+use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\VarDumper\Caster\ReflectionCaster;
+use Symfony\Component\VarDumper\Cloner\Data;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper as BaseCliDumper;
+use Symfony\Component\VarDumper\VarDumper;
+
+class CliDumper extends BaseCliDumper
+{
+    use ResolvesDumpSource;
+
+    /**
+     * The base path of the application.
+     *
+     * @var string
+     */
+    protected $basePath;
+
+    /**
+     * The output instance.
+     *
+     * @var \Symfony\Component\Console\Output\OutputInterface
+     */
+    protected $output;
+
+    /**
+     * The compiled view path for the application.
+     *
+     * @var string
+     */
+    protected $compiledViewPath;
+
+    /**
+     * If the dumper is currently dumping.
+     *
+     * @var bool
+     */
+    protected $dumping = false;
+
+    /**
+     * Create a new CLI dumper instance.
+     *
+     * @param  \Symfony\Component\Console\Output\OutputInterface  $output
+     * @param  string  $basePath
+     * @param  string  $compiledViewPath
+     */
+    <span style="background-color: green">p</span>ublic function __construct($output, $basePath, $compiledViewPath)
+    {
+        parent::__construct();
+
+        $this-&gt;basePath = $basePath;
+        $this-&gt;output = $output;
+        $this-&gt;compiledViewPath = $compiledViewPath;
+
+        $this-&gt;setColors($this-&gt;supportsColors());
+    }
+
+    /**
+     * Create a new CLI dumper instance and register it as the default dumper.
+     *
+     * @param  string  $basePath
+     * @param  string  $compiledViewPath
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function register($basePath, $compiledViewPath)
+    {
+        $cloner = tap(new VarCloner())-&gt;addCasters(ReflectionCaster::UNSET_CLOSURE_FILE_INFO);
+
+        $dumper = new static(new ConsoleOutput(), $basePath, $compiledViewPath);
+
+        VarDumper::setHandler(fn ($value) =&gt; <span style="background-color: red">$</span>dumper-&gt;dumpWithSource($cloner-&gt;cloneVar($value)));
+    }
+
+    /**
+     * Dump a variable with its source file / line.
+     *
+     * @param  \Symfony\Component\VarDumper\Cloner\Data  $data
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function dumpWithSource(Data $data)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;dumping) {
+            $this-&gt;dump($data);
+
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;dumping = true;
+
+        $output = (string) $this-&gt;dump($data, true);
+        $lines = explode(&quot;\n&quot;, $output);
+
+        $lines[array_key_last($lines) - 1] .= $this-&gt;getDumpSourceContent();
+
+        $this-&gt;output-&gt;write(implode(&quot;\n&quot;, $lines));
+
+        $this-&gt;dumping = false;
+    }
+
+    /**
+     * Get the dump&#039;s source console content.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function getDumpSourceContent()
+    {
+        <span style="background-color: red">i</span>f (is_null($dumpSource = $this-&gt;resolveDumpSource())) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        [$file, $relativeFile, $line] = $dumpSource;
+
+        $href = $this-&gt;resolveSourceHref($file, $line);
+
+        return sprintf(
+            &#039; &lt;fg=gray&gt;// &lt;fg=gray%s&gt;%s%s&lt;/&gt;&lt;/&gt;&#039;,
+            is_null($href) ? &#039;&#039; : <span style="background-color: red">"</span>;href=$href&quot;,
+            $relativeFile,
+            is_null($line) ? &#039;&#039; : <span style="background-color: red">"</span>:$line&quot;
+        );
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    <span style="background-color: green">p</span>rotected function supportsColors(): bool
+    {
+        return $this-&gt;output-&gt;isDecorated();
+    }
+}
+</pre>

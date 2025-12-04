@@ -1,0 +1,83 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesIncludes
+{
+    /**
+     * Compile the each statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEach($expression)
+    {
+        return &quot;&lt;?php echo \$__env-&gt;renderEach{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the include statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileInclude($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        return &quot;&lt;?php echo \$__env-&gt;make({$expression}, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1]))-&gt;render(); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the include-if statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIncludeIf($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        return &quot;&lt;?php if (\$__env-&gt;exists({$expression})) echo \$__env-&gt;make({$expression}, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1]))-&gt;render(); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the include-when statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIncludeWhen($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        return &quot;&lt;?php echo \$__env-&gt;renderWhen($expression, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1])); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the include-unless statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIncludeUnless($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        return &quot;&lt;?php echo \$__env-&gt;renderUnless($expression, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1])); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the include-first statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIncludeFirst($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        return &quot;&lt;?php echo \$__env-&gt;first({$expression}, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1]))-&gt;render(); ?&gt;&quot;;
+    }
+}
+</pre>

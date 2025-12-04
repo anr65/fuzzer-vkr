@@ -1,0 +1,5 @@
+rules:
+ 
+ - if:n
+asnes:
+ - in

@@ -1,0 +1,158 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http;
+
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
+use Illuminate\Http\Testing\FileFactory;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\HttpFoundation\File\UploadedFile as SymfonyUploadedFile;
+
+class UploadedFile extends SymfonyUploadedFile
+{
+    use FileHelpers, Macroable;
+
+    /**
+     * Begin creating a new file fake.
+     *
+     * @return \Illuminate\Http\Testing\FileFactory
+     */
+    <span style="background-color: red">p</span>ublic static function fake()
+    {
+        return new FileFactory;
+    }
+
+    /**
+     * Store the uploaded file on a filesystem disk.
+     *
+     * @param  string  $path
+     * @param  array|string  $options
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function store($path = &#039;&#039;, $options = [])
+    {
+        return $this-&gt;storeAs($path, $this-&gt;hashName(), $this-&gt;parseOptions($options));
+    }
+
+    /**
+     * Store the uploaded file on a filesystem disk with public visibility.
+     *
+     * @param  string  $path
+     * @param  array|string  $options
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function storePublicly($path = &#039;&#039;, $options = [])
+    {
+        $options = $this-&gt;parseOptions($options);
+
+        $options[&#039;visibility&#039;] = &#039;public&#039;;
+
+        return $this-&gt;storeAs($path, $this-&gt;hashName(), $options);
+    }
+
+    /**
+     * Store the uploaded file on a filesystem disk with public visibility.
+     *
+     * @param  string  $path
+     * @param  array|string|null  $name
+     * @param  array|string  $options
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function storePubliclyAs($path, $name = null, $options = [])
+    {
+        <span style="background-color: red">i</span>f (is_null($name) || <span style="background-color: red">i</span>s_array($name)) {
+            [$path, $name, $options] = [&#039;&#039;, $path, $name ?? <span style="background-color: red">[</span>]];
+        <span style="background-color: red">}</span>
+
+        $options = $this-&gt;parseOptions($options);
+
+        $options[&#039;visibility&#039;] = &#039;public&#039;;
+
+        return $this-&gt;storeAs($path, $name, $options);
+    }
+
+    /**
+     * Store the uploaded file on a filesystem disk.
+     *
+     * @param  string  $path
+     * @param  string|array  $name
+     * @param  array|string  $options
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function storeAs($path, $name = null, $options = [])
+    {
+        <span style="background-color: red">i</span>f (is_null($name) || <span style="background-color: red">i</span>s_array($name)) {
+            [$path, $name, $options] = [&#039;&#039;, $path, $name ?? <span style="background-color: red">[</span>]];
+        <span style="background-color: red">}</span>
+
+        $options = $this-&gt;parseOptions($options);
+
+        $disk = Arr::pull($options, &#039;disk&#039;);
+
+        return Container::getInstance()-&gt;make(FilesystemFactory::class)-&gt;disk($disk)-&gt;putFileAs(
+            $path, $this, $name, $options
+        );
+    }
+
+    /**
+     * Get the contents of the uploaded file.
+     *
+     * @return false|string
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     */
+    <span style="background-color: red">p</span>ublic function get()
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isValid()) {
+            throw new FileNotFoundException(&quot;File does not exist at path {$this-&gt;getPathname()}.&quot;);
+        <span style="background-color: red">}</span>
+
+        return file_get_contents($this-&gt;getPathname());
+    }
+
+    /**
+     * Get the file&#039;s extension supplied by the client.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function clientExtension()
+    {
+        return $this-&gt;guessClientExtension();
+    }
+
+    /**
+     * Create a new file instance from a base instance.
+     *
+     * @param  \Symfony\Component\HttpFoundation\File\UploadedFile  $file
+     * @param  bool  $test
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function createFromBase(SymfonyUploadedFile $file, $test = false)
+    {
+        return $file instanceof static ? $file : <span style="background-color: red">n</span>ew static(
+            $file-&gt;getPathname(),
+            $file-&gt;getClientOriginalPath(),
+            $file-&gt;getClientMimeType(),
+            $file-&gt;getError(),
+            $test
+        );
+    }
+
+    /**
+     * Parse and format the given options.
+     *
+     * @param  array|string  $options
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function parseOptions($options)
+    {
+        <span style="background-color: red">i</span>f (is_string($options)) {
+            $options = [&#039;disk&#039; =&gt; $options];
+        <span style="background-color: red">}</span>
+
+        return $options;
+    }
+}
+</pre>

@@ -1,0 +1,641 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log\Context;
+
+use __PHP_Incomplete_Class;
+use Closure;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Log\Context\Events\ContextDehydrating as Dehydrating;
+use Illuminate\Log\Context\Events\ContextHydrated as Hydrated;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
+use RuntimeException;
+use Throwable;
+
+class Repository
+{
+    use Conditionable, Macroable, SerializesModels;
+
+    /**
+     * The event dispatcher instance.
+     *
+     * @var \Illuminate\Contracts\Events\Dispatcher
+     */
+    protected $events;
+
+    /**
+     * The contextual data.
+     *
+     * @var array&lt;string, mixed&gt;
+     */
+    protected $data = [];
+
+    /**
+     * The hidden contextual data.
+     *
+     * @var array&lt;string, mixed&gt;
+     */
+    protected $hidden = [];
+
+    /**
+     * The callback that should handle unserialize exceptions.
+     *
+     * @var callable|null
+     */
+    protected static $handleUnserializeExceptionsUsing;
+
+    /**
+     * Create a new Context instance.
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Dispatcher $events)
+    {
+        $this-&gt;events = $events;
+    }
+
+    /**
+     * Determine if the given key exists.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function has($key)
+    {
+        return array_key_exists($key, $this-&gt;data);
+    }
+
+    /**
+     * Determine if the given key is missing.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function missing($key)
+    {
+        return ! $this-&gt;has($key);
+    }
+
+    /**
+     * Determine if the given key exists within the hidden context data.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasHidden($key)
+    {
+        return array_key_exists($key, $this-&gt;hidden);
+    }
+
+    /**
+     * Determine if the given key is missing within the hidden context data.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function missingHidden($key)
+    {
+        return ! $this-&gt;hasHidden($key);
+    }
+
+    /**
+     * Retrieve all the context data.
+     *
+     * @return array&lt;string, mixed&gt;
+     */
+    <span style="background-color: green">p</span>ublic function all()
+    {
+        return $this-&gt;data;
+    }
+
+    /**
+     * Retrieve all the hidden context data.
+     *
+     * @return array&lt;string, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function allHidden()
+    {
+        return $this-&gt;hidden;
+    }
+
+    /**
+     * Retrieve the given key&#039;s value.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function get($key, $default = null)
+    {
+        return $this-&gt;data[$key] ?? <span style="background-color: red">v</span>alue($default);
+    }
+
+    /**
+     * Retrieve the given key&#039;s hidden value.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getHidden($key, $default = null)
+    {
+        return $this-&gt;hidden[$key] ?? <span style="background-color: red">v</span>alue($default);
+    }
+
+    /**
+     * Retrieve the given key&#039;s value and then forget it.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function pull($key, $default = null)
+    {
+        return tap($this-&gt;get($key, $default), <span style="background-color: red">f</span>unction () use ($key) {
+            $this-&gt;forget($key);
+        });
+    }
+
+    /**
+     * Retrieve the given key&#039;s hidden value and then forget it.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function pullHidden($key, $default = null)
+    {
+        return tap($this-&gt;getHidden($key, $default), <span style="background-color: red">f</span>unction () use ($key) {
+            $this-&gt;forgetHidden($key);
+        });
+    }
+
+    /**
+     * Retrieve only the values of the given keys.
+     *
+     * @param  array&lt;int, string&gt;  $keys
+     * @return array&lt;string, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function only($keys)
+    {
+        return array_intersect_key($this-&gt;data, array_flip($keys));
+    }
+
+    /**
+     * Retrieve only the hidden values of the given keys.
+     *
+     * @param  array&lt;int, string&gt;  $keys
+     * @return array&lt;string, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function onlyHidden($keys)
+    {
+        return array_intersect_key($this-&gt;hidden, array_flip($keys));
+    }
+
+    /**
+     * Add a context value.
+     *
+     * @param  string|array&lt;string, mixed&gt;  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function add($key, $value = null)
+    {
+        $this-&gt;data = array_merge(
+            $this-&gt;data,
+            is_array($key) ? $key : <span style="background-color: red">[</span>$key =&gt; $value]
+        );
+
+        return $this;
+    }
+
+    /**
+     * Add a hidden context value.
+     *
+     * @param  string|array&lt;string, mixed&gt;  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function addHidden($key, #[\SensitiveParameter] $value = null)
+    {
+        $this-&gt;hidden = array_merge(
+            $this-&gt;hidden,
+            is_array($key) ? $key : <span style="background-color: red">[</span>$key =&gt; $value]
+        );
+
+        return $this;
+    }
+
+    /**
+     * Forget the given context key.
+     *
+     * @param  string|array&lt;int, string&gt;  $key
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function forget($key)
+    {
+        <span style="background-color: red">f</span>oreach ((array) $key as $k) {
+            unset($this-&gt;data[$k]);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Forget the given hidden context key.
+     *
+     * @param  string|array&lt;int, string&gt;  $key
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function forgetHidden($key)
+    {
+        <span style="background-color: red">f</span>oreach ((array) $key as $k) {
+            unset($this-&gt;hidden[$k]);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a context value if it does not exist yet.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function addIf($key, $value)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;has($key)) {
+            $this-&gt;add($key, $value);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a hidden context value if it does not exist yet.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function addHiddenIf($key, #[\SensitiveParameter] $value)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;hasHidden($key)) {
+            $this-&gt;addHidden($key, $value);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Push the given values onto the key&#039;s stack.
+     *
+     * @param  string  $key
+     * @param  mixed  ...$values
+     * @return $this
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function push($key, ...$values)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isStackable($key)) {
+            throw new RuntimeException(&quot;Unable to push value onto context stack for key [{$key}].&quot;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;data[$key] = [
+            ...$this-&gt;data[$key] ?? <span style="background-color: red">[</span>],
+            ...$values,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Pop the latest value from the key&#039;s stack.
+     *
+     * @param  string  $key
+     * @return mixed
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function pop($key)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isStackable($key) || <span style="background-color: red">!</span> count($this-&gt;data[$key])) {
+            throw new RuntimeException(&quot;Unable to pop value from context stack for key [{$key}].&quot;);
+        <span style="background-color: red">}</span>
+
+        return array_pop($this-&gt;data[$key]);
+    }
+
+    /**
+     * Push the given hidden values onto the key&#039;s stack.
+     *
+     * @param  string  $key
+     * @param  mixed  ...$values
+     * @return $this
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function pushHidden($key, ...$values)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isHiddenStackable($key)) {
+            throw new RuntimeException(&quot;Unable to push value onto hidden context stack for key [{$key}].&quot;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;hidden[$key] = [
+            ...$this-&gt;hidden[$key] ?? <span style="background-color: red">[</span>],
+            ...$values,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Pop the latest hidden value from the key&#039;s stack.
+     *
+     * @param  string  $key
+     * @return mixed
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function popHidden($key)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isHiddenStackable($key) || <span style="background-color: red">!</span> count($this-&gt;hidden[$key])) {
+            throw new RuntimeException(&quot;Unable to pop value from hidden context stack for key [{$key}].&quot;);
+        <span style="background-color: red">}</span>
+
+        return array_pop($this-&gt;hidden[$key]);
+    }
+
+    /**
+     * Increment a context counter.
+     *
+     * @param  string  $key
+     * @param  int  $amount
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function increment(string $key, int $amount = 1)
+    {
+        $this-&gt;add(
+            $key,
+            (int) $this-&gt;get($key, 0) + $amount,
+        );
+
+        return $this;
+    }
+
+    /**
+     * Decrement a context counter.
+     *
+     * @param  string  $key
+     * @param  int  $amount
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function decrement(string $key, int $amount = 1)
+    {
+        return $this-&gt;increment($key, $amount * -1);
+    }
+
+    /**
+     * Determine if the given value is in the given stack.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @param  bool  $strict
+     * @return bool
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function stackContains(string $key, mixed $value, bool $strict = false): bool
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isStackable($key)) {
+            throw new RuntimeException(&quot;Given key [{$key}] is not a stack.&quot;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! array_key_exists($key, $this-&gt;data)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($value instanceof Closure) {
+            return (new Collection($this-&gt;data[$key]))-&gt;contains($value);
+        <span style="background-color: red">}</span>
+
+        return in_array($value, $this-&gt;data[$key], $strict);
+    }
+
+    /**
+     * Determine if the given value is in the given hidden stack.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @param  bool  $strict
+     * @return bool
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function hiddenStackContains(string $key, mixed $value, bool $strict = false): bool
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isHiddenStackable($key)) {
+            throw new RuntimeException(&quot;Given key [{$key}] is not a stack.&quot;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! array_key_exists($key, $this-&gt;hidden)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($value instanceof Closure) {
+            return (new Collection($this-&gt;hidden[$key]))-&gt;contains($value);
+        <span style="background-color: red">}</span>
+
+        return in_array($value, $this-&gt;hidden[$key], $strict);
+    }
+
+    /**
+     * Determine if a given key can be used as a stack.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isStackable($key)
+    {
+        return ! $this-&gt;has($key) ||
+            (<span style="background-color: red">i</span>s_array($this-&gt;data[$key]) &amp;&amp; <span style="background-color: red">a</span>rray_is_list($this-&gt;data[$key]));
+    }
+
+    /**
+     * Determine if a given key can be used as a hidden stack.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isHiddenStackable($key)
+    {
+        return ! $this-&gt;hasHidden($key) ||
+            (<span style="background-color: red">i</span>s_array($this-&gt;hidden[$key]) &amp;&amp; <span style="background-color: red">a</span>rray_is_list($this-&gt;hidden[$key]));
+    }
+
+    /**
+     * Run the callback function with the given context values and restore the original context state when complete.
+     *
+     * @param  callable  $callback
+     * @param  array&lt;string, mixed&gt;  $data
+     * @param  array&lt;string, mixed&gt;  $hidden
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function scope(callable $callback, array $data = [], array $hidden = [])
+    {
+        $dataBefore = $this-&gt;data;
+        $hiddenBefore = $this-&gt;hidden;
+
+        <span style="background-color: red">i</span>f ($data !== []) {
+            $this-&gt;add($data);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($hidden !== []) {
+            $this-&gt;addHidden($hidden);
+        <span style="background-color: red">}</span>
+
+        try {
+            return $callback();
+        } <span style="background-color: red">f</span>inally {
+            $this-&gt;data = $dataBefore;
+            $this-&gt;hidden = $hiddenBefore;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the repository is empty.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isEmpty()
+    {
+        return $this-&gt;all() === [] &amp;&amp; <span style="background-color: red">$</span>this-&gt;allHidden() === [];
+    }
+
+    /**
+     * Execute the given callback when context is about to be dehydrated.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dehydrating($callback)
+    {
+        $this-&gt;events-&gt;listen(fn (Dehydrating $event) =&gt; <span style="background-color: red">$</span>callback($event-&gt;context));
+
+        return $this;
+    }
+
+    /**
+     * Execute the given callback when context has been hydrated.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function hydrated($callback)
+    {
+        $this-&gt;events-&gt;listen(fn (Hydrated $event) =&gt; <span style="background-color: red">$</span>callback($event-&gt;context));
+
+        return $this;
+    }
+
+    /**
+     * Handle unserialize exceptions using the given callback.
+     *
+     * @param  callable|null  $callback
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function handleUnserializeExceptionsUsing($callback)
+    {
+        static::$handleUnserializeExceptionsUsing = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Flush all context data.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function flush()
+    {
+        $this-&gt;data = [];
+        $this-&gt;hidden = [];
+
+        return $this;
+    }
+
+    /**
+     * Dehydrate the context data.
+     *
+     * @internal
+     *
+     * @return ?array
+     */
+    <span style="background-color: red">p</span>ublic function dehydrate()
+    {
+        $instance = (new static($this-&gt;events))
+            -&gt;add($this-&gt;all())
+            -&gt;addHidden($this-&gt;allHidden());
+
+        $instance-&gt;events-&gt;dispatch(new Dehydrating($instance));
+
+        $serialize = fn ($value) =&gt; <span style="background-color: red">s</span>erialize($instance-&gt;getSerializedPropertyValue($value, withRelations: false));
+
+        return $instance-&gt;isEmpty() ? null : <span style="background-color: red">[</span>
+            &#039;data&#039; =&gt; array_map($serialize, $instance-&gt;all()),
+            &#039;hidden&#039; =&gt; array_map($serialize, $instance-&gt;allHidden()),
+        ];
+    }
+
+    /**
+     * Hydrate the context instance.
+     *
+     * @internal
+     *
+     * @param  ?array  $context
+     * @return $this
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function hydrate($context)
+    {
+        $unserialize = <span style="background-color: red">f</span>unction ($value, $key, $hidden) {
+            try {
+                return tap($this-&gt;getRestoredPropertyValue(unserialize($value)), <span style="background-color: red">f</span>unction ($value) {
+                    <span style="background-color: red">i</span>f ($value instanceof __PHP_Incomplete_Class) {
+                        throw new RuntimeException(&#039;Value is incomplete class: &#039;.json_encode($value));
+                    <span style="background-color: red">}</span>
+                });
+            } <span style="background-color: red">c</span>atch (Throwable $e) {
+                <span style="background-color: red">i</span>f (static::$handleUnserializeExceptionsUsing !== null) {
+                    return (static::$handleUnserializeExceptionsUsing)($e, $key, $value, $hidden);
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($e instanceof ModelNotFoundException) {
+                    <span style="background-color: red">i</span>f (function_exists(&#039;report&#039;)) {
+                        report($e);
+                    <span style="background-color: red">}</span>
+
+                    return null;
+                <span style="background-color: red">}</span>
+
+                throw $e;
+            <span style="background-color: red">}</span>
+        };
+
+        [$data, $hidden] = [
+            (new Collection($context[&#039;data&#039;] ?? <span style="background-color: red">[</span>]))-&gt;map(fn ($value, $key) =&gt; <span style="background-color: red">$</span>unserialize($value, $key, false))-&gt;all(),
+            (new Collection($context[&#039;hidden&#039;] ?? <span style="background-color: red">[</span>]))-&gt;map(fn ($value, $key) =&gt; <span style="background-color: red">$</span>unserialize($value, $key, true))-&gt;all(),
+        ];
+
+        $this-&gt;events-&gt;dispatch(new Hydrated(
+            $this-&gt;flush()-&gt;add($data)-&gt;addHidden($hidden)
+        ));
+
+        return $this;
+    }
+}
+</pre>

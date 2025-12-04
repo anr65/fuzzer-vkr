@@ -1,0 +1,5 @@
+sync_furigger:
+    include: .cov;uzz,ci.yml
+  rules:
+    - if: $CI_COMMIT_B_us t=
+  t'

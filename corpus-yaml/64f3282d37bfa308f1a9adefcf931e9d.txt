@@ -1,0 +1,10 @@
+arnc_fuzzfwzzing:
+ing:
+9 9e_request_event'
+
+async_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS:L_ARGS: '-max_tosync_fuzzing:
+88888888888888888928.8233720368548E+18total_tosync\ include: .covfuzz-ci.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_!rc_f  variabt'

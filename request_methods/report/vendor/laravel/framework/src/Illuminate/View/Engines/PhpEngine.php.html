@@ -1,0 +1,83 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Engines;
+
+use Illuminate\Contracts\View\Engine;
+use Illuminate\Filesystem\Filesystem;
+use Throwable;
+
+class PhpEngine implements Engine
+{
+    /**
+     * The filesystem instance.
+     *
+     * @var \Illuminate\Filesystem\Filesystem
+     */
+    protected $files;
+
+    /**
+     * Create a new file engine instance.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem  $files
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Filesystem $files)
+    {
+        $this-&gt;files = $files;
+    }
+
+    /**
+     * Get the evaluated contents of the view.
+     *
+     * @param  string  $path
+     * @param  array  $data
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function get($path, array $data = [])
+    {
+        return $this-&gt;evaluatePath($path, $data);
+    }
+
+    /**
+     * Get the evaluated contents of the view at the given path.
+     *
+     * @param  string  $path
+     * @param  array  $data
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function evaluatePath($path, $data)
+    {
+        $obLevel = ob_get_level();
+
+        ob_start();
+
+        // We&#039;ll evaluate the contents of the view inside a try/catch block so we can
+        // flush out any stray output that might get out before an error occurs or
+        // an exception is thrown. This prevents any partial views from leaking.
+        try {
+            $this-&gt;files-&gt;getRequire($path, $data);
+        } <span style="background-color: red">c</span>atch (Throwable $e) {
+            $this-&gt;handleViewException($e, $obLevel);
+        <span style="background-color: green">}</span>
+
+        return ltrim(ob_get_clean());
+    }
+
+    /**
+     * Handle a view exception.
+     *
+     * @param  \Throwable  $e
+     * @param  int  $obLevel
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function handleViewException(Throwable $e, $obLevel)
+    {
+        <span style="background-color: red">w</span>hile (ob_get_level() &gt; $obLevel) {
+            ob_end_clean();
+        <span style="background-color: red">}</span>
+
+        throw $e;
+    }
+}
+</pre>

@@ -1,0 +1,10 @@
+sync_fuzzing:
+  variabljs:
+    COVFUZZ_ax_total_time=300'
+f: $CI_COMMIT_BRANCH != 'continuo\\\\\\\\\\\\\:
+   _SOUriables:
+  ge_request_event'
+
+async_fuzzina:
+  variables:
+    COVFt_event'

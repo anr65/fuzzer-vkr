@@ -1,0 +1,191 @@
+<pre>&lt;?php
+
+use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\ServiceProvider;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Name
+    |--------------------------------------------------------------------------
+    |
+    | This value is the name of your application, which will be used when the
+    | framework needs to place the application&#039;s name in a notification or
+    | other UI elements where an application name needs to be displayed.
+    |
+    */
+
+    &#039;name&#039; =&gt; env(&#039;APP_NAME&#039;, &#039;Laravel&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Environment
+    |--------------------------------------------------------------------------
+    |
+    | This value determines the &quot;environment&quot; your application is currently
+    | running in. This may determine how you prefer to configure various
+    | services the application utilizes. Set this in your &quot;.env&quot; file.
+    |
+    */
+
+    &#039;env&#039; =&gt; env(&#039;APP_ENV&#039;, &#039;production&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Debug Mode
+    |--------------------------------------------------------------------------
+    |
+    | When your application is in debug mode, detailed error messages with
+    | stack traces will be shown on every error that occurs within your
+    | application. If disabled, a simple generic error page is shown.
+    |
+    */
+
+    &#039;debug&#039; =&gt; (bool) env(&#039;APP_DEBUG&#039;, false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application URL
+    |--------------------------------------------------------------------------
+    |
+    | This URL is used by the console to properly generate URLs when using
+    | the Artisan command line tool. You should set this to the root of
+    | the application so that it&#039;s available within Artisan commands.
+    |
+    */
+
+    &#039;url&#039; =&gt; env(&#039;APP_URL&#039;, &#039;http://localhost&#039;),
+
+    &#039;frontend_url&#039; =&gt; env(&#039;FRONTEND_URL&#039;, &#039;http://localhost:3000&#039;),
+
+    &#039;asset_url&#039; =&gt; env(&#039;ASSET_URL&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify the default timezone for your application, which
+    | will be used by the PHP date and date-time functions. The timezone
+    | is set to &quot;UTC&quot; by default as it is suitable for most use cases.
+    |
+    */
+
+    &#039;timezone&#039; =&gt; &#039;UTC&#039;,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Locale Configuration
+    |--------------------------------------------------------------------------
+    |
+    | The application locale determines the default locale that will be used
+    | by Laravel&#039;s translation / localization methods. This option can be
+    | set to any locale for which you plan to have translation strings.
+    |
+    */
+
+    &#039;locale&#039; =&gt; env(&#039;APP_LOCALE&#039;, &#039;en&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Fallback Locale
+    |--------------------------------------------------------------------------
+    |
+    | The fallback locale determines the locale to use when the default one
+    | is not available. You may change the value to correspond to any of
+    | the languages which are currently supported by your application.
+    |
+    */
+
+    &#039;fallback_locale&#039; =&gt; env(&#039;APP_FALLBACK_LOCALE&#039;, &#039;en&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Faker Locale
+    |--------------------------------------------------------------------------
+    |
+    | This locale will be used by the Faker PHP library when generating fake
+    | data for your database seeds. For example, this will be used to get
+    | localized telephone numbers, street address information and more.
+    |
+    */
+
+    &#039;faker_locale&#039; =&gt; env(&#039;APP_FAKER_LOCALE&#039;, &#039;en_US&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Encryption Key
+    |--------------------------------------------------------------------------
+    |
+    | This key is utilized by Laravel&#039;s encryption services and should be set
+    | to a random, 32 character string to ensure that all encrypted values
+    | are secure. You should do this prior to deploying the application.
+    |
+    */
+
+    &#039;cipher&#039; =&gt; &#039;AES-256-CBC&#039;,
+
+    &#039;key&#039; =&gt; env(&#039;APP_KEY&#039;),
+
+    &#039;previous_keys&#039; =&gt; [
+        ...array_filter(
+            explode(&#039;,&#039;, env(&#039;APP_PREVIOUS_KEYS&#039;, &#039;&#039;))
+        ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maintenance Mode Driver
+    |--------------------------------------------------------------------------
+    |
+    | These configuration options determine the driver used to determine and
+    | manage Laravel&#039;s &quot;maintenance mode&quot; status. The &quot;cache&quot; driver will
+    | allow maintenance mode to be controlled across multiple machines.
+    |
+    | Supported drivers: &quot;file&quot;, &quot;cache&quot;
+    |
+    */
+
+    &#039;maintenance&#039; =&gt; [
+        &#039;driver&#039; =&gt; env(&#039;APP_MAINTENANCE_DRIVER&#039;, &#039;file&#039;),
+        &#039;store&#039; =&gt; env(&#039;APP_MAINTENANCE_STORE&#039;, &#039;database&#039;),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Autoloaded Service Providers
+    |--------------------------------------------------------------------------
+    |
+    | The service providers listed here will be automatically loaded on any
+    | requests to your application. You may add your own services to the
+    | arrays below to provide additional features to this application.
+    |
+    */
+
+    &#039;providers&#039; =&gt; ServiceProvider::defaultProviders()-&gt;merge([
+        // Package Service Providers...
+    ])-&gt;merge([
+        // Application Service Providers...
+        // App\Providers\AppServiceProvider::class,
+    ])-&gt;merge([
+        // Added Service Providers (Do not remove this line)...
+    ])-&gt;toArray(),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Class Aliases
+    |--------------------------------------------------------------------------
+    |
+    | This array of class aliases will be registered when this application
+    | is started. You may add any additional class aliases which should
+    | be loaded to the array. For speed, all aliases are lazy loaded.
+    |
+    */
+
+    &#039;aliases&#039; =&gt; Facade::defaultAliases()-&gt;merge([
+        // &#039;Example&#039; =&gt; App\Facades\Example::class,
+    ])-&gt;toArray(),
+
+];
+</pre>

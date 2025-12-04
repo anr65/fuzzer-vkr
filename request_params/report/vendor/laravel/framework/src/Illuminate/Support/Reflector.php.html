@@ -1,0 +1,171 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use ReflectionClass;
+use ReflectionEnum;
+use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionUnionType;
+
+class Reflector
+{
+    /**
+     * This is a PHP 7.4 compatible implementation of is_callable.
+     *
+     * @param  mixed  $var
+     * @param  bool  $syntaxOnly
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic static function isCallable($var, $syntaxOnly = false)
+    {
+        <span style="background-color: green">i</span>f (! is_array($var)) {
+            return is_callable($var, $syntaxOnly);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($var[0], $var[1]) || <span style="background-color: green">!</span> is_string($var[1] ?? <span style="background-color: red">n</span>ull)) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($syntaxOnly &amp;&amp;
+            (<span style="background-color: red">i</span>s_string($var[0]) || <span style="background-color: red">i</span>s_object($var[0])) &amp;&amp;
+            <span style="background-color: red">i</span>s_string($var[1])) {
+            return true;
+        <span style="background-color: green">}</span>
+
+        $class = is_object($var[0]) ? get_class($var[0]) : <span style="background-color: red">$</span>var[0];
+
+        $method = $var[1];
+
+        <span style="background-color: red">i</span>f (! class_exists($class)) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (method_exists($class, $method)) {
+            return (new ReflectionMethod($class, $method))-&gt;isPublic();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (is_object($var[0]) &amp;&amp; <span style="background-color: green">m</span>ethod_exists($class, &#039;__call&#039;)) {
+            return (new ReflectionMethod($class, &#039;__call&#039;))-&gt;isPublic();
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! is_object($var[0]) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($class, &#039;__callStatic&#039;)) {
+            return (new ReflectionMethod($class, &#039;__callStatic&#039;))-&gt;isPublic();
+        <span style="background-color: green">}</span>
+
+        return false;
+    }
+
+    /**
+     * Get the class name of the given parameter&#039;s type, if possible.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>ublic static function getParameterClassName($parameter)
+    {
+        $type = $parameter-&gt;getType();
+
+        <span style="background-color: red">i</span>f (! $type instanceof ReflectionNamedType || <span style="background-color: green">$</span>type-&gt;isBuiltin()) {
+            return;
+        <span style="background-color: green">}</span>
+
+        return static::getTypeName($parameter, $type);
+    }
+
+    /**
+     * Get the class names of the given parameter&#039;s type, including union types.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function getParameterClassNames($parameter)
+    {
+        $type = $parameter-&gt;getType();
+
+        <span style="background-color: green">i</span>f (! $type instanceof ReflectionUnionType) {
+            return array_filter([static::getParameterClassName($parameter)]);
+        <span style="background-color: red">}</span>
+
+        $unionTypes = [];
+
+        <span style="background-color: red">f</span>oreach ($type-&gt;getTypes() as $listedType) {
+            <span style="background-color: red">i</span>f (! $listedType instanceof ReflectionNamedType || <span style="background-color: red">$</span>listedType-&gt;isBuiltin()) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $unionTypes[] = static::getTypeName($parameter, $listedType);
+        <span style="background-color: red">}</span>
+
+        return array_filter($unionTypes);
+    }
+
+    /**
+     * Get the given type&#039;s class name.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @param  \ReflectionNamedType  $type
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected static function getTypeName($parameter, $type)
+    {
+        $name = $type-&gt;getName();
+
+        <span style="background-color: green">i</span>f (! is_null($class = $parameter-&gt;getDeclaringClass())) {
+            <span style="background-color: red">i</span>f ($name === &#039;self&#039;) {
+                return $class-&gt;getName();
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f ($name === &#039;parent&#039; &amp;&amp; <span style="background-color: red">$</span>parent = $class-&gt;getParentClass()) {
+                return $parent-&gt;getName();
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $name;
+    }
+
+    /**
+     * Determine if the parameter&#039;s type is a subclass of the given type.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @param  string  $className
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isParameterSubclassOf($parameter, $className)
+    {
+        $paramClassName = static::getParameterClassName($parameter);
+
+        return $paramClassName
+            &amp;&amp; (<span style="background-color: red">c</span>lass_exists($paramClassName) || <span style="background-color: red">i</span>nterface_exists($paramClassName))
+            &amp;&amp; <span style="background-color: red">(</span>new ReflectionClass($paramClassName))-&gt;isSubclassOf($className);
+    }
+
+    /**
+     * Determine if the parameter&#039;s type is a Backed Enum with a string backing type.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isParameterBackedEnumWithStringBackingType($parameter)
+    {
+        <span style="background-color: red">i</span>f (! $parameter-&gt;getType() instanceof ReflectionNamedType) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $backedEnumClass = $parameter-&gt;getType()?-&gt;getName();
+
+        <span style="background-color: red">i</span>f (is_null($backedEnumClass)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (enum_exists($backedEnumClass)) {
+            $reflectionBackedEnum = new ReflectionEnum($backedEnumClass);
+
+            return $reflectionBackedEnum-&gt;isBacked()
+                &amp;&amp; <span style="background-color: red">$</span>reflectionBackedEnum-&gt;getBackingType()-&gt;getName() == &#039;string&#039;;
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+}
+</pre>

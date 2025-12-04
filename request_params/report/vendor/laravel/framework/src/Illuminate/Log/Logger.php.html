@@ -1,0 +1,316 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log;
+
+use Closure;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Traits\Conditionable;
+use Psr\Log\LoggerInterface;
+use RuntimeException;
+
+class Logger implements LoggerInterface
+{
+    use Conditionable;
+
+    /**
+     * The underlying logger implementation.
+     *
+     * @var \Psr\Log\LoggerInterface
+     */
+    protected $logger;
+
+    /**
+     * The event dispatcher instance.
+     *
+     * @var \Illuminate\Contracts\Events\Dispatcher|null
+     */
+    protected $dispatcher;
+
+    /**
+     * Any context to be added to logs.
+     *
+     * @var array
+     */
+    protected $context = [];
+
+    /**
+     * Create a new log writer instance.
+     *
+     * @param  \Psr\Log\LoggerInterface  $logger
+     * @param  \Illuminate\Contracts\Events\Dispatcher|null  $dispatcher
+     */
+    <span style="background-color: green">p</span>ublic function __construct(LoggerInterface $logger, ?Dispatcher $dispatcher = null)
+    {
+        $this-&gt;logger = $logger;
+        $this-&gt;dispatcher = $dispatcher;
+    }
+
+    /**
+     * Log an emergency message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function emergency($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log an alert message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function alert($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log a critical message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function critical($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log an error message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function error($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log a warning message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function warning($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log a notice to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function notice($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log an informational message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function info($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log a debug message to the logs.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function debug($message, array $context = []): void
+    {
+        $this-&gt;writeLog(__FUNCTION__, $message, $context);
+    }
+
+    /**
+     * Log a message to the logs.
+     *
+     * @param  string  $level
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function log($level, $message, array $context = []): void
+    {
+        $this-&gt;writeLog($level, $message, $context);
+    }
+
+    /**
+     * Dynamically pass log calls into the writer.
+     *
+     * @param  string  $level
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function write($level, $message, array $context = []): void
+    {
+        $this-&gt;writeLog($level, $message, $context);
+    }
+
+    /**
+     * Write a message to the log.
+     *
+     * @param  string  $level
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function writeLog($level, $message, $context): void
+    {
+        $this-&gt;logger-&gt;{$level}(
+            $message = $this-&gt;formatMessage($message),
+            $context = array_merge($this-&gt;context, $context)
+        );
+
+        $this-&gt;fireLogEvent($level, $message, $context);
+    }
+
+    /**
+     * Add context to all future logs.
+     *
+     * @param  array  $context
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function withContext(array $context = [])
+    {
+        $this-&gt;context = array_merge($this-&gt;context, $context);
+
+        return $this;
+    }
+
+    /**
+     * Flush the log context on all currently resolved channels.
+     *
+     * @param  string[]|null  $keys
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutContext(?array $keys = null)
+    {
+        <span style="background-color: red">i</span>f (is_array($keys)) {
+            $this-&gt;context = array_diff_key($this-&gt;context, array_flip($keys));
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;context = [];
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Register a new callback handler for when a log event is triggered.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function listen(Closure $callback)
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;dispatcher)) {
+            throw new RuntimeException(&#039;Events dispatcher has not been set.&#039;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;dispatcher-&gt;listen(MessageLogged::class, $callback);
+    }
+
+    /**
+     * Fires a log event.
+     *
+     * @param  string  $level
+     * @param  string  $message
+     * @param  array  $context
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function fireLogEvent($level, $message, array $context = [])
+    {
+        // If the event dispatcher is set, we will pass along the parameters to the
+        // log listeners. These are useful for building profilers or other tools
+        // that aggregate all of the log messages for a given &quot;request&quot; cycle.
+        $this-&gt;dispatcher?-&gt;dispatch(new MessageLogged($level, $message, $context));
+    }
+
+    /**
+     * Format the parameters for the logger.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\Illuminate\Contracts\Support\Jsonable|\Illuminate\Support\Stringable|array|string  $message
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function formatMessage($message)
+    {
+        <span style="background-color: red">i</span>f (is_array($message)) {
+            return var_export($message, true);
+        } <span style="background-color: red">e</span>lseif ($message instanceof Jsonable) {
+            return $message-&gt;toJson();
+        } <span style="background-color: red">e</span>lseif ($message instanceof Arrayable) {
+            return var_export($message-&gt;toArray(), true);
+        <span style="background-color: green">}</span>
+
+        return (string) $message;
+    }
+
+    /**
+     * Get the underlying logger implementation.
+     *
+     * @return \Psr\Log\LoggerInterface
+     */
+    <span style="background-color: green">p</span>ublic function getLogger()
+    {
+        return $this-&gt;logger;
+    }
+
+    /**
+     * Get the event dispatcher instance.
+     *
+     * @return \Illuminate\Contracts\Events\Dispatcher
+     */
+    <span style="background-color: red">p</span>ublic function getEventDispatcher()
+    {
+        return $this-&gt;dispatcher;
+    }
+
+    /**
+     * Set the event dispatcher instance.
+     *
+     * @param  \Illuminate\Contracts\Events\Dispatcher  $dispatcher
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setEventDispatcher(Dispatcher $dispatcher)
+    {
+        $this-&gt;dispatcher = $dispatcher;
+    }
+
+    /**
+     * Dynamically proxy method calls to the underlying logger.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;logger-&gt;{$method}(...$parameters);
+    }
+}
+</pre>

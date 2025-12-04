@@ -1,0 +1,67 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http;
+
+use Illuminate\Support\Str;
+
+trait FileHelpers
+{
+    /**
+     * The cache copy of the file&#039;s hash name.
+     *
+     * @var string|null
+     */
+    protected $hashName = null;
+
+    /**
+     * Get the fully qualified path to the file.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function path()
+    {
+        return $this-&gt;getRealPath();
+    }
+
+    /**
+     * Get the file&#039;s extension.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function extension()
+    {
+        return $this-&gt;guessExtension();
+    }
+
+    /**
+     * Get a filename for the file.
+     *
+     * @param  string|null  $path
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function hashName($path = null)
+    {
+        <span style="background-color: red">i</span>f ($path) {
+            $path = rtrim($path, &#039;/&#039;).&#039;/&#039;;
+        <span style="background-color: red">}</span>
+
+        $hash = $this-&gt;hashName ?: <span style="background-color: red">$</span>this-&gt;hashName = Str::random(40);
+
+        <span style="background-color: red">i</span>f ($extension = $this-&gt;guessExtension()) {
+            $extension = &#039;.&#039;.$extension;
+        <span style="background-color: red">}</span>
+
+        return $path.$hash.$extension;
+    }
+
+    /**
+     * Get the dimensions of the image (if applicable).
+     *
+     * @return array|null
+     */
+    <span style="background-color: red">p</span>ublic function dimensions()
+    {
+        return @getimagesize($this-&gt;getRealPath());
+    }
+}
+</pre>

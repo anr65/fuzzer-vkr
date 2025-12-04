@@ -1,0 +1,116 @@
+<pre>&lt;?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication Defaults
+    |--------------------------------------------------------------------------
+    |
+    | This option defines the default authentication &quot;guard&quot; and password
+    | reset &quot;broker&quot; for your application. You may change these values
+    | as required, but they&#039;re a perfect start for most applications.
+    |
+    */
+
+    &#039;defaults&#039; =&gt; [
+        &#039;guard&#039; =&gt; env(&#039;AUTH_GUARD&#039;, &#039;web&#039;),
+        &#039;passwords&#039; =&gt; env(&#039;AUTH_PASSWORD_BROKER&#039;, &#039;users&#039;),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication Guards
+    |--------------------------------------------------------------------------
+    |
+    | Next, you may define every authentication guard for your application.
+    | Of course, a great default configuration has been defined for you
+    | which utilizes session storage plus the Eloquent user provider.
+    |
+    | All authentication guards have a user provider, which defines how the
+    | users are actually retrieved out of your database or other storage
+    | system used by the application. Typically, Eloquent is utilized.
+    |
+    | Supported: &quot;session&quot;
+    |
+    */
+
+    &#039;guards&#039; =&gt; [
+        &#039;web&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;session&#039;,
+            &#039;provider&#039; =&gt; &#039;users&#039;,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | User Providers
+    |--------------------------------------------------------------------------
+    |
+    | All authentication guards have a user provider, which defines how the
+    | users are actually retrieved out of your database or other storage
+    | system used by the application. Typically, Eloquent is utilized.
+    |
+    | If you have multiple user tables or models you may configure multiple
+    | providers to represent the model / table. These providers may then
+    | be assigned to any extra authentication guards you have defined.
+    |
+    | Supported: &quot;database&quot;, &quot;eloquent&quot;
+    |
+    */
+
+    &#039;providers&#039; =&gt; [
+        &#039;users&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;eloquent&#039;,
+            &#039;model&#039; =&gt; env(&#039;AUTH_MODEL&#039;, App\Models\User::class),
+        ],
+
+        // &#039;users&#039; =&gt; [
+        //     &#039;driver&#039; =&gt; &#039;database&#039;,
+        //     &#039;table&#039; =&gt; &#039;users&#039;,
+        // ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Resetting Passwords
+    |--------------------------------------------------------------------------
+    |
+    | These configuration options specify the behavior of Laravel&#039;s password
+    | reset functionality, including the table utilized for token storage
+    | and the user provider that is invoked to actually retrieve users.
+    |
+    | The expiry time is the number of minutes that each reset token will be
+    | considered valid. This security feature keeps tokens short-lived so
+    | they have less time to be guessed. You may change this as needed.
+    |
+    | The throttle setting is the number of seconds a user must wait before
+    | generating more password reset tokens. This prevents the user from
+    | quickly generating a very large amount of password reset tokens.
+    |
+    */
+
+    &#039;passwords&#039; =&gt; [
+        &#039;users&#039; =&gt; [
+            &#039;provider&#039; =&gt; &#039;users&#039;,
+            &#039;table&#039; =&gt; env(&#039;AUTH_PASSWORD_RESET_TOKEN_TABLE&#039;, &#039;password_reset_tokens&#039;),
+            &#039;expire&#039; =&gt; 60,
+            &#039;throttle&#039; =&gt; 60,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Password Confirmation Timeout
+    |--------------------------------------------------------------------------
+    |
+    | Here you may define the amount of seconds before a password confirmation
+    | window expires and users are asked to re-enter their password via the
+    | confirmation screen. By default, the timeout lasts for three hours.
+    |
+    */
+
+    &#039;password_timeout&#039; =&gt; env(&#039;AUTH_PASSWORD_TIMEOUT&#039;, 10800),
+
+];
+</pre>

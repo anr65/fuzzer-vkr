@@ -1,0 +1,104 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Formatter;
+
+use Symfony\Component\Console\Exception\InvalidArgumentException;
+use Symfony\Contracts\Service\ResetInterface;
+
+/**
+ * @author Jean-François Simon &lt;contact@jfsimon.fr&gt;
+ */
+class OutputFormatterStyleStack implements ResetInterface
+{
+    /**
+     * @var OutputFormatterStyleInterface[]
+     */
+    private array $styles = [];
+
+    private OutputFormatterStyleInterface $emptyStyle;
+
+    <span style="background-color: green">p</span>ublic function __construct(?OutputFormatterStyleInterface $emptyStyle = null)
+    {
+        $this-&gt;emptyStyle = $emptyStyle ?? <span style="background-color: green">n</span>ew OutputFormatterStyle();
+        $this-&gt;reset();
+    }
+
+    /**
+     * Resets stack (ie. empty internal arrays).
+     */
+    <span style="background-color: green">p</span>ublic function reset(): void
+    {
+        $this-&gt;styles = [];
+    }
+
+    /**
+     * Pushes a style in the stack.
+     */
+    <span style="background-color: red">p</span>ublic function push(OutputFormatterStyleInterface $style): void
+    {
+        $this-&gt;styles[] = $style;
+    }
+
+    /**
+     * Pops a style from the stack.
+     *
+     * @throws InvalidArgumentException When style tags incorrectly nested
+     */
+    <span style="background-color: red">p</span>ublic function pop(?OutputFormatterStyleInterface $style = null): OutputFormatterStyleInterface
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;styles) {
+            return $this-&gt;emptyStyle;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (null === $style) {
+            return array_pop($this-&gt;styles);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach (array_reverse($this-&gt;styles, true) as $index =&gt; $stackedStyle) {
+            <span style="background-color: red">i</span>f ($style-&gt;apply(&#039;&#039;) === $stackedStyle-&gt;apply(&#039;&#039;)) {
+                $this-&gt;styles = \array_slice($this-&gt;styles, 0, $index);
+
+                return $stackedStyle;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&#039;Incorrectly nested style tag found.&#039;);
+    }
+
+    /**
+     * Computes current style with stacks top codes.
+     */
+    <span style="background-color: red">p</span>ublic function getCurrent(): OutputFormatterStyleInterface
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;styles) {
+            return $this-&gt;emptyStyle;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;styles[\count($this-&gt;styles) - 1];
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setEmptyStyle(OutputFormatterStyleInterface $emptyStyle): static
+    {
+        $this-&gt;emptyStyle = $emptyStyle;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getEmptyStyle(): OutputFormatterStyleInterface
+    {
+        return $this-&gt;emptyStyle;
+    }
+}
+</pre>

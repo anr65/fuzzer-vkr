@@ -1,0 +1,45 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation;
+
+use Illuminate\Support\Manager;
+
+class MaintenanceModeManager extends Manager
+{
+    /**
+     * Create an instance of the file based maintenance driver.
+     *
+     * @return \Illuminate\Foundation\FileBasedMaintenanceMode
+     */
+    <span style="background-color: green">p</span>rotected function createFileDriver(): FileBasedMaintenanceMode
+    {
+        return new FileBasedMaintenanceMode();
+    }
+
+    /**
+     * Create an instance of the cache based maintenance driver.
+     *
+     * @return \Illuminate\Foundation\CacheBasedMaintenanceMode
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     */
+    <span style="background-color: red">p</span>rotected function createCacheDriver(): CacheBasedMaintenanceMode
+    {
+        return new CacheBasedMaintenanceMode(
+            $this-&gt;container-&gt;make(&#039;cache&#039;),
+            $this-&gt;config-&gt;get(&#039;app.maintenance.store&#039;) ?: <span style="background-color: red">$</span>this-&gt;config-&gt;get(&#039;cache.default&#039;),
+            &#039;illuminate:foundation:down&#039;
+        );
+    }
+
+    /**
+     * Get the default driver name.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getDefaultDriver(): string
+    {
+        return $this-&gt;config-&gt;get(&#039;app.maintenance.driver&#039;, &#039;file&#039;);
+    }
+}
+</pre>

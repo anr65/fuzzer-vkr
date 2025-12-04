@@ -1,0 +1,290 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation\File;
+
+use Symfony\Component\HttpFoundation\File\Exception\CannotWriteFileException;
+use Symfony\Component\HttpFoundation\File\Exception\ExtensionFileException;
+use Symfony\Component\HttpFoundation\File\Exception\FileException;
+use Symfony\Component\HttpFoundation\File\Exception\FileNotFoundException;
+use Symfony\Component\HttpFoundation\File\Exception\FormSizeFileException;
+use Symfony\Component\HttpFoundation\File\Exception\IniSizeFileException;
+use Symfony\Component\HttpFoundation\File\Exception\NoFileException;
+use Symfony\Component\HttpFoundation\File\Exception\NoTmpDirFileException;
+use Symfony\Component\HttpFoundation\File\Exception\PartialFileException;
+use Symfony\Component\Mime\MimeTypes;
+
+/**
+ * A file uploaded through a form.
+ *
+ * @author Bernhard Schussek &lt;bschussek@gmail.com&gt;
+ * @author Florian Eckerstorfer &lt;florian@eckerstorfer.org&gt;
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class UploadedFile extends File
+{
+    private string $originalName;
+    private string $mimeType;
+    private int $error;
+    private string $originalPath;
+
+    /**
+     * Accepts the information of the uploaded file as provided by the PHP global $_FILES.
+     *
+     * The file object is only created when the uploaded file is valid (i.e. when the
+     * isValid() method returns true). Otherwise the only methods that could be called
+     * on an UploadedFile instance are:
+     *
+     *   * getClientOriginalName,
+     *   * getClientMimeType,
+     *   * isValid,
+     *   * getError.
+     *
+     * Calling any other method on an non-valid instance will cause an unpredictable result.
+     *
+     * @param string      $path         The full temporary path to the file
+     * @param string      $originalName The original file name of the uploaded file
+     * @param string|null $mimeType     The type of the file as provided by PHP; null defaults to application/octet-stream
+     * @param int|null    $error        The error constant of the upload (one of PHP&#039;s UPLOAD_ERR_XXX constants); null defaults to UPLOAD_ERR_OK
+     * @param bool        $test         Whether the test mode is active
+     *                                  Local files are used in test mode hence the code should not enforce HTTP uploads
+     *
+     * @throws FileException         If file_uploads is disabled
+     * @throws FileNotFoundException If the file does not exist
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        string $path,
+        string $originalName,
+        ?string $mimeType = null,
+        ?int $error = null,
+        private bool $test = false,
+    ) {
+        $this-&gt;originalName = $this-&gt;getName($originalName);
+        $this-&gt;originalPath = strtr($originalName, &#039;\\&#039;, &#039;/&#039;);
+        $this-&gt;mimeType = $mimeType ?: <span style="background-color: red">'</span>application/octet-stream&#039;;
+        $this-&gt;error = $error ?: <span style="background-color: green">\</span>UPLOAD_ERR_OK;
+
+        parent::__construct($path, \UPLOAD_ERR_OK === $this-&gt;error);
+    }
+
+    /**
+     * Returns the original file name.
+     *
+     * It is extracted from the request from which the file has been uploaded.
+     * This should not be considered as a safe value to use for a file name on your servers.
+     */
+    <span style="background-color: red">p</span>ublic function getClientOriginalName(): string
+    {
+        return $this-&gt;originalName;
+    }
+
+    /**
+     * Returns the original file extension.
+     *
+     * It is extracted from the original file name that was uploaded.
+     * This should not be considered as a safe value to use for a file name on your servers.
+     */
+    <span style="background-color: red">p</span>ublic function getClientOriginalExtension(): string
+    {
+        return pathinfo($this-&gt;originalName, \PATHINFO_EXTENSION);
+    }
+
+    /**
+     * Returns the original file full path.
+     *
+     * It is extracted from the request from which the file has been uploaded.
+     * This should not be considered as a safe value to use for a file name/path on your servers.
+     *
+     * If this file was uploaded with the &quot;webkitdirectory&quot; upload directive, this will contain
+     * the path of the file relative to the uploaded root directory. Otherwise this will be identical
+     * to getClientOriginalName().
+     */
+    <span style="background-color: red">p</span>ublic function getClientOriginalPath(): string
+    {
+        return $this-&gt;originalPath;
+    }
+
+    /**
+     * Returns the file mime type.
+     *
+     * The client mime type is extracted from the request from which the file
+     * was uploaded, so it should not be considered as a safe value.
+     *
+     * For a trusted mime type, use getMimeType() instead (which guesses the mime
+     * type based on the file content).
+     *
+     * @see getMimeType()
+     */
+    <span style="background-color: red">p</span>ublic function getClientMimeType(): string
+    {
+        return $this-&gt;mimeType;
+    }
+
+    /**
+     * Returns the extension based on the client mime type.
+     *
+     * If the mime type is unknown, returns null.
+     *
+     * This method uses the mime type as guessed by getClientMimeType()
+     * to guess the file extension. As such, the extension returned
+     * by this method cannot be trusted.
+     *
+     * For a trusted extension, use guessExtension() instead (which guesses
+     * the extension based on the guessed mime type for the file).
+     *
+     * @see guessExtension()
+     * @see getClientMimeType()
+     */
+    <span style="background-color: red">p</span>ublic function guessClientExtension(): ?string
+    {
+        <span style="background-color: red">i</span>f (!class_exists(MimeTypes::class)) {
+            throw new \LogicException(&#039;You cannot guess the extension as the Mime component is not installed. Try running &quot;composer require symfony/mime&quot;.&#039;);
+        <span style="background-color: red">}</span>
+
+        return MimeTypes::getDefault()-&gt;getExtensions($this-&gt;getClientMimeType())[0] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Returns the upload error.
+     *
+     * If the upload was successful, the constant UPLOAD_ERR_OK is returned.
+     * Otherwise one of the other UPLOAD_ERR_XXX constants is returned.
+     */
+    <span style="background-color: red">p</span>ublic function getError(): int
+    {
+        return $this-&gt;error;
+    }
+
+    /**
+     * Returns whether the file has been uploaded with HTTP and no error occurred.
+     */
+    <span style="background-color: red">p</span>ublic function isValid(): bool
+    {
+        $isOk = \UPLOAD_ERR_OK === $this-&gt;error;
+
+        return $this-&gt;test ? $isOk : <span style="background-color: red">$</span>isOk &amp;&amp; <span style="background-color: red">i</span>s_uploaded_file($this-&gt;getPathname());
+    }
+
+    /**
+     * Moves the file to a new location.
+     *
+     * @throws FileException if, for any reason, the file could not have been moved
+     */
+    <span style="background-color: red">p</span>ublic function move(string $directory, ?string $name = null): File
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isValid()) {
+            <span style="background-color: red">i</span>f ($this-&gt;test) {
+                return parent::move($directory, $name);
+            <span style="background-color: red">}</span>
+
+            $target = $this-&gt;getTargetFile($directory, $name);
+
+            set_error_handler(<span style="background-color: red">f</span>unction ($type, $msg) use (&amp;$error) { $error = $msg; });
+            try {
+                $moved = move_uploaded_file($this-&gt;getPathname(), $target);
+            } <span style="background-color: red">f</span>inally {
+                restore_error_handler();
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f (!$moved) {
+                throw new FileException(\sprintf(&#039;Could not move the file &quot;%s&quot; to &quot;%s&quot; (%s).&#039;, $this-&gt;getPathname(), $target, strip_tags($error)));
+            <span style="background-color: red">}</span>
+
+            @chmod($target, 0666 &amp; ~umask());
+
+            return $target;
+        <span style="background-color: red">}</span>
+
+        switch ($this-&gt;error) {
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_INI_SIZE:
+                throw new IniSizeFileException($this-&gt;getErrorMessage());
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_FORM_SIZE:
+                throw new FormSizeFileException($this-&gt;getErrorMessage());
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_PARTIAL:
+                throw new PartialFileException($this-&gt;getErrorMessage());
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_NO_FILE:
+                throw new NoFileException($this-&gt;getErrorMessage());
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_CANT_WRITE:
+                throw new CannotWriteFileException($this-&gt;getErrorMessage());
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_NO_TMP_DIR:
+                throw new NoTmpDirFileException($this-&gt;getErrorMessage());
+            <span style="background-color: red">c</span>ase \UPLOAD_ERR_EXTENSION:
+                throw new ExtensionFileException($this-&gt;getErrorMessage());
+        <span style="background-color: red">}</span>
+
+        throw new FileException($this-&gt;getErrorMessage());
+    }
+
+    /**
+     * Returns the maximum size of an uploaded file as configured in php.ini.
+     *
+     * @return int|float The maximum size of an uploaded file in bytes (returns float if size &gt; PHP_INT_MAX)
+     */
+    <span style="background-color: red">p</span>ublic static function getMaxFilesize(): int|float
+    {
+        $sizePostMax = self::parseFilesize(\ini_get(&#039;post_max_size&#039;));
+        $sizeUploadMax = self::parseFilesize(\ini_get(&#039;upload_max_filesize&#039;));
+
+        return min($sizePostMax ?: <span style="background-color: red">\</span>PHP_INT_MAX, $sizeUploadMax ?: <span style="background-color: red">\</span>PHP_INT_MAX);
+    }
+
+    <span style="background-color: red">p</span>rivate static function parseFilesize(string $size): int|float
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; === $size) {
+            return 0;
+        <span style="background-color: red">}</span>
+
+        $size = strtolower($size);
+
+        $max = ltrim($size, &#039;+&#039;);
+        <span style="background-color: red">i</span>f (str_starts_with($max, &#039;0x&#039;)) {
+            $max = \intval($max, 16);
+        } <span style="background-color: red">e</span>lseif (str_starts_with($max, &#039;0&#039;)) {
+            $max = \intval($max, 8);
+        } <span style="background-color: red">e</span>lse {
+            $max = (int) $max;
+        <span style="background-color: red">}</span>
+
+        switch (substr($size, -1)) {
+            <span style="background-color: red">c</span>ase &#039;t&#039;: $max *= 1024;
+                // no break
+            <span style="background-color: red">c</span>ase &#039;g&#039;: $max *= 1024;
+                // no break
+            <span style="background-color: red">c</span>ase &#039;m&#039;: $max *= 1024;
+                // no break
+            <span style="background-color: red">c</span>ase &#039;k&#039;: $max *= 1024;
+        <span style="background-color: red">}</span>
+
+        return $max;
+    }
+
+    /**
+     * Returns an informative upload error message.
+     */
+    <span style="background-color: red">p</span>ublic function getErrorMessage(): string
+    {
+        static $errors = [
+            \UPLOAD_ERR_INI_SIZE =&gt; &#039;The file &quot;%s&quot; exceeds your upload_max_filesize ini directive (limit is %d KiB).&#039;,
+            \UPLOAD_ERR_FORM_SIZE =&gt; &#039;The file &quot;%s&quot; exceeds the upload limit defined in your form.&#039;,
+            \UPLOAD_ERR_PARTIAL =&gt; &#039;The file &quot;%s&quot; was only partially uploaded.&#039;,
+            \UPLOAD_ERR_NO_FILE =&gt; &#039;No file was uploaded.&#039;,
+            \UPLOAD_ERR_CANT_WRITE =&gt; &#039;The file &quot;%s&quot; could not be written on disk.&#039;,
+            \UPLOAD_ERR_NO_TMP_DIR =&gt; &#039;File could not be uploaded: missing temporary directory.&#039;,
+            \UPLOAD_ERR_EXTENSION =&gt; &#039;File upload was stopped by a PHP extension.&#039;,
+        ];
+
+        $errorCode = $this-&gt;error;
+        $maxFilesize = \UPLOAD_ERR_INI_SIZE === $errorCode ? self::getMaxFilesize() / 1024 : <span style="background-color: red">0</span>;
+        $message = $errors[$errorCode] ?? <span style="background-color: red">'</span>The file &quot;%s&quot; was not uploaded due to an unknown error.&#039;;
+
+        return \sprintf($message, $this-&gt;getClientOriginalName(), $maxFilesize);
+    }
+}
+</pre>

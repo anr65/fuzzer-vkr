@@ -1,0 +1,268 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv;
+
+use Dotenv\Exception\InvalidPathException;
+use Dotenv\Loader\Loader;
+use Dotenv\Loader\LoaderInterface;
+use Dotenv\Parser\Parser;
+use Dotenv\Parser\ParserInterface;
+use Dotenv\Repository\Adapter\ArrayAdapter;
+use Dotenv\Repository\Adapter\PutenvAdapter;
+use Dotenv\Repository\RepositoryBuilder;
+use Dotenv\Repository\RepositoryInterface;
+use Dotenv\Store\StoreBuilder;
+use Dotenv\Store\StoreInterface;
+use Dotenv\Store\StringStore;
+
+class Dotenv
+{
+    /**
+     * The store instance.
+     *
+     * @var \Dotenv\Store\StoreInterface
+     */
+    private $store;
+
+    /**
+     * The parser instance.
+     *
+     * @var \Dotenv\Parser\ParserInterface
+     */
+    private $parser;
+
+    /**
+     * The loader instance.
+     *
+     * @var \Dotenv\Loader\LoaderInterface
+     */
+    private $loader;
+
+    /**
+     * The repository instance.
+     *
+     * @var \Dotenv\Repository\RepositoryInterface
+     */
+    private $repository;
+
+    /**
+     * Create a new dotenv instance.
+     *
+     * @param \Dotenv\Store\StoreInterface           $store
+     * @param \Dotenv\Parser\ParserInterface         $parser
+     * @param \Dotenv\Loader\LoaderInterface         $loader
+     * @param \Dotenv\Repository\RepositoryInterface $repository
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        StoreInterface $store,
+        ParserInterface $parser,
+        LoaderInterface $loader,
+        RepositoryInterface $repository
+    ) {
+        $this-&gt;store = $store;
+        $this-&gt;parser = $parser;
+        $this-&gt;loader = $loader;
+        $this-&gt;repository = $repository;
+    }
+
+    /**
+     * Create a new dotenv instance.
+     *
+     * @param \Dotenv\Repository\RepositoryInterface $repository
+     * @param string|string[]                        $paths
+     * @param string|string[]|null                   $names
+     * @param bool                                   $shortCircuit
+     * @param string|null                            $fileEncoding
+     *
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: green">p</span>ublic static function create(RepositoryInterface $repository, $paths, $names = null, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $builder = $names === null ? StoreBuilder::createWithDefaultName() : <span style="background-color: green">S</span>toreBuilder::createWithNoNames();
+
+        <span style="background-color: green">f</span>oreach ((array) $paths as $path) {
+            $builder = $builder-&gt;addPath($path);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ((array) $names as $name) {
+            $builder = $builder-&gt;addName($name);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($shortCircuit) {
+            $builder = $builder-&gt;shortCircuit();
+        <span style="background-color: green">}</span>
+
+        return new self($builder-&gt;fileEncoding($fileEncoding)-&gt;make(), new Parser(), new Loader(), $repository);
+    }
+
+    /**
+     * Create a new mutable dotenv instance with default repository.
+     *
+     * @param string|string[]      $paths
+     * @param string|string[]|null $names
+     * @param bool                 $shortCircuit
+     * @param string|null          $fileEncoding
+     *
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: red">p</span>ublic static function createMutable($paths, $names = null, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $repository = RepositoryBuilder::createWithDefaultAdapters()-&gt;make();
+
+        return self::create($repository, $paths, $names, $shortCircuit, $fileEncoding);
+    }
+
+    /**
+     * Create a new mutable dotenv instance with default repository with the putenv adapter.
+     *
+     * @param string|string[]      $paths
+     * @param string|string[]|null $names
+     * @param bool                 $shortCircuit
+     * @param string|null          $fileEncoding
+     *
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: red">p</span>ublic static function createUnsafeMutable($paths, $names = null, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $repository = RepositoryBuilder::createWithDefaultAdapters()
+            -&gt;addAdapter(PutenvAdapter::class)
+            -&gt;make();
+
+        return self::create($repository, $paths, $names, $shortCircuit, $fileEncoding);
+    }
+
+    /**
+     * Create a new immutable dotenv instance with default repository.
+     *
+     * @param string|string[]      $paths
+     * @param string|string[]|null $names
+     * @param bool                 $shortCircuit
+     * @param string|null          $fileEncoding
+     *
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: red">p</span>ublic static function createImmutable($paths, $names = null, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $repository = RepositoryBuilder::createWithDefaultAdapters()-&gt;immutable()-&gt;make();
+
+        return self::create($repository, $paths, $names, $shortCircuit, $fileEncoding);
+    }
+
+    /**
+     * Create a new immutable dotenv instance with default repository with the putenv adapter.
+     *
+     * @param string|string[]      $paths
+     * @param string|string[]|null $names
+     * @param bool                 $shortCircuit
+     * @param string|null          $fileEncoding
+     *
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: red">p</span>ublic static function createUnsafeImmutable($paths, $names = null, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $repository = RepositoryBuilder::createWithDefaultAdapters()
+            -&gt;addAdapter(PutenvAdapter::class)
+            -&gt;immutable()
+            -&gt;make();
+
+        return self::create($repository, $paths, $names, $shortCircuit, $fileEncoding);
+    }
+
+    /**
+     * Create a new dotenv instance with an array backed repository.
+     *
+     * @param string|string[]      $paths
+     * @param string|string[]|null $names
+     * @param bool                 $shortCircuit
+     * @param string|null          $fileEncoding
+     *
+     * @return \Dotenv\Dotenv
+     */
+    <span style="background-color: red">p</span>ublic static function createArrayBacked($paths, $names = null, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $repository = RepositoryBuilder::createWithNoAdapters()-&gt;addAdapter(ArrayAdapter::class)-&gt;make();
+
+        return self::create($repository, $paths, $names, $shortCircuit, $fileEncoding);
+    }
+
+    /**
+     * Parse the given content and resolve nested variables.
+     *
+     * This method behaves just like load(), only without mutating your actual
+     * environment. We do this by using an array backed repository.
+     *
+     * @param string $content
+     *
+     * @throws \Dotenv\Exception\InvalidFileException
+     *
+     * @return array&lt;string,string|null&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function parse(string $content)
+    {
+        $repository = RepositoryBuilder::createWithNoAdapters()-&gt;addAdapter(ArrayAdapter::class)-&gt;make();
+
+        $phpdotenv = new self(new StringStore($content), new Parser(), new Loader(), $repository);
+
+        return $phpdotenv-&gt;load();
+    }
+
+    /**
+     * Read and load environment file(s).
+     *
+     * @throws \Dotenv\Exception\InvalidPathException|\Dotenv\Exception\InvalidEncodingException|\Dotenv\Exception\InvalidFileException
+     *
+     * @return array&lt;string,string|null&gt;
+     */
+    <span style="background-color: green">p</span>ublic function load()
+    {
+        $entries = $this-&gt;parser-&gt;parse($this-&gt;store-&gt;read());
+
+        return $this-&gt;loader-&gt;load($this-&gt;repository, $entries);
+    }
+
+    /**
+     * Read and load environment file(s), silently failing if no files can be read.
+     *
+     * @throws \Dotenv\Exception\InvalidEncodingException|\Dotenv\Exception\InvalidFileException
+     *
+     * @return array&lt;string,string|null&gt;
+     */
+    <span style="background-color: green">p</span>ublic function safeLoad()
+    {
+        try {
+            return $this-&gt;load();
+        } <span style="background-color: green">c</span>atch (InvalidPathException $e) {
+            // suppressing exception
+            return [];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Required ensures that the specified variables exist, and returns a new validator object.
+     *
+     * @param string|string[] $variables
+     *
+     * @return \Dotenv\Validator
+     */
+    <span style="background-color: red">p</span>ublic function required($variables)
+    {
+        return (new Validator($this-&gt;repository, (array) $variables))-&gt;required();
+    }
+
+    /**
+     * Returns a new validator object that won&#039;t check if the specified variables exist.
+     *
+     * @param string|string[] $variables
+     *
+     * @return \Dotenv\Validator
+     */
+    <span style="background-color: red">p</span>ublic function ifPresent($variables)
+    {
+        return new Validator($this-&gt;repository, (array) $variables);
+    }
+}
+</pre>

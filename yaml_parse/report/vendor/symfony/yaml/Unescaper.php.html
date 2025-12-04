@@ -1,0 +1,109 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Yaml;
+
+use Symfony\Component\Yaml\Exception\ParseException;
+
+/**
+ * Unescaper encapsulates unescaping rules for single and double-quoted
+ * YAML strings.
+ *
+ * @author Matthew Lewinski &lt;matthew@lewinski.org&gt;
+ *
+ * @internal
+ */
+class Unescaper
+{
+    /**
+     * Regex fragment that matches an escaped character in a double quoted string.
+     */
+    public const REGEX_ESCAPED_CHARACTER = &#039;\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)&#039;;
+
+    /**
+     * Unescapes a single quoted string.
+     *
+     * @param string $value A single quoted string
+     */
+    <span style="background-color: red">p</span>ublic function unescapeSingleQuotedString(string $value): string
+    {
+        return str_replace(&#039;\&#039;\&#039;&#039;, &#039;\&#039;&#039;, $value);
+    }
+
+    /**
+     * Unescapes a double quoted string.
+     *
+     * @param string $value A double quoted string
+     */
+    <span style="background-color: green">p</span>ublic function unescapeDoubleQuotedString(string $value): string
+    {
+        $callback = fn ($match) =&gt; <span style="background-color: red">$</span>this-&gt;unescapeCharacter($match[0]);
+
+        // evaluate the string
+        return preg_replace_callback(&#039;/&#039;.self::REGEX_ESCAPED_CHARACTER.&#039;/u&#039;, $callback, $value);
+    }
+
+    /**
+     * Unescapes a character that was found in a double-quoted string.
+     *
+     * @param string $value An escaped character
+     */
+    <span style="background-color: red">p</span>rivate function unescapeCharacter(string $value): string
+    {
+        return match ($value[1]) {
+            &#039;0&#039; =&gt; <span style="background-color: red">"</span>\x0&quot;,
+            &#039;a&#039; =&gt; <span style="background-color: red">"</span>\x7&quot;,
+            &#039;b&#039; =&gt; <span style="background-color: red">"</span>\x8&quot;,
+            &#039;t&#039; =&gt; <span style="background-color: red">"</span>\t&quot;,
+            &quot;\t&quot; =&gt; <span style="background-color: red">"</span>\t&quot;,
+            &#039;n&#039; =&gt; <span style="background-color: red">"</span>\n&quot;,
+            &#039;v&#039; =&gt; <span style="background-color: red">"</span>\xB&quot;,
+            &#039;f&#039; =&gt; <span style="background-color: red">"</span>\xC&quot;,
+            &#039;r&#039; =&gt; <span style="background-color: red">"</span>\r&quot;,
+            &#039;e&#039; =&gt; <span style="background-color: red">"</span>\x1B&quot;,
+            &#039; &#039; =&gt; <span style="background-color: red">'</span> &#039;,
+            &#039;&quot;&#039; =&gt; <span style="background-color: red">'</span>&quot;&#039;,
+            &#039;/&#039; =&gt; <span style="background-color: red">'</span>/&#039;,
+            &#039;\\&#039; =&gt; <span style="background-color: red">'</span>\\&#039;,
+            // U+0085 NEXT LINE
+            &#039;N&#039; =&gt; <span style="background-color: red">"</span>\xC2\x85&quot;,
+            // U+00A0 NO-BREAK SPACE
+            &#039;_&#039; =&gt; <span style="background-color: red">"</span>\xC2\xA0&quot;,
+            // U+2028 LINE SEPARATOR
+            &#039;L&#039; =&gt; <span style="background-color: red">"</span>\xE2\x80\xA8&quot;,
+            // U+2029 PARAGRAPH SEPARATOR
+            &#039;P&#039; =&gt; <span style="background-color: red">"</span>\xE2\x80\xA9&quot;,
+            &#039;x&#039; =&gt; <span style="background-color: red">s</span>elf::utf8chr(hexdec(substr($value, 2, 2))),
+            &#039;u&#039; =&gt; <span style="background-color: red">s</span>elf::utf8chr(hexdec(substr($value, 2, 4))),
+            &#039;U&#039; =&gt; <span style="background-color: red">s</span>elf::utf8chr(hexdec(substr($value, 2, 8))),
+            default =&gt; <span style="background-color: red">t</span>hrow new ParseException(\sprintf(&#039;Found unknown escape character &quot;%s&quot;.&#039;, $value)),
+        };
+    }
+
+    /**
+     * Get the UTF-8 character for the given code point.
+     */
+    <span style="background-color: red">p</span>rivate static function utf8chr(int $c): string
+    {
+        <span style="background-color: red">i</span>f (0x80 &gt; $c %= 0x200000) {
+            return \chr($c);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (0x800 &gt; $c) {
+            return \chr(0xC0 | $c &gt;&gt; 6).\chr(0x80 | $c &amp; 0x3F);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (0x10000 &gt; $c) {
+            return \chr(0xE0 | $c &gt;&gt; 12).\chr(0x80 | $c &gt;&gt; 6 &amp; 0x3F).\chr(0x80 | $c &amp; 0x3F);
+        <span style="background-color: red">}</span>
+
+        return \chr(0xF0 | $c &gt;&gt; 18).\chr(0x80 | $c &gt;&gt; 12 &amp; 0x3F).\chr(0x80 | $c &gt;&gt; 6 &amp; 0x3F).\chr(0x80 | $c &amp; 0x3F);
+    }
+}
+</pre>

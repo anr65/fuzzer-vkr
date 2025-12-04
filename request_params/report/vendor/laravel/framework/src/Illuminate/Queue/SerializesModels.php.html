@@ -1,0 +1,109 @@
+<pre>&lt;?php
+
+namespace Illuminate\Queue;
+
+use Illuminate\Queue\Attributes\WithoutRelations;
+use ReflectionClass;
+use ReflectionProperty;
+
+trait SerializesModels
+{
+    use SerializesAndRestoresModelIdentifiers;
+
+    /**
+     * Prepare the instance values for serialization.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function __serialize()
+    {
+        $values = [];
+
+        $reflectionClass = new ReflectionClass($this);
+
+        [$class, $properties, $classLevelWithoutRelations] = [
+            get_class($this),
+            $reflectionClass-&gt;getProperties(),
+            ! empty($reflectionClass-&gt;getAttributes(WithoutRelations::class)),
+        ];
+
+        <span style="background-color: red">f</span>oreach ($properties as $property) {
+            <span style="background-color: red">i</span>f ($property-&gt;isStatic()) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (! $property-&gt;isInitialized($this)) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $value = $this-&gt;getPropertyValue($property);
+
+            <span style="background-color: red">i</span>f ($property-&gt;hasDefaultValue() &amp;&amp; <span style="background-color: red">$</span>value === $property-&gt;getDefaultValue()) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $name = $property-&gt;getName();
+
+            <span style="background-color: red">i</span>f ($property-&gt;isPrivate()) {
+                $name = &quot;\0{$class}\0{$name}&quot;;
+            } <span style="background-color: red">e</span>lseif ($property-&gt;isProtected()) {
+                $name = &quot;\0*\0{$name}&quot;;
+            <span style="background-color: red">}</span>
+
+            $values[$name] = $this-&gt;getSerializedPropertyValue(
+                $value,
+                ! $classLevelWithoutRelations &amp;&amp;
+                    <span style="background-color: red">e</span>mpty($property-&gt;getAttributes(WithoutRelations::class))
+            );
+        <span style="background-color: red">}</span>
+
+        return $values;
+    }
+
+    /**
+     * Restore the model after serialization.
+     *
+     * @param  array  $values
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __unserialize(array $values)
+    {
+        $properties = (new ReflectionClass($this))-&gt;getProperties();
+
+        $class = get_class($this);
+
+        <span style="background-color: red">f</span>oreach ($properties as $property) {
+            <span style="background-color: red">i</span>f ($property-&gt;isStatic()) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $name = $property-&gt;getName();
+
+            <span style="background-color: red">i</span>f ($property-&gt;isPrivate()) {
+                $name = &quot;\0{$class}\0{$name}&quot;;
+            } <span style="background-color: red">e</span>lseif ($property-&gt;isProtected()) {
+                $name = &quot;\0*\0{$name}&quot;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (! array_key_exists($name, $values)) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $property-&gt;setValue(
+                $this, $this-&gt;getRestoredPropertyValue($values[$name])
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the property value for the given property.
+     *
+     * @param  \ReflectionProperty  $property
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function getPropertyValue(ReflectionProperty $property)
+    {
+        return $property-&gt;getValue($this);
+    }
+}
+</pre>

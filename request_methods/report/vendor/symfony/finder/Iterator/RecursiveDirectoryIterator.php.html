@@ -1,0 +1,135 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder\Iterator;
+
+use Symfony\Component\Finder\Exception\AccessDeniedException;
+use Symfony\Component\Finder\SplFileInfo;
+
+/**
+ * Extends the \RecursiveDirectoryIterator to support relative paths.
+ *
+ * @author Victor Berchet &lt;victor@suumit.com&gt;
+ *
+ * @extends \RecursiveDirectoryIterator&lt;string, SplFileInfo&gt;
+ */
+class RecursiveDirectoryIterator extends \RecursiveDirectoryIterator
+{
+    private bool $ignoreUnreadableDirs;
+    private bool $ignoreFirstRewind = true;
+
+    // these 3 properties take part of the performance optimization to avoid redoing the same work in all iterations
+    private string $rootPath;
+    private string $subPath;
+    private string $directorySeparator = &#039;/&#039;;
+
+    /**
+     * @throws \RuntimeException
+     */
+    <span style="background-color: green">p</span>ublic function __construct(string $path, int $flags, bool $ignoreUnreadableDirs = false)
+    {
+        <span style="background-color: red">i</span>f ($flags &amp; (self::CURRENT_AS_PATHNAME | self::CURRENT_AS_SELF)) {
+            throw new \RuntimeException(&#039;This iterator only support returning current as fileinfo.&#039;);
+        <span style="background-color: green">}</span>
+
+        parent::__construct($path, $flags);
+        $this-&gt;ignoreUnreadableDirs = $ignoreUnreadableDirs;
+        $this-&gt;rootPath = $path;
+        <span style="background-color: red">i</span>f (&#039;/&#039; !== \DIRECTORY_SEPARATOR &amp;&amp; <span style="background-color: red">!</span>($flags &amp; self::UNIX_PATHS)) {
+            $this-&gt;directorySeparator = \DIRECTORY_SEPARATOR;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Return an instance of SplFileInfo with support for relative paths.
+     */
+    <span style="background-color: green">p</span>ublic function current(): SplFileInfo
+    {
+        // the logic here avoids redoing the same work in all iterations
+
+        <span style="background-color: green">i</span>f (!isset($this-&gt;subPath)) {
+            $this-&gt;subPath = $this-&gt;getSubPath();
+        <span style="background-color: green">}</span>
+        $subPathname = $this-&gt;subPath;
+        <span style="background-color: red">i</span>f (&#039;&#039; !== $subPathname) {
+            $subPathname .= $this-&gt;directorySeparator;
+        <span style="background-color: green">}</span>
+        $subPathname .= $this-&gt;getFilename();
+        $basePath = $this-&gt;rootPath;
+
+        <span style="background-color: green">i</span>f (&#039;/&#039; !== $basePath &amp;&amp; <span style="background-color: green">!</span>str_ends_with($basePath, $this-&gt;directorySeparator) &amp;&amp; <span style="background-color: green">!</span>str_ends_with($basePath, &#039;/&#039;)) {
+            $basePath .= $this-&gt;directorySeparator;
+        <span style="background-color: green">}</span>
+
+        return new SplFileInfo($basePath.$subPathname, $this-&gt;subPath, $subPathname);
+    }
+
+    <span style="background-color: green">p</span>ublic function hasChildren(bool $allowLinks = false): bool
+    {
+        $hasChildren = parent::hasChildren($allowLinks);
+
+        <span style="background-color: green">i</span>f (!$hasChildren || <span style="background-color: red">!</span>$this-&gt;ignoreUnreadableDirs) {
+            return $hasChildren;
+        <span style="background-color: red">}</span>
+
+        try {
+            parent::getChildren();
+
+            return true;
+        } <span style="background-color: red">c</span>atch (\UnexpectedValueException) {
+            // If directory is unreadable and finder is set to ignore it, skip children
+            return false;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * @throws AccessDeniedException
+     */
+    <span style="background-color: red">p</span>ublic function getChildren(): \RecursiveDirectoryIterator
+    {
+        try {
+            $children = parent::getChildren();
+
+            <span style="background-color: red">i</span>f ($children instanceof self) {
+                // parent method will call the constructor with default arguments, so unreadable dirs won&#039;t be ignored anymore
+                $children-&gt;ignoreUnreadableDirs = $this-&gt;ignoreUnreadableDirs;
+
+                // performance optimization to avoid redoing the same work in all children
+                $children-&gt;rootPath = $this-&gt;rootPath;
+            <span style="background-color: red">}</span>
+
+            return $children;
+        } <span style="background-color: red">c</span>atch (\UnexpectedValueException $e) {
+            throw new AccessDeniedException($e-&gt;getMessage(), $e-&gt;getCode(), $e);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: green">p</span>ublic function next(): void
+    {
+        $this-&gt;ignoreFirstRewind = false;
+
+        parent::next();
+    }
+
+    <span style="background-color: green">p</span>ublic function rewind(): void
+    {
+        // some streams like FTP are not rewindable, ignore the first rewind after creation,
+        // as newly created DirectoryIterator does not need to be rewound
+        <span style="background-color: green">i</span>f ($this-&gt;ignoreFirstRewind) {
+            $this-&gt;ignoreFirstRewind = false;
+
+            return;
+        <span style="background-color: red">}</span>
+
+        parent::rewind();
+    }
+}
+</pre>

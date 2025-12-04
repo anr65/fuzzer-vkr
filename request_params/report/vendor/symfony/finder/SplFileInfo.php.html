@@ -1,0 +1,81 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder;
+
+/**
+ * Extends \SplFileInfo to support relative paths.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class SplFileInfo extends \SplFileInfo
+{
+    /**
+     * @param string $file             The file name
+     * @param string $relativePath     The relative path
+     * @param string $relativePathname The relative path name
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        string $file,
+        private string $relativePath,
+        private string $relativePathname,
+    ) {
+        parent::__construct($file);
+    }
+
+    /**
+     * Returns the relative path.
+     *
+     * This path does not contain the file name.
+     */
+    <span style="background-color: red">p</span>ublic function getRelativePath(): string
+    {
+        return $this-&gt;relativePath;
+    }
+
+    /**
+     * Returns the relative path name.
+     *
+     * This path contains the file name.
+     */
+    <span style="background-color: green">p</span>ublic function getRelativePathname(): string
+    {
+        return $this-&gt;relativePathname;
+    }
+
+    <span style="background-color: red">p</span>ublic function getFilenameWithoutExtension(): string
+    {
+        $filename = $this-&gt;getFilename();
+
+        return pathinfo($filename, \PATHINFO_FILENAME);
+    }
+
+    /**
+     * Returns the contents of the file.
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function getContents(): string
+    {
+        set_error_handler(<span style="background-color: red">f</span>unction ($type, $msg) use (&amp;$error) { $error = $msg; });
+        try {
+            $content = file_get_contents($this-&gt;getPathname());
+        } <span style="background-color: red">f</span>inally {
+            restore_error_handler();
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (false === $content) {
+            throw new \RuntimeException($error);
+        <span style="background-color: red">}</span>
+
+        return $content;
+    }
+}
+</pre>

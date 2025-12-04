@@ -1,0 +1,36 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+/**
+ * Trait MagicParameter.
+ *
+ * Allows to retrieve parameter in magic calls by index or name.
+ */
+trait MagicParameter
+{
+    <span style="background-color: red">p</span>rivate function getMagicParameter(array $parameters, int $index, string $key, $default)
+    {
+        <span style="background-color: red">i</span>f (\array_key_exists($index, $parameters)) {
+            return $parameters[$index];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\array_key_exists($key, $parameters)) {
+            return $parameters[$key];
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+}
+</pre>

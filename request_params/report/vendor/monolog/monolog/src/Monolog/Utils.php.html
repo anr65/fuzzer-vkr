@@ -1,0 +1,258 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog;
+
+final class Utils
+{
+    const DEFAULT_JSON_FLAGS = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR;
+
+    <span style="background-color: green">p</span>ublic static function getClass(object $object): string
+    {
+        $class = \get_class($object);
+
+        <span style="background-color: green">i</span>f (false === ($pos = strpos($class, &quot;@anonymous\0&quot;))) {
+            return $class;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (false === ($parent = get_parent_class($class))) {
+            return substr($class, 0, $pos + 10);
+        <span style="background-color: red">}</span>
+
+        return $parent . &#039;@anonymous&#039;;
+    }
+
+    <span style="background-color: red">p</span>ublic static function substr(string $string, int $start, ?int $length = null): string
+    {
+        <span style="background-color: red">i</span>f (\extension_loaded(&#039;mbstring&#039;)) {
+            return mb_strcut($string, $start, $length);
+        <span style="background-color: red">}</span>
+
+        return substr($string, $start, (null === $length) ? \strlen($string) : <span style="background-color: red">$</span>length);
+    }
+
+    /**
+     * Makes sure if a relative path is passed in it is turned into an absolute path
+     *
+     * @param string $streamUrl stream URL or path without protocol
+     */
+    <span style="background-color: green">p</span>ublic static function canonicalizePath(string $streamUrl): string
+    {
+        $prefix = &#039;&#039;;
+        <span style="background-color: red">i</span>f (&#039;file://&#039; === substr($streamUrl, 0, 7)) {
+            $streamUrl = substr($streamUrl, 7);
+            $prefix = &#039;file://&#039;;
+        <span style="background-color: green">}</span>
+
+        // other type of stream, not supported
+        <span style="background-color: red">i</span>f (false !== strpos($streamUrl, &#039;://&#039;)) {
+            return $streamUrl;
+        <span style="background-color: green">}</span>
+
+        // already absolute
+        <span style="background-color: green">i</span>f (substr($streamUrl, 0, 1) === &#039;/&#039; || <span style="background-color: red">s</span>ubstr($streamUrl, 1, 1) === &#039;:&#039; || <span style="background-color: red">s</span>ubstr($streamUrl, 0, 2) === &#039;\\\\&#039;) {
+            return $prefix.$streamUrl;
+        <span style="background-color: red">}</span>
+
+        $streamUrl = getcwd() . &#039;/&#039; . $streamUrl;
+
+        return $prefix.$streamUrl;
+    }
+
+    /**
+     * Return the JSON representation of a value
+     *
+     * @param  mixed             $data
+     * @param  int               $encodeFlags  flags to pass to json encode, defaults to DEFAULT_JSON_FLAGS
+     * @param  bool              $ignoreErrors whether to ignore encoding errors or to throw on error, when ignored and the encoding fails, &quot;null&quot; is returned which is valid json for null
+     * @throws \RuntimeException if encoding fails and errors are not ignored
+     * @return string            when errors are ignored and the encoding fails, &quot;null&quot; is returned which is valid json for null
+     */
+    <span style="background-color: green">p</span>ublic static function jsonEncode($data, ?int $encodeFlags = null, bool $ignoreErrors = false): string
+    {
+        <span style="background-color: red">i</span>f (null === $encodeFlags) {
+            $encodeFlags = self::DEFAULT_JSON_FLAGS;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($ignoreErrors) {
+            $json = @json_encode($data, $encodeFlags);
+            <span style="background-color: red">i</span>f (false === $json) {
+                return &#039;null&#039;;
+            <span style="background-color: green">}</span>
+
+            return $json;
+        <span style="background-color: red">}</span>
+
+        $json = json_encode($data, $encodeFlags);
+        <span style="background-color: red">i</span>f (false === $json) {
+            $json = self::handleJsonError(json_last_error(), $data);
+        <span style="background-color: red">}</span>
+
+        return $json;
+    }
+
+    /**
+     * Handle a json_encode failure.
+     *
+     * If the failure is due to invalid string encoding, try to clean the
+     * input and encode again. If the second encoding attempt fails, the
+     * initial error is not encoding related or the input can&#039;t be cleaned then
+     * raise a descriptive exception.
+     *
+     * @param  int               $code        return code of json_last_error function
+     * @param  mixed             $data        data that was meant to be encoded
+     * @param  int               $encodeFlags flags to pass to json encode, defaults to JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
+     * @throws \RuntimeException if failure can&#039;t be corrected
+     * @return string            JSON encoded data after error correction
+     */
+    <span style="background-color: red">p</span>ublic static function handleJsonError(int $code, $data, ?int $encodeFlags = null): string
+    {
+        <span style="background-color: red">i</span>f ($code !== JSON_ERROR_UTF8) {
+            self::throwEncodeError($code, $data);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($data)) {
+            self::detectAndCleanUtf8($data);
+        } <span style="background-color: red">e</span>lseif (\is_array($data)) {
+            array_walk_recursive($data, [&#039;Monolog\Utils&#039;, &#039;detectAndCleanUtf8&#039;]);
+        } <span style="background-color: red">e</span>lse {
+            self::throwEncodeError($code, $data);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (null === $encodeFlags) {
+            $encodeFlags = self::DEFAULT_JSON_FLAGS;
+        <span style="background-color: red">}</span>
+
+        $json = json_encode($data, $encodeFlags);
+
+        <span style="background-color: red">i</span>f ($json === false) {
+            self::throwEncodeError(json_last_error(), $data);
+        <span style="background-color: red">}</span>
+
+        return $json;
+    }
+
+    /**
+     * Throws an exception according to a given code with a customized message
+     *
+     * @param  int               $code return code of json_last_error function
+     * @param  mixed             $data data that was meant to be encoded
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rivate static function throwEncodeError(int $code, $data): never
+    {
+        $msg = match ($code) {
+            JSON_ERROR_DEPTH =&gt; <span style="background-color: red">'</span>Maximum stack depth exceeded&#039;,
+            JSON_ERROR_STATE_MISMATCH =&gt; <span style="background-color: red">'</span>Underflow or the modes mismatch&#039;,
+            JSON_ERROR_CTRL_CHAR =&gt; <span style="background-color: red">'</span>Unexpected control character found&#039;,
+            JSON_ERROR_UTF8 =&gt; <span style="background-color: red">'</span>Malformed UTF-8 characters, possibly incorrectly encoded&#039;,
+            default =&gt; <span style="background-color: red">'</span>Unknown error&#039;,
+        };
+
+        throw new \RuntimeException(&#039;JSON encoding failed: &#039;.$msg.&#039;. Encoding: &#039;.var_export($data, true));
+    }
+
+    /**
+     * Detect invalid UTF-8 string characters and convert to valid UTF-8.
+     *
+     * Valid UTF-8 input will be left unmodified, but strings containing
+     * invalid UTF-8 codepoints will be reencoded as UTF-8 with an assumed
+     * original encoding of ISO-8859-15. This conversion may result in
+     * incorrect output if the actual encoding was not ISO-8859-15, but it
+     * will be clean UTF-8 output and will not rely on expensive and fragile
+     * detection algorithms.
+     *
+     * Function converts the input in place in the passed variable so that it
+     * can be used as a callback for array_walk_recursive.
+     *
+     * @param mixed $data Input to check and convert if needed, passed by ref
+     */
+    <span style="background-color: red">p</span>rivate static function detectAndCleanUtf8(&amp;$data): void
+    {
+        <span style="background-color: red">i</span>f (\is_string($data) &amp;&amp; <span style="background-color: red">p</span>reg_match(&#039;//u&#039;, $data) !== 1) {
+            $data = preg_replace_callback(
+                &#039;/[\x80-\xFF]+/&#039;,
+                <span style="background-color: red">f</span>unction (array $m): string {
+                    return \function_exists(&#039;mb_convert_encoding&#039;)
+                        ? mb_convert_encoding($m[0], &#039;UTF-8&#039;, &#039;ISO-8859-1&#039;)
+                        : (<span style="background-color: red">\</span>function_exists(&#039;utf8_encode&#039;) ? utf8_encode($m[0]) : <span style="background-color: red">'</span>&#039;);
+                },
+                $data
+            );
+            <span style="background-color: red">i</span>f (!\is_string($data)) {
+                $pcreErrorCode = preg_last_error();
+
+                throw new \RuntimeException(&#039;Failed to preg_replace_callback: &#039; . $pcreErrorCode . &#039; / &#039; . preg_last_error_msg());
+            <span style="background-color: red">}</span>
+            $data = str_replace(
+                [&#039;¤&#039;, &#039;¦&#039;, &#039;¨&#039;, &#039;´&#039;, &#039;¸&#039;, &#039;¼&#039;, &#039;½&#039;, &#039;¾&#039;],
+                [&#039;€&#039;, &#039;Š&#039;, &#039;š&#039;, &#039;Ž&#039;, &#039;ž&#039;, &#039;Œ&#039;, &#039;œ&#039;, &#039;Ÿ&#039;],
+                $data
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Converts a string with a valid &#039;memory_limit&#039; format, to bytes.
+     *
+     * @param  string|false $val
+     * @return int|false    Returns an integer representing bytes. Returns FALSE in case of error.
+     */
+    <span style="background-color: green">p</span>ublic static function expandIniShorthandBytes($val)
+    {
+        <span style="background-color: red">i</span>f (!\is_string($val)) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        // support -1
+        <span style="background-color: red">i</span>f ((int) $val &lt; 0) {
+            return (int) $val;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (!(bool) preg_match(&#039;/^\s*(?&lt;val&gt;\d+)(?:\.\d+)?\s*(?&lt;unit&gt;[gmk]?)\s*$/i&#039;, $val, $match)) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        $val = (int) $match[&#039;val&#039;];
+        switch (strtolower($match[&#039;unit&#039;])) {
+            <span style="background-color: red">c</span>ase &#039;g&#039;:
+                $val *= 1024;
+                // no break
+            <span style="background-color: green">c</span>ase &#039;m&#039;:
+                $val *= 1024;
+                // no break
+            <span style="background-color: green">c</span>ase &#039;k&#039;:
+                $val *= 1024;
+        <span style="background-color: green">}</span>
+
+        return $val;
+    }
+
+    <span style="background-color: red">p</span>ublic static function getRecordMessageForException(LogRecord $record): string
+    {
+        $context = &#039;&#039;;
+        $extra = &#039;&#039;;
+
+        try {
+            <span style="background-color: red">i</span>f (\count($record-&gt;context) &gt; 0) {
+                $context = &quot;\nContext: &quot; . json_encode($record-&gt;context, JSON_THROW_ON_ERROR);
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f (\count($record-&gt;extra) &gt; 0) {
+                $extra = &quot;\nExtra: &quot; . json_encode($record-&gt;extra, JSON_THROW_ON_ERROR);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">c</span>atch (\Throwable $e) {
+            // noop
+        <span style="background-color: red">}</span>
+
+        return &quot;\nThe exception occurred while attempting to log: &quot; . $record-&gt;message . $context . $extra;
+    }
+}
+</pre>

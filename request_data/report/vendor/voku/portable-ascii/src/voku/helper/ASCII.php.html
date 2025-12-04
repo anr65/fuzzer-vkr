@@ -1,0 +1,1425 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace voku\helper;
+
+/**
+ * ## 🇷🇺 Русским гражданам
+ * В Украине сейчас идет война. Силами РФ наносятся удары по гражданской инфраструктуре в [Харькове][1], [Киеве][2], [Чернигове][3], [Сумах][4], [Ирпене][5] и десятках других городов. Гибнут люди - и гражданское население, и военные, в том числе российские призывники, которых бросили воевать. Чтобы лишить собственный народ доступа к информации, правительство РФ запретило называть войну войной, закрыло независимые СМИ и принимает сейчас ряд диктаторских законов. Эти законы призваны заткнуть рот всем, кто против войны. За обычный призыв к миру сейчас можно получить несколько лет тюрьмы.
+ * Не молчите! Молчание - знак вашего согласия с политикой российского правительства.
+ *  **Вы можете сделать выбор НЕ МОЛЧАТЬ.**
+ * ---
+ * ## 🇺🇸 To people of Russia
+ * There is a war in Ukraine right now. The forces of the Russian Federation are attacking civilian infrastructure in [Kharkiv][1], [Kyiv][2], [Chernihiv][3], [Sumy][4], [Irpin][5] and dozens of other cities. People are dying – both civilians and military servicemen, including Russian conscripts who were thrown into the fighting. In order to deprive its own people of access to information, the government of the Russian Federation has forbidden calling a war a war, shut down independent media and is passing a number of dictatorial laws. These laws are meant to silence all those who are against war. You can be jailed for multiple years for simply calling for peace.
+ * Do not be silent! Silence is a sign that you accept the Russian government&#039;s policy.
+ * **You can choose NOT TO BE SILENT.**
+ * ---
+ * - [1] https://cloudfront-us-east-2.images.arcpublishing.com/reuters/P7K2MSZDGFMIJPDD7CI2GIROJI.jpg &quot;Kharkiv under attack&quot;
+ * - [2] https://gdb.voanews.com/01bd0000-0aff-0242-fad0-08d9fc92c5b3_cx0_cy5_cw0_w1023_r1_s.jpg &quot;Kyiv under attack&quot;
+ * - [3] https://ichef.bbci.co.uk/news/976/cpsprodpb/163DD/production/_123510119_hi074310744.jpg &quot;Chernihiv under attack&quot;
+ * - [4] https://www.youtube.com/watch?v=8K-bkqKKf2A &quot;Sumy under attack&quot;
+ * - [5] https://cloudfront-us-east-2.images.arcpublishing.com/reuters/K4MTMLEHTRKGFK3GSKAT4GR3NE.jpg &quot;Irpin under attack&quot;
+ *
+ * @psalm-immutable
+ */
+final class ASCII
+{
+    //
+    // INFO: https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
+    //
+
+    const UZBEK_LANGUAGE_CODE = &#039;uz&#039;;
+
+    const TURKMEN_LANGUAGE_CODE = &#039;tk&#039;;
+
+    const THAI_LANGUAGE_CODE = &#039;th&#039;;
+
+    const PASHTO_LANGUAGE_CODE = &#039;ps&#039;;
+
+    const ORIYA_LANGUAGE_CODE = &#039;or&#039;;
+
+    const MONGOLIAN_LANGUAGE_CODE = &#039;mn&#039;;
+
+    const KOREAN_LANGUAGE_CODE = &#039;ko&#039;;
+
+    const KIRGHIZ_LANGUAGE_CODE = &#039;ky&#039;;
+
+    const ARMENIAN_LANGUAGE_CODE = &#039;hy&#039;;
+
+    const BENGALI_LANGUAGE_CODE = &#039;bn&#039;;
+
+    const BELARUSIAN_LANGUAGE_CODE = &#039;be&#039;;
+
+    const AMHARIC_LANGUAGE_CODE = &#039;am&#039;;
+
+    const JAPANESE_LANGUAGE_CODE = &#039;ja&#039;;
+
+    const CHINESE_LANGUAGE_CODE = &#039;zh&#039;;
+
+    const DUTCH_LANGUAGE_CODE = &#039;nl&#039;;
+
+    const ITALIAN_LANGUAGE_CODE = &#039;it&#039;;
+
+    const MACEDONIAN_LANGUAGE_CODE = &#039;mk&#039;;
+
+    const PORTUGUESE_LANGUAGE_CODE = &#039;pt&#039;;
+
+    const GREEKLISH_LANGUAGE_CODE = &#039;el__greeklish&#039;;
+
+    const GREEK_LANGUAGE_CODE = &#039;el&#039;;
+
+    const HINDI_LANGUAGE_CODE = &#039;hi&#039;;
+
+    const SWEDISH_LANGUAGE_CODE = &#039;sv&#039;;
+
+    const TURKISH_LANGUAGE_CODE = &#039;tr&#039;;
+
+    const BULGARIAN_LANGUAGE_CODE = &#039;bg&#039;;
+
+    const HUNGARIAN_LANGUAGE_CODE = &#039;hu&#039;;
+
+    const MYANMAR_LANGUAGE_CODE = &#039;my&#039;;
+
+    const CROATIAN_LANGUAGE_CODE = &#039;hr&#039;;
+
+    const FINNISH_LANGUAGE_CODE = &#039;fi&#039;;
+
+    const GEORGIAN_LANGUAGE_CODE = &#039;ka&#039;;
+
+    const RUSSIAN_LANGUAGE_CODE = &#039;ru&#039;;
+
+    const RUSSIAN_PASSPORT_2013_LANGUAGE_CODE = &#039;ru__passport_2013&#039;;
+
+    const RUSSIAN_GOST_2000_B_LANGUAGE_CODE = &#039;ru__gost_2000_b&#039;;
+
+    const UKRAINIAN_LANGUAGE_CODE = &#039;uk&#039;;
+
+    const KAZAKH_LANGUAGE_CODE = &#039;kk&#039;;
+
+    const CZECH_LANGUAGE_CODE = &#039;cs&#039;;
+
+    const DANISH_LANGUAGE_CODE = &#039;da&#039;;
+
+    const POLISH_LANGUAGE_CODE = &#039;pl&#039;;
+
+    const ROMANIAN_LANGUAGE_CODE = &#039;ro&#039;;
+
+    const ESPERANTO_LANGUAGE_CODE = &#039;eo&#039;;
+
+    const ESTONIAN_LANGUAGE_CODE = &#039;et&#039;;
+
+    const LATVIAN_LANGUAGE_CODE = &#039;lv&#039;;
+
+    const LITHUANIAN_LANGUAGE_CODE = &#039;lt&#039;;
+
+    const NORWEGIAN_LANGUAGE_CODE = &#039;no&#039;;
+
+    const VIETNAMESE_LANGUAGE_CODE = &#039;vi&#039;;
+
+    const ARABIC_LANGUAGE_CODE = &#039;ar&#039;;
+
+    const PERSIAN_LANGUAGE_CODE = &#039;fa&#039;;
+
+    const SERBIAN_LANGUAGE_CODE = &#039;sr&#039;;
+
+    const SERBIAN_CYRILLIC_LANGUAGE_CODE = &#039;sr__cyr&#039;;
+
+    const SERBIAN_LATIN_LANGUAGE_CODE = &#039;sr__lat&#039;;
+
+    const AZERBAIJANI_LANGUAGE_CODE = &#039;az&#039;;
+
+    const SLOVAK_LANGUAGE_CODE = &#039;sk&#039;;
+
+    const FRENCH_LANGUAGE_CODE = &#039;fr&#039;;
+
+    const FRENCH_AUSTRIAN_LANGUAGE_CODE = &#039;fr_at&#039;;
+
+    const FRENCH_SWITZERLAND_LANGUAGE_CODE = &#039;fr_ch&#039;;
+
+    const GERMAN_LANGUAGE_CODE = &#039;de&#039;;
+
+    const GERMAN_AUSTRIAN_LANGUAGE_CODE = &#039;de_at&#039;;
+
+    const GERMAN_SWITZERLAND_LANGUAGE_CODE = &#039;de_ch&#039;;
+
+    const ENGLISH_LANGUAGE_CODE = &#039;en&#039;;
+
+    const EXTRA_LATIN_CHARS_LANGUAGE_CODE = &#039;latin&#039;;
+
+    const EXTRA_WHITESPACE_CHARS_LANGUAGE_CODE = &#039; &#039;;
+
+    const EXTRA_MSWORD_CHARS_LANGUAGE_CODE = &#039;msword&#039;;
+
+    /**
+     * @var array&lt;string, array&lt;string, string&gt;&gt;|null
+     */
+    private static $ASCII_MAPS;
+
+    /**
+     * @var array&lt;string, array&lt;string, string&gt;&gt;|null
+     */
+    private static $ASCII_MAPS_AND_EXTRAS;
+
+    /**
+     * @var array&lt;string, array&lt;string, string&gt;&gt;|null
+     */
+    private static $ASCII_EXTRAS;
+
+    /**
+     * @var array&lt;string, int&gt;|null
+     */
+    private static $ORD;
+
+    /**
+     * @var array&lt;string, int&gt;|null
+     */
+    private static $LANGUAGE_MAX_KEY;
+
+    /**
+     * url: https://en.wikipedia.org/wiki/Wikipedia:ASCII#ASCII_printable_characters
+     *
+     * @var string
+     */
+    private static $REGEX_ASCII = &quot;[^\x09\x10\x13\x0A\x0D\x20-\x7E]&quot;;
+
+    /**
+     * bidirectional text chars
+     *
+     * url: https://www.w3.org/International/questions/qa-bidi-unicode-controls
+     *
+     * @var array&lt;int, string&gt;
+     */
+    private static $BIDI_UNI_CODE_CONTROLS_TABLE = [
+        // LEFT-TO-RIGHT EMBEDDING (use -&gt; dir = &quot;ltr&quot;)
+        8234 =&gt; &quot;\xE2\x80\xAA&quot;,
+        // RIGHT-TO-LEFT EMBEDDING (use -&gt; dir = &quot;rtl&quot;)
+        8235 =&gt; &quot;\xE2\x80\xAB&quot;,
+        // POP DIRECTIONAL FORMATTING // (use -&gt; &lt;/bdo&gt;)
+        8236 =&gt; &quot;\xE2\x80\xAC&quot;,
+        // LEFT-TO-RIGHT OVERRIDE // (use -&gt; &lt;bdo dir = &quot;ltr&quot;&gt;)
+        8237 =&gt; &quot;\xE2\x80\xAD&quot;,
+        // RIGHT-TO-LEFT OVERRIDE // (use -&gt; &lt;bdo dir = &quot;rtl&quot;&gt;)
+        8238 =&gt; &quot;\xE2\x80\xAE&quot;,
+        // LEFT-TO-RIGHT ISOLATE // (use -&gt; dir = &quot;ltr&quot;)
+        8294 =&gt; &quot;\xE2\x81\xA6&quot;,
+        // RIGHT-TO-LEFT ISOLATE // (use -&gt; dir = &quot;rtl&quot;)
+        8295 =&gt; &quot;\xE2\x81\xA7&quot;,
+        // FIRST STRONG ISOLATE // (use -&gt; dir = &quot;auto&quot;)
+        8296 =&gt; &quot;\xE2\x81\xA8&quot;,
+        // POP DIRECTIONAL ISOLATE
+        8297 =&gt; &quot;\xE2\x81\xA9&quot;,
+    ];
+
+    /**
+     * Get all languages from the constants &quot;ASCII::.*LANGUAGE_CODE&quot;.
+     *
+     * @return array&lt;string, string&gt;
+     *                                 &lt;p&gt;An associative array where the key is the language code in lowercase
+     *                                 and the value is the corresponding language string.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function getAllLanguages(): array
+    {
+        // init
+        static $LANGUAGES = [];
+
+        <span style="background-color: red">i</span>f ($LANGUAGES !== []) {
+            return $LANGUAGES;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ((new \ReflectionClass(__CLASS__))-&gt;getConstants() as $constant =&gt; $lang) {
+            <span style="background-color: red">i</span>f (\strpos($constant, &#039;EXTRA&#039;) !== false) {
+                $LANGUAGES[\strtolower($constant)] = $lang;
+            } <span style="background-color: red">e</span>lse {
+                $LANGUAGES[\strtolower(\str_replace(&#039;_LANGUAGE_CODE&#039;, &#039;&#039;, $constant))] = $lang;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $LANGUAGES;
+    }
+
+    /**
+     * Returns an replacement array for ASCII methods.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * $array = ASCII::charsArray();
+     * var_dump($array[&#039;ru&#039;][&#039;б&#039;]); // &#039;b&#039;
+     * &lt;/code&gt;
+     *
+     * @param bool $replace_extra_symbols [optional] &lt;p&gt;Add some more replacements e.g. &quot;£&quot; with &quot; pound &quot;.&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return array&lt;string, array&lt;string , string&gt;&gt;
+     *                                               &lt;p&gt;An array where the key is the language code, and the value is
+     *                                               an associative array mapping original characters to their replacements.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function charsArray(bool $replace_extra_symbols = false): array
+    {
+        <span style="background-color: red">i</span>f ($replace_extra_symbols) {
+            self::prepareAsciiAndExtrasMaps();
+
+            return self::$ASCII_MAPS_AND_EXTRAS ?? <span style="background-color: red">[</span>];
+        <span style="background-color: red">}</span>
+
+        self::prepareAsciiMaps();
+
+        return self::$ASCII_MAPS ?? <span style="background-color: red">[</span>];
+    }
+
+    /**
+     * Returns an replacement array for ASCII methods with a mix of multiple languages.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * $array = ASCII::charsArrayWithMultiLanguageValues();
+     * var_dump($array[&#039;b&#039;]); // [&#039;β&#039;, &#039;б&#039;, &#039;ဗ&#039;, &#039;ბ&#039;, &#039;ب&#039;]
+     * &lt;/code&gt;
+     *
+     * @param bool $replace_extra_symbols [optional] &lt;p&gt;Add some more replacements e.g. &quot;£&quot; with &quot; pound &quot;.&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return array&lt;string, list&lt;string&gt;&gt;
+     *                                     &lt;p&gt;An array of replacements.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function charsArrayWithMultiLanguageValues(bool $replace_extra_symbols = false): array
+    {
+        static $CHARS_ARRAY = [];
+        $cacheKey = &#039;&#039; . $replace_extra_symbols;
+
+        <span style="background-color: red">i</span>f (isset($CHARS_ARRAY[$cacheKey])) {
+            return $CHARS_ARRAY[$cacheKey];
+        <span style="background-color: red">}</span>
+
+        // init
+        $return = [];
+        $language_all_chars = self::charsArrayWithSingleLanguageValues(
+            $replace_extra_symbols,
+            false
+        );
+
+        /* @noinspection AlterInForeachInspection | ok here */
+        <span style="background-color: red">f</span>oreach ($language_all_chars as $key =&gt; &amp;$value) {
+            $return[$value][] = $key;
+        <span style="background-color: red">}</span>
+
+        $CHARS_ARRAY[$cacheKey] = $return;
+
+        return $return;
+    }
+
+    /**
+     * Returns an replacement array for ASCII methods with one language.
+     *
+     * For example, German will map &#039;ä&#039; to &#039;ae&#039;, while other languages
+     * will simply return e.g. &#039;a&#039;.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * $array = ASCII::charsArrayWithOneLanguage(&#039;ru&#039;);
+     * $tmpKey = \array_search(&#039;yo&#039;, $array[&#039;replace&#039;]);
+     * echo $array[&#039;orig&#039;][$tmpKey]; // &#039;ё&#039;
+     * &lt;/code&gt;
+     *
+     * @param string $language              [optional] &lt;p&gt;Language of the source string e.g.: en, de_at, or de-ch.
+     *                                      (default is &#039;en&#039;) | ASCII::*_LANGUAGE_CODE&lt;/p&gt;
+     * @param bool   $replace_extra_symbols [optional] &lt;p&gt;Add some more replacements e.g. &quot;£&quot; with &quot; pound &quot;.&lt;/p&gt;
+     * @param bool   $asOrigReplaceArray    [optional] &lt;p&gt;TRUE === return {orig: list&lt;string&gt;, replace: list&lt;string&gt;}
+     *                                      array&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return ($asOrigReplaceArray is true ? array{orig: list&lt;string&gt;, replace: list&lt;string&gt;} : array&lt;string, string&gt;)
+     *
+     * @phpstan-param ASCII::*_LANGUAGE_CODE $language
+     */
+    <span style="background-color: green">p</span>ublic static function charsArrayWithOneLanguage(
+        string $language = self::ENGLISH_LANGUAGE_CODE,
+        bool $replace_extra_symbols = false,
+        bool $asOrigReplaceArray = true
+    ): array {
+        $language = self::get_language($language);
+
+        // init
+        static $CHARS_ARRAY = [];
+        $cacheKey = &#039;&#039; . $replace_extra_symbols . &#039;-&#039; . $asOrigReplaceArray;
+
+        // check static cache
+        <span style="background-color: red">i</span>f (isset($CHARS_ARRAY[$cacheKey][$language])) {
+            return $CHARS_ARRAY[$cacheKey][$language];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($replace_extra_symbols) {
+            self::prepareAsciiAndExtrasMaps();
+
+            <span style="background-color: red">i</span>f (isset(self::$ASCII_MAPS_AND_EXTRAS[$language])) {
+                $tmpArray = self::$ASCII_MAPS_AND_EXTRAS[$language];
+
+                <span style="background-color: red">i</span>f ($asOrigReplaceArray) {
+                    $CHARS_ARRAY[$cacheKey][$language] = [
+                        &#039;orig&#039;    =&gt; \array_keys($tmpArray),
+                        &#039;replace&#039; =&gt; \array_values($tmpArray),
+                    ];
+                } <span style="background-color: red">e</span>lse {
+                    $CHARS_ARRAY[$cacheKey][$language] = $tmpArray;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                <span style="background-color: red">i</span>f ($asOrigReplaceArray) {
+                    $CHARS_ARRAY[$cacheKey][$language] = [
+                        &#039;orig&#039;    =&gt; [],
+                        &#039;replace&#039; =&gt; [],
+                    ];
+                } <span style="background-color: red">e</span>lse {
+                    $CHARS_ARRAY[$cacheKey][$language] = [];
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        } <span style="background-color: green">e</span>lse {
+            self::prepareAsciiMaps();
+
+            <span style="background-color: green">i</span>f (isset(self::$ASCII_MAPS[$language])) {
+                $tmpArray = self::$ASCII_MAPS[$language];
+
+                <span style="background-color: red">i</span>f ($asOrigReplaceArray) {
+                    $CHARS_ARRAY[$cacheKey][$language] = [
+                        &#039;orig&#039;    =&gt; \array_keys($tmpArray),
+                        &#039;replace&#039; =&gt; \array_values($tmpArray),
+                    ];
+                } <span style="background-color: green">e</span>lse {
+                    $CHARS_ARRAY[$cacheKey][$language] = $tmpArray;
+                <span style="background-color: green">}</span>
+            } <span style="background-color: red">e</span>lse {
+                <span style="background-color: red">i</span>f ($asOrigReplaceArray) {
+                    $CHARS_ARRAY[$cacheKey][$language] = [
+                        &#039;orig&#039;    =&gt; [],
+                        &#039;replace&#039; =&gt; [],
+                    ];
+                } <span style="background-color: red">e</span>lse {
+                    $CHARS_ARRAY[$cacheKey][$language] = [];
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $CHARS_ARRAY[$cacheKey][$language] ?? <span style="background-color: red">[</span>&#039;orig&#039; =&gt; [], &#039;replace&#039; =&gt; []];
+    }
+
+    /**
+     * Returns an replacement array for ASCII methods with multiple languages.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * $array = ASCII::charsArrayWithSingleLanguageValues();
+     * $tmpKey = \array_search(&#039;hnaik&#039;, $array[&#039;replace&#039;]);
+     * echo $array[&#039;orig&#039;][$tmpKey]; // &#039;၌&#039;
+     * &lt;/code&gt;
+     *
+     * @param bool $replace_extra_symbols [optional] &lt;p&gt;Add some more replacements e.g. &quot;£&quot; with &quot; pound &quot;.&lt;/p&gt;
+     * @param bool $asOrigReplaceArray    [optional] &lt;p&gt;TRUE === return {orig: list&lt;string&gt;, replace: list&lt;string&gt;}
+     *                                    array&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return ($asOrigReplaceArray is true ? array{orig: list&lt;string&gt;, replace: list&lt;string&gt;} : array&lt;string, string&gt;)
+     */
+    <span style="background-color: green">p</span>ublic static function charsArrayWithSingleLanguageValues(
+        bool $replace_extra_symbols = false,
+        bool $asOrigReplaceArray = true
+    ): array {
+        // init
+        static $CHARS_ARRAY = [];
+        $cacheKey = &#039;&#039; . $replace_extra_symbols . &#039;-&#039; . $asOrigReplaceArray;
+
+        <span style="background-color: red">i</span>f (isset($CHARS_ARRAY[$cacheKey])) {
+            return $CHARS_ARRAY[$cacheKey];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($replace_extra_symbols) {
+            self::prepareAsciiAndExtrasMaps();
+
+            /* @noinspection AlterInForeachInspection | ok here */
+            <span style="background-color: red">f</span>oreach (self::$ASCII_MAPS_AND_EXTRAS ?? <span style="background-color: red">[</span>] as &amp;$map) {
+                $CHARS_ARRAY[$cacheKey][] = $map;
+            <span style="background-color: red">}</span>
+        } <span style="background-color: green">e</span>lse {
+            self::prepareAsciiMaps();
+
+            /* @noinspection AlterInForeachInspection | ok here */
+            <span style="background-color: green">f</span>oreach (self::$ASCII_MAPS ?? <span style="background-color: red">[</span>] as &amp;$map) {
+                $CHARS_ARRAY[$cacheKey][] = $map;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        $CHARS_ARRAY[$cacheKey] = \array_merge([], ...$CHARS_ARRAY[$cacheKey]);
+
+        <span style="background-color: red">i</span>f ($asOrigReplaceArray) {
+            $CHARS_ARRAY[$cacheKey] = [
+                &#039;orig&#039;    =&gt; \array_keys($CHARS_ARRAY[$cacheKey]),
+                &#039;replace&#039; =&gt; \array_values($CHARS_ARRAY[$cacheKey]),
+            ];
+        <span style="background-color: green">}</span>
+
+        return $CHARS_ARRAY[$cacheKey];
+    }
+
+    /**
+     * Accepts a string and removes all non-UTF-8 characters from it + extras if needed.
+     *
+     * @param string $str                         &lt;p&gt;The string to be sanitized.&lt;/p&gt;
+     * @param bool   $normalize_whitespace        [optional] &lt;p&gt;Set to true, if you need to normalize the
+     *                                            whitespace.&lt;/p&gt;
+     * @param bool   $normalize_msword            [optional] &lt;p&gt;Set to true, if you need to normalize MS Word chars
+     *                                            e.g.: &quot;…&quot;
+     *                                            =&gt; &quot;...&quot;&lt;/p&gt;
+     * @param bool   $keep_non_breaking_space     [optional] &lt;p&gt;Set to true, to keep non-breaking-spaces, in
+     *                                            combination with
+     *                                            $normalize_whitespace&lt;/p&gt;
+     * @param bool   $remove_invisible_characters [optional] &lt;p&gt;Set to false, if you not want to remove invisible
+     *                                            characters e.g.: &quot;\0&quot;&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;A clean UTF-8 string.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function clean(
+        string $str,
+        bool $normalize_whitespace = true,
+        bool $keep_non_breaking_space = false,
+        bool $normalize_msword = true,
+        bool $remove_invisible_characters = true
+    ): string {
+        // http://stackoverflow.com/questions/1401317/remove-non-utf8-characters-from-string
+        // caused connection reset problem on larger strings
+
+        $regex = &#039;/
+          (
+            (?: [\x00-\x7F]               # single-byte sequences   0xxxxxxx
+            |   [\xC0-\xDF][\x80-\xBF]    # double-byte sequences   110xxxxx 10xxxxxx
+            |   [\xE0-\xEF][\x80-\xBF]{2} # triple-byte sequences   1110xxxx 10xxxxxx * 2
+            |   [\xF0-\xF7][\x80-\xBF]{3} # quadruple-byte sequence 11110xxx 10xxxxxx * 3
+            ){1,100}                      # ...one or more times
+          )
+        | ( [\x80-\xBF] )                 # invalid byte in range 10000000 - 10111111
+        | ( [\xC0-\xFF] )                 # invalid byte in range 11000000 - 11111111
+        /x&#039;;
+        $str = (string) \preg_replace($regex, &#039;$1&#039;, $str);
+
+        <span style="background-color: red">i</span>f ($normalize_whitespace) {
+            $str = self::normalize_whitespace($str, $keep_non_breaking_space);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($normalize_msword) {
+            $str = self::normalize_msword($str);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($remove_invisible_characters) {
+            $str = self::remove_invisible_characters($str);
+        <span style="background-color: red">}</span>
+
+        return $str;
+    }
+
+    /**
+     * Checks if a string is 7 bit ASCII.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * ASCII::is_ascii(&#039;白&#039;); // false
+     * &lt;/code&gt;
+     *
+     * @param string $str &lt;p&gt;The string to check.&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return bool
+     *              &lt;p&gt;
+     *              &lt;strong&gt;true&lt;/strong&gt; if it is ASCII&lt;br&gt;
+     *              &lt;strong&gt;false&lt;/strong&gt; otherwise
+     *              &lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function is_ascii(string $str): bool
+    {
+        <span style="background-color: red">i</span>f ($str === &#039;&#039;) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return !\preg_match(&#039;/&#039; . self::$REGEX_ASCII . &#039;/&#039;, $str);
+    }
+
+    /**
+     * Returns a string with smart quotes, ellipsis characters, and dashes from
+     * Windows-1252 (commonly used in Word documents) replaced by their ASCII
+     * equivalents.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * ASCII::normalize_msword(&#039;„Abcdef…”&#039;); // &#039;&quot;Abcdef...&quot;&#039;
+     * &lt;/code&gt;
+     *
+     * @param string $str &lt;p&gt;The string to be normalized.&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;A string with normalized characters for commonly used chars in Word documents.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function normalize_msword(string $str): string
+    {
+        <span style="background-color: red">i</span>f ($str === &#039;&#039;) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        static $MSWORD_CACHE = [&#039;orig&#039; =&gt; [], &#039;replace&#039; =&gt; []];
+
+        <span style="background-color: red">i</span>f (empty($MSWORD_CACHE[&#039;orig&#039;])) {
+            self::prepareAsciiMaps();
+
+            $map = self::$ASCII_MAPS[self::EXTRA_MSWORD_CHARS_LANGUAGE_CODE] ?? <span style="background-color: red">[</span>];
+
+            $MSWORD_CACHE = [
+                &#039;orig&#039;    =&gt; \array_keys($map),
+                &#039;replace&#039; =&gt; \array_values($map),
+            ];
+        <span style="background-color: red">}</span>
+
+        return \str_replace($MSWORD_CACHE[&#039;orig&#039;], $MSWORD_CACHE[&#039;replace&#039;], $str);
+    }
+
+    /**
+     * Normalize the whitespace.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * ASCII::normalize_whitespace(&quot;abc-\xc2\xa0-öäü-\xe2\x80\xaf-\xE2\x80\xAC&quot;, true); // &quot;abc-\xc2\xa0-öäü- -&quot;
+     * &lt;/code&gt;
+     *
+     * @param string $str                          &lt;p&gt;The string to be normalized.&lt;/p&gt;
+     * @param bool   $keepNonBreakingSpace         [optional] &lt;p&gt;Set to true, to keep non-breaking-spaces.&lt;/p&gt;
+     * @param bool   $keepBidiUnicodeControls      [optional] &lt;p&gt;Set to true, to keep non-printable (for the web)
+     *                                             bidirectional text chars.&lt;/p&gt;
+     * @param bool   $normalize_control_characters [optional] &lt;p&gt;Set to true, to convert e.g. LINE-, PARAGRAPH-SEPARATOR with &quot;\n&quot; and LINE TABULATION with &quot;\t&quot;.&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;A string with normalized whitespace.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function normalize_whitespace(
+        string $str,
+        bool $keepNonBreakingSpace = false,
+        bool $keepBidiUnicodeControls = false,
+        bool $normalize_control_characters = false
+    ): string {
+        <span style="background-color: red">i</span>f ($str === &#039;&#039;) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        static $WHITESPACE_CACHE = [];
+        $cacheKey = (int) $keepNonBreakingSpace;
+
+        <span style="background-color: red">i</span>f ($normalize_control_characters) {
+            $str = \str_replace(
+                [
+                    &quot;\x0d\x0c&quot;,     // &#039;END OF LINE&#039;
+                    &quot;\xe2\x80\xa8&quot;, // &#039;LINE SEPARATOR&#039;
+                    &quot;\xe2\x80\xa9&quot;, // &#039;PARAGRAPH SEPARATOR&#039;
+                    &quot;\x0c&quot;,         // &#039;FORM FEED&#039; // &quot;\f&quot;
+                    &quot;\x0b&quot;,         // &#039;VERTICAL TAB&#039; // &quot;\v&quot;
+                ],
+                [
+                    &quot;\n&quot;,
+                    &quot;\n&quot;,
+                    &quot;\n&quot;,
+                    &quot;\n&quot;,
+                    &quot;\t&quot;,
+                ],
+                $str
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!isset($WHITESPACE_CACHE[$cacheKey])) {
+            self::prepareAsciiMaps();
+
+            $WHITESPACE_CACHE[$cacheKey] = self::$ASCII_MAPS[self::EXTRA_WHITESPACE_CHARS_LANGUAGE_CODE] ?? <span style="background-color: red">[</span>];
+
+            <span style="background-color: red">i</span>f ($keepNonBreakingSpace) {
+                unset($WHITESPACE_CACHE[$cacheKey][&quot;\xc2\xa0&quot;]);
+            <span style="background-color: red">}</span>
+
+            $WHITESPACE_CACHE[$cacheKey] = array_keys($WHITESPACE_CACHE[$cacheKey]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$keepBidiUnicodeControls) {
+            static $BIDI_UNICODE_CONTROLS_CACHE = null;
+
+            <span style="background-color: red">i</span>f ($BIDI_UNICODE_CONTROLS_CACHE === null) {
+                $BIDI_UNICODE_CONTROLS_CACHE = self::$BIDI_UNI_CODE_CONTROLS_TABLE;
+            <span style="background-color: red">}</span>
+
+            $str = \str_replace($BIDI_UNICODE_CONTROLS_CACHE, &#039;&#039;, $str);
+        <span style="background-color: red">}</span>
+
+        return \str_replace($WHITESPACE_CACHE[$cacheKey], &#039; &#039;, $str);
+    }
+
+    /**
+     * Remove invisible characters from a string.
+     *
+     * This prevents malicious code injection through null bytes or other control characters.
+     *
+     * copy&amp;past from https://github.com/bcit-ci/CodeIgniter/blob/develop/system/core/Common.php
+     *
+     * @param string $str
+     * @param bool   $url_encoded
+     * @param string $replacement
+     * @param bool   $keep_basic_control_characters
+     *
+     * @psalm-pure
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function remove_invisible_characters(
+        string $str,
+        bool $url_encoded = false,
+        string $replacement = &#039;&#039;,
+        bool $keep_basic_control_characters = true
+    ): string {
+        // init
+        $non_displayables = [];
+
+        // every control character except:
+        // - newline (dec 10),
+        // - carriage return (dec 13),
+        // - horizontal tab (dec 09)
+        <span style="background-color: red">i</span>f ($url_encoded) {
+            $non_displayables[] = &#039;/%0[0-8bcefBCEF]/&#039;; // url encoded 00-08, 11, 12, 14, 15
+            $non_displayables[] = &#039;/%1[0-9a-fA-F]/&#039;; // url encoded 16-31
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($keep_basic_control_characters) {
+            $non_displayables[] = &#039;/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/S&#039;; // 00-08, 11, 12, 14-31, 127
+        } <span style="background-color: red">e</span>lse {
+            $str = self::normalize_whitespace($str, false, false, true);
+            $non_displayables[] = &#039;/[^\P{C}\s]/u&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">d</span>o {
+            $str = (string) \preg_replace($non_displayables, $replacement, $str, -1, $count);
+        } while ($count !== 0)<span style="background-color: red">;</span>
+
+        return $str;
+    }
+
+    /**
+     * WARNING: This method will return broken characters and is only for special cases.
+     *
+     * Convert two UTF-8 encoded strings to a single-byte strings suitable for
+     * functions that need the same string length after the conversion.
+     *
+     * The function simply uses (and updates) a tailored dynamic encoding
+     * (in/out map parameter) where non-ascii characters are remapped to
+     * the range [128-255] in order of appearance.
+     *
+     * @return array{0: string, 1: string}
+     */
+    <span style="background-color: red">p</span>ublic static function to_ascii_remap(string $str1, string $str2): array
+    {
+        $charMap = [];
+        $str1 = self::to_ascii_remap_intern($str1, $charMap);
+        $str2 = self::to_ascii_remap_intern($str2, $charMap);
+
+        return [$str1, $str2];
+    }
+
+    /**
+     * Returns an ASCII version of the string. A set of non-ASCII characters are
+     * replaced with their closest ASCII counterparts, and the rest are removed
+     * by default. The language or locale of the source string can be supplied
+     * for language-specific transliteration in any of the following formats:
+     * en, en_GB, or en-GB. For example, passing &quot;de&quot; results in &quot;äöü&quot; mapping
+     * to &quot;aeoeue&quot; rather than &quot;aou&quot; as in other languages.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * ASCII::to_ascii(&#039;�Düsseldorf�&#039;, &#039;en&#039;); // Dusseldorf
+     * &lt;/code&gt;
+     *
+     * @param string    $str                       &lt;p&gt;The input string.&lt;/p&gt;
+     * @param string    $language                  [optional] &lt;p&gt;Language of the source string.
+     *                                             (default is &#039;en&#039;) | ASCII::*_LANGUAGE_CODE&lt;/p&gt;
+     * @param bool      $remove_unsupported_chars  [optional] &lt;p&gt;Whether to remove the
+     *                                             unsupported characters.&lt;/p&gt;
+     * @param bool      $replace_extra_symbols     [optional]  &lt;p&gt;Add some more replacements e.g. &quot;£&quot; with &quot; pound
+     *                                             &quot;.&lt;/p&gt;
+     * @param bool      $use_transliterate         [optional]  &lt;p&gt;Use ASCII::to_transliterate() for unknown chars.&lt;/p&gt;
+     * @param bool      $replace_single_chars_only [optional]  &lt;p&gt;Single char replacement is better for the
+     *                                             performance, but some languages need to replace more than one char
+     *                                             at the same time. If FALSE === auto-setting, depended on the
+     *                                             language&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;A string that contains only ASCII characters.&lt;/p&gt;
+     *
+     * @phpstan-param ASCII::*_LANGUAGE_CODE $language
+     */
+    <span style="background-color: green">p</span>ublic static function to_ascii(
+        string $str,
+        string $language = self::ENGLISH_LANGUAGE_CODE,
+        bool $remove_unsupported_chars = true,
+        bool $replace_extra_symbols = false,
+        bool $use_transliterate = false,
+        bool $replace_single_chars_only = false
+    ): string {
+        <span style="background-color: red">i</span>f ($str === &#039;&#039;) {
+            return &#039;&#039;;
+        <span style="background-color: green">}</span>
+
+        /** @phpstan-var ASCII::*_LANGUAGE_CODE $language - hack for phpstan */
+        $language = self::get_language($language);
+
+        static $EXTRA_SYMBOLS_CACHE = null;
+
+        static $REPLACE_HELPER_CACHE = [];
+        $cacheKey = $language . &#039;-&#039; . $replace_extra_symbols;
+
+        <span style="background-color: green">i</span>f (!isset($REPLACE_HELPER_CACHE[$cacheKey])) {
+            $langAll = self::charsArrayWithSingleLanguageValues($replace_extra_symbols, false);
+
+            $langSpecific = self::charsArrayWithOneLanguage($language, $replace_extra_symbols, false);
+
+            <span style="background-color: green">i</span>f ($langSpecific === []) {
+                $REPLACE_HELPER_CACHE[$cacheKey] = $langAll;
+            } <span style="background-color: red">e</span>lse {
+                $REPLACE_HELPER_CACHE[$cacheKey] = \array_merge([], $langAll, $langSpecific);
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (
+            $replace_extra_symbols
+            &amp;&amp;
+            <span style="background-color: red">$</span>EXTRA_SYMBOLS_CACHE === null
+        ) {
+            $EXTRA_SYMBOLS_CACHE = [];
+            <span style="background-color: red">f</span>oreach (self::$ASCII_EXTRAS ?? <span style="background-color: red">[</span>] as $extrasDataTmp) {
+                <span style="background-color: red">f</span>oreach ($extrasDataTmp as $extrasDataKeyTmp =&gt; $extrasDataValueTmp) {
+                    $EXTRA_SYMBOLS_CACHE[$extrasDataKeyTmp] = $extrasDataKeyTmp;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            $EXTRA_SYMBOLS_CACHE = \implode(&#039;&#039;, $EXTRA_SYMBOLS_CACHE);
+        <span style="background-color: green">}</span>
+
+        $charDone = [];
+        <span style="background-color: red">i</span>f (\preg_match_all(&#039;/&#039; . self::$REGEX_ASCII . ($replace_extra_symbols ? &#039;|[&#039; . $EXTRA_SYMBOLS_CACHE . &#039;]&#039; : <span style="background-color: green">'</span>&#039;) . &#039;/u&#039;, $str, $matches)) {
+            <span style="background-color: red">i</span>f (!$replace_single_chars_only) {
+                <span style="background-color: red">i</span>f (self::$LANGUAGE_MAX_KEY === null) {
+                    self::$LANGUAGE_MAX_KEY = self::getData(&#039;ascii_language_max_key&#039;);
+                <span style="background-color: red">}</span>
+
+                $maxKeyLength = self::$LANGUAGE_MAX_KEY[$language] ?? <span style="background-color: red">0</span>;
+
+                <span style="background-color: red">i</span>f ($maxKeyLength &gt;= 5) {
+                    <span style="background-color: red">f</span>oreach ($matches[0] as $keyTmp =&gt; $char) {
+                        <span style="background-color: red">i</span>f (isset($matches[0][$keyTmp + 4])) {
+                            $fiveChars = $matches[0][$keyTmp + 0] . $matches[0][$keyTmp + 1] . $matches[0][$keyTmp + 2] . $matches[0][$keyTmp + 3] . $matches[0][$keyTmp + 4];
+                        } <span style="background-color: red">e</span>lse {
+                            $fiveChars = null;
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (
+                            $fiveChars
+                            &amp;&amp;
+                            <span style="background-color: red">!</span>isset($charDone[$fiveChars])
+                            &amp;&amp;
+                            <span style="background-color: red">i</span>sset($REPLACE_HELPER_CACHE[$cacheKey][$fiveChars])
+                            &amp;&amp;
+                            <span style="background-color: red">\</span>strpos($str, $fiveChars) !== false
+                        ) {
+                            // DEBUG
+                            //\var_dump($str, $fiveChars, $REPLACE_HELPER_CACHE[$cacheKey][$fiveChars]);
+
+                            $charDone[$fiveChars] = true;
+                            $str = \str_replace($fiveChars, $REPLACE_HELPER_CACHE[$cacheKey][$fiveChars], $str);
+
+                            // DEBUG
+                            //\var_dump($str, &quot;\n&quot;);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($maxKeyLength &gt;= 4) {
+                    <span style="background-color: red">f</span>oreach ($matches[0] as $keyTmp =&gt; $char) {
+                        <span style="background-color: red">i</span>f (isset($matches[0][$keyTmp + 3])) {
+                            $fourChars = $matches[0][$keyTmp + 0] . $matches[0][$keyTmp + 1] . $matches[0][$keyTmp + 2] . $matches[0][$keyTmp + 3];
+                        } <span style="background-color: red">e</span>lse {
+                            $fourChars = null;
+                        <span style="background-color: red">}</span>
+                        <span style="background-color: red">i</span>f (
+                            $fourChars
+                            &amp;&amp;
+                            <span style="background-color: red">!</span>isset($charDone[$fourChars])
+                            &amp;&amp;
+                            <span style="background-color: red">i</span>sset($REPLACE_HELPER_CACHE[$cacheKey][$fourChars])
+                            &amp;&amp;
+                            <span style="background-color: red">\</span>strpos($str, $fourChars) !== false
+                        ) {
+                            // DEBUG
+                            //\var_dump($str, $fourChars, $REPLACE_HELPER_CACHE[$cacheKey][$fourChars]);
+
+                            $charDone[$fourChars] = true;
+                            $str = \str_replace($fourChars, $REPLACE_HELPER_CACHE[$cacheKey][$fourChars], $str);
+
+                            // DEBUG
+                            //\var_dump($str, &quot;\n&quot;);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">f</span>oreach ($matches[0] as $keyTmp =&gt; $char) {
+                    <span style="background-color: red">i</span>f (isset($matches[0][$keyTmp + 2])) {
+                        $threeChars = $matches[0][$keyTmp + 0] . $matches[0][$keyTmp + 1] . $matches[0][$keyTmp + 2];
+                    } <span style="background-color: red">e</span>lse {
+                        $threeChars = null;
+                    <span style="background-color: red">}</span>
+                    <span style="background-color: red">i</span>f (
+                        $threeChars
+                        &amp;&amp;
+                        <span style="background-color: red">!</span>isset($charDone[$threeChars])
+                        &amp;&amp;
+                        <span style="background-color: red">i</span>sset($REPLACE_HELPER_CACHE[$cacheKey][$threeChars])
+                        &amp;&amp;
+                        <span style="background-color: red">\</span>strpos($str, $threeChars) !== false
+                    ) {
+                        // DEBUG
+                        //\var_dump($str, $threeChars, $REPLACE_HELPER_CACHE[$cacheKey][$threeChars]);
+
+                        $charDone[$threeChars] = true;
+                        $str = \str_replace($threeChars, $REPLACE_HELPER_CACHE[$cacheKey][$threeChars], $str);
+
+                        // DEBUG
+                        //\var_dump($str, &quot;\n&quot;);
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">f</span>oreach ($matches[0] as $keyTmp =&gt; $char) {
+                    <span style="background-color: red">i</span>f (isset($matches[0][$keyTmp + 1])) {
+                        $twoChars = $matches[0][$keyTmp + 0] . $matches[0][$keyTmp + 1];
+                    } <span style="background-color: red">e</span>lse {
+                        $twoChars = null;
+                    <span style="background-color: red">}</span>
+                    <span style="background-color: red">i</span>f (
+                        $twoChars
+                        &amp;&amp;
+                        <span style="background-color: red">!</span>isset($charDone[$twoChars])
+                        &amp;&amp;
+                        <span style="background-color: red">i</span>sset($REPLACE_HELPER_CACHE[$cacheKey][$twoChars])
+                        &amp;&amp;
+                        <span style="background-color: red">\</span>strpos($str, $twoChars) !== false
+                    ) {
+                        // DEBUG
+                        //\var_dump($str, $twoChars, $REPLACE_HELPER_CACHE[$cacheKey][$twoChars]);
+
+                        $charDone[$twoChars] = true;
+                        $str = \str_replace($twoChars, $REPLACE_HELPER_CACHE[$cacheKey][$twoChars], $str);
+
+                        // DEBUG
+                        //\var_dump($str, &quot;\n&quot;);
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">f</span>oreach ($matches[0] as $char) {
+                <span style="background-color: red">i</span>f (
+                    !isset($charDone[$char])
+                    &amp;&amp;
+                    <span style="background-color: red">i</span>sset($REPLACE_HELPER_CACHE[$cacheKey][$char])
+                    &amp;&amp;
+                    <span style="background-color: red">\</span>strpos($str, $char) !== false
+                ) {
+                    // DEBUG
+                    //\var_dump($str, $char, $REPLACE_HELPER_CACHE[$cacheKey][$char]);
+
+                    $charDone[$char] = true;
+                    $str = \str_replace($char, $REPLACE_HELPER_CACHE[$cacheKey][$char], $str);
+
+                    // DEBUG
+                    //\var_dump($str, &quot;\n&quot;);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (!isset(self::$ASCII_MAPS[$language])) {
+            $use_transliterate = true;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($use_transliterate) {
+            $str = self::to_transliterate($str, null, false);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($remove_unsupported_chars) {
+            $str = (string) \str_replace([&quot;\n\r&quot;, &quot;\n&quot;, &quot;\r&quot;, &quot;\t&quot;], &#039; &#039;, $str);
+            $str = (string) \preg_replace(&#039;/&#039; . self::$REGEX_ASCII . &#039;/&#039;, &#039;&#039;, $str);
+        <span style="background-color: green">}</span>
+
+        return $str;
+    }
+
+    /**
+     * Convert given string to safe filename (and keep string case).
+     *
+     * EXAMPLE: &lt;code&gt;
+     * ASCII::to_filename(&#039;שדגשדג.png&#039;, true)); // &#039;shdgshdg.png&#039;
+     * &lt;/code&gt;
+     *
+     * @param string $str               &lt;p&gt;The string input.&lt;/p&gt;
+     * @param bool   $use_transliterate &lt;p&gt;ASCII::to_transliterate() is used by default - unsafe characters are
+     *                                  simply replaced with hyphen otherwise.&lt;/p&gt;
+     * @param string $fallback_char     &lt;p&gt;The fallback character. - &quot;-&quot; is the default&lt;/p&gt;
+     *
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;A string that contains only safe characters for a filename.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function to_filename(
+        string $str,
+        bool $use_transliterate = true,
+        string $fallback_char = &#039;-&#039;
+    ): string {
+        <span style="background-color: red">i</span>f ($use_transliterate) {
+            $str = self::to_transliterate($str, $fallback_char);
+        <span style="background-color: red">}</span>
+
+        $fallback_char_escaped = \preg_quote($fallback_char, &#039;/&#039;);
+
+        $str = (string) \preg_replace(
+            [
+                &#039;/[^&#039; . $fallback_char_escaped . &#039;.\\-a-zA-Z\d\\s]/&#039;, // 1) remove un-needed chars
+                &#039;/\s+/u&#039;,                                             // 2) convert spaces to $fallback_char
+                &#039;/[&#039; . $fallback_char_escaped . &#039;]+/u&#039;,               // 3) remove double $fallback_char&#039;s
+            ],
+            [
+                &#039;&#039;,
+                $fallback_char,
+                $fallback_char,
+            ],
+            $str
+        );
+
+        return \trim($str, $fallback_char);
+    }
+
+    /**
+     * Converts a string into a URL-friendly slug.
+     *
+     * - This includes replacing non-ASCII characters with their closest ASCII equivalents, removing remaining
+     *   non-ASCII and non-alphanumeric characters, and replacing whitespace with $separator.
+     * - The separator defaults to a single dash, and the string is also converted to lowercase.
+     * - The language of the source string can also be supplied for language-specific transliteration.
+     *
+     * @param string                $str                   &lt;p&gt;The string input.&lt;/p&gt;
+     * @param string                $separator             [optional] &lt;p&gt;The string used to replace whitespace.&lt;/p&gt;
+     * @param string                $language              [optional] &lt;p&gt;Language of the source string.
+     *                                                     (default is &#039;en&#039;) | ASCII::*_LANGUAGE_CODE&lt;/p&gt;
+     * @param array&lt;string, string&gt; $replacements          [optional] &lt;p&gt;A map of replaceable strings.&lt;/p&gt;
+     * @param bool                  $replace_extra_symbols [optional] &lt;p&gt;Add some more replacements e.g. &quot;£&quot; with &quot;
+     *                                                     pound &quot;.&lt;/p&gt;
+     * @param bool                  $use_str_to_lower      [optional] &lt;p&gt;Use &quot;string to lower&quot; for the input.&lt;/p&gt;
+     * @param bool                  $use_transliterate     [optional] &lt;p&gt;Use ASCII::to_transliterate() for unknown
+     *                                                     chars.&lt;/p&gt;
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;The URL-friendly slug.&lt;/p&gt;
+     *
+     * @phpstan-param ASCII::*_LANGUAGE_CODE $language
+     */
+    <span style="background-color: red">p</span>ublic static function to_slugify(
+        string $str,
+        string $separator = &#039;-&#039;,
+        string $language = self::ENGLISH_LANGUAGE_CODE,
+        array $replacements = [],
+        bool $replace_extra_symbols = false,
+        bool $use_str_to_lower = true,
+        bool $use_transliterate = false
+    ): string {
+        <span style="background-color: red">i</span>f ($str === &#039;&#039;) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($replacements as $from =&gt; $to) {
+            $str = \str_replace($from, $to, $str);
+        <span style="background-color: red">}</span>
+
+        $str = self::to_ascii(
+            $str,
+            $language,
+            false,
+            $replace_extra_symbols,
+            $use_transliterate
+        );
+
+        $str = \str_replace(&#039;@&#039;, $separator, $str);
+
+        $str = (string) \preg_replace(
+            &#039;/[^a-zA-Z\\d\\s\\-_&#039; . \preg_quote($separator, &#039;/&#039;) . &#039;]/&#039;,
+            &#039;&#039;,
+            $str
+        );
+
+        <span style="background-color: red">i</span>f ($use_str_to_lower) {
+            $str = \strtolower($str);
+        <span style="background-color: red">}</span>
+
+        $str = (string) \preg_replace(&#039;/^[\&#039;\\s]+|[\&#039;\\s]+$/&#039;, &#039;&#039;, $str);
+        $str = (string) \preg_replace(&#039;/\\B([A-Z])/&#039;, &#039;-\1&#039;, $str);
+        $str = (string) \preg_replace(&#039;/[\\-_\\s]+/&#039;, $separator, $str);
+
+        $l = \strlen($separator);
+        <span style="background-color: red">i</span>f ($l &amp;&amp; <span style="background-color: red">\</span>strpos($str, $separator) === 0) {
+            $str = (string) \substr($str, $l);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\substr($str, -$l) === $separator) {
+            $str = (string) \substr($str, 0, \strlen($str) - $l);
+        <span style="background-color: red">}</span>
+
+        return $str;
+    }
+
+    /**
+     * Returns an ASCII version of the string. A set of non-ASCII characters are
+     * replaced with their closest ASCII counterparts, and the rest are removed
+     * unless instructed otherwise.
+     *
+     * EXAMPLE: &lt;code&gt;
+     * ASCII::to_transliterate(&#039;déjà σσς iıii&#039;); // &#039;deja sss iiii&#039;
+     * &lt;/code&gt;
+     *
+     * @param string      $str     &lt;p&gt;The input string.&lt;/p&gt;
+     * @param string|null $unknown [optional] &lt;p&gt;Character use if character unknown. (default is &#039;?&#039;)
+     *                             But you can also use NULL to keep the unknown chars.&lt;/p&gt;
+     * @param bool        $strict  [optional] &lt;p&gt;Use &quot;transliterator_transliterate()&quot; from PHP-Intl
+     *
+     * @psalm-pure
+     *
+     * @return string
+     *                &lt;p&gt;A String that contains only ASCII characters.&lt;/p&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function to_transliterate(
+        string $str,
+        $unknown = &#039;?&#039;,
+        bool $strict = false
+    ): string {
+        static $UTF8_TO_TRANSLIT = null;
+
+        static $TRANSLITERATOR = null;
+
+        static $SUPPORT_INTL = null;
+
+        <span style="background-color: red">i</span>f ($str === &#039;&#039;) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($SUPPORT_INTL === null) {
+            $SUPPORT_INTL = \extension_loaded(&#039;intl&#039;);
+        <span style="background-color: red">}</span>
+
+        // check if we only have ASCII, first (better performance)
+        $str_tmp = $str;
+        <span style="background-color: red">i</span>f (self::is_ascii($str)) {
+            return $str;
+        <span style="background-color: red">}</span>
+
+        $str = self::clean($str);
+
+        // check again if we only have ASCII, now ...
+        <span style="background-color: red">i</span>f (
+            $str_tmp !== $str
+            &amp;&amp;
+            <span style="background-color: red">s</span>elf::is_ascii($str)
+        ) {
+            return $str;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (
+            $strict
+            &amp;&amp;
+            <span style="background-color: red">$</span>SUPPORT_INTL === true
+        ) {
+            <span style="background-color: red">i</span>f (!isset($TRANSLITERATOR)) {
+                // INFO: see &quot;*-Latin&quot; rules via &quot;transliterator_list_ids()&quot;
+                $TRANSLITERATOR = \transliterator_create(&#039;NFKC; [:Nonspacing Mark:] Remove; NFKC; Any-Latin; Latin-ASCII;&#039;);
+            <span style="background-color: red">}</span>
+
+            // INFO: https://unicode.org/cldr/utility/character.jsp
+            $str_tmp = \transliterator_transliterate($TRANSLITERATOR, $str);
+
+            <span style="background-color: red">i</span>f ($str_tmp !== false) {
+                // check again if we only have ASCII, now ...
+                <span style="background-color: red">i</span>f (
+                    $str_tmp !== $str
+                    &amp;&amp;
+                    <span style="background-color: red">s</span>elf::is_ascii($str_tmp)
+                ) {
+                    return $str_tmp;
+                <span style="background-color: red">}</span>
+
+                $str = $str_tmp;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (self::$ORD === null) {
+            self::$ORD = self::getData(&#039;ascii_ord&#039;);
+        <span style="background-color: red">}</span>
+
+        \preg_match_all(&#039;/.|[^\x00]$/us&#039;, $str, $array_tmp);
+        $chars = $array_tmp[0];
+        $ord = null;
+        $str_tmp = &#039;&#039;;
+        <span style="background-color: red">f</span>oreach ($chars as &amp;$c) {
+            $ordC0 = self::$ORD[$c[0]];
+
+            <span style="background-color: red">i</span>f ($ordC0 &gt;= 0 &amp;&amp; <span style="background-color: red">$</span>ordC0 &lt;= 127) {
+                $str_tmp .= $c;
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            $ordC1 = self::$ORD[$c[1]];
+
+            // ASCII - next please
+            <span style="background-color: red">i</span>f ($ordC0 &gt;= 192 &amp;&amp; <span style="background-color: red">$</span>ordC0 &lt;= 223) {
+                $ord = ($ordC0 - 192) * 64 + ($ordC1 - 128);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($ordC0 &gt;= 224) {
+                $ordC2 = self::$ORD[$c[2]];
+
+                <span style="background-color: red">i</span>f ($ordC0 &lt;= 239) {
+                    $ord = ($ordC0 - 224) * 4096 + ($ordC1 - 128) * 64 + ($ordC2 - 128);
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($ordC0 &gt;= 240) {
+                    $ordC3 = self::$ORD[$c[3]];
+
+                    <span style="background-color: red">i</span>f ($ordC0 &lt;= 247) {
+                        $ord = ($ordC0 - 240) * 262144 + ($ordC1 - 128) * 4096 + ($ordC2 - 128) * 64 + ($ordC3 - 128);
+                    <span style="background-color: red">}</span>
+
+                    // We only process valid UTF-8 chars (&lt;= 4 byte), so we don&#039;t need this code here ...
+                    /*
+                    if ($ordC0 &gt;= 248) {
+                        $ordC4 = self::$ORD[$c[4]];
+
+                        if ($ordC0 &lt;= 251) {
+                            $ord = ($ordC0 - 248) * 16777216 + ($ordC1 - 128) * 262144 + ($ordC2 - 128) * 4096 + ($ordC3 - 128) * 64 + ($ordC4 - 128);
+                        }
+
+                        if ($ordC0 &gt;= 252) {
+                            $ordC5 = self::$ORD[$c[5]];
+
+                            if ($ordC0 &lt;= 253) {
+                                $ord = ($ordC0 - 252) * 1073741824 + ($ordC1 - 128) * 16777216 + ($ordC2 - 128) * 262144 + ($ordC3 - 128) * 4096 + ($ordC4 - 128) * 64 + ($ordC5 - 128);
+                            }
+                        }
+                    }
+                     */
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (
+                $ordC0 === 254
+                ||
+                <span style="background-color: red">$</span>ordC0 === 255
+                ||
+                <span style="background-color: red">$</span>ord === null
+            ) {
+                $str_tmp .= $unknown ?? <span style="background-color: red">$</span>c;
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            $bank = $ord &gt;&gt; 8;
+            <span style="background-color: red">i</span>f (!isset($UTF8_TO_TRANSLIT[$bank])) {
+                $UTF8_TO_TRANSLIT[$bank] = self::getDataIfExists(\sprintf(&#039;x%03x&#039;, $bank));
+            <span style="background-color: red">}</span>
+
+            $new_char = $ord &amp; 255;
+
+            <span style="background-color: red">i</span>f (isset($UTF8_TO_TRANSLIT[$bank][$new_char])) {
+                // keep for debugging
+                /*
+                echo &quot;file: &quot; . sprintf(&#039;x%02x&#039;, $bank) . &quot;\n&quot;;
+                echo &quot;char: &quot; . $c . &quot;\n&quot;;
+                echo &quot;ord: &quot; . $ord . &quot;\n&quot;;
+                echo &quot;new_char: &quot; . $new_char . &quot;\n&quot;;
+                echo &quot;new_char: &quot; . mb_chr($new_char) . &quot;\n&quot;;
+                echo &quot;ascii: &quot; . $UTF8_TO_TRANSLIT[$bank][$new_char] . &quot;\n&quot;;
+                echo &quot;bank:&quot; . $bank . &quot;\n\n&quot;;
+                 */
+
+                $new_char = $UTF8_TO_TRANSLIT[$bank][$new_char];
+
+                /* @noinspection PhpStatementHasEmptyBodyInspection */
+                <span style="background-color: red">i</span>f ($unknown === null &amp;&amp; <span style="background-color: red">$</span>new_char === &#039;&#039;) {
+                    // nothing
+                } <span style="background-color: red">e</span>lseif (
+                    $new_char === &#039;[?]&#039;
+                    ||
+                    <span style="background-color: red">$</span>new_char === &#039;[?] &#039;
+                ) {
+                    $c = $unknown ?? <span style="background-color: red">$</span>c;
+                } <span style="background-color: red">e</span>lse {
+                    $c = $new_char;
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                // keep for debugging missing chars
+                /*
+                echo &quot;file: &quot; . sprintf(&#039;x%02x&#039;, $bank) . &quot;\n&quot;;
+                echo &quot;char: &quot; . $c . &quot;\n&quot;;
+                echo &quot;ord: &quot; . $ord . &quot;\n&quot;;
+                echo &quot;new_char: &quot; . $new_char . &quot;\n&quot;;
+                echo &quot;new_char: &quot; . mb_chr($new_char) . &quot;\n&quot;;
+                echo &quot;bank:&quot; . $bank . &quot;\n\n&quot;;
+                 */
+
+                $c = $unknown ?? <span style="background-color: red">$</span>c;
+            <span style="background-color: red">}</span>
+
+            $str_tmp .= $c;
+        <span style="background-color: red">}</span>
+
+        return $str_tmp;
+    }
+
+    /**
+     * WARNING: This method will return broken characters and is only for special cases.
+     *
+     * Convert a UTF-8 encoded string to a single-byte string suitable for
+     * functions that need the same string length after the conversion.
+     *
+     * The function simply uses (and updates) a tailored dynamic encoding
+     * (in/out map parameter) where non-ascii characters are remapped to
+     * the range [128-255] in order of appearance.
+     *
+     * Thus, it supports up to 128 different multibyte code points max over
+     * the whole set of strings sharing this encoding.
+     *
+     * Source: https://github.com/KEINOS/mb_levenshtein
+     *
+     * @param string $str &lt;p&gt;UTF-8 string to be converted to extended ASCII.&lt;/p&gt;
+     * @param array  $map &lt;p&gt;Internal-Map of code points to ASCII characters.&lt;/p&gt;
+     *
+     * @return string
+     *                &lt;p&gt;Mapped broken string.&lt;/p&gt;
+     *
+     * @phpstan-param array&lt;string, string&gt; $map
+     */
+    <span style="background-color: red">p</span>rivate static function to_ascii_remap_intern(string $str, array &amp;$map): string
+    {
+        // find all utf-8 characters
+        $matches = [];
+        <span style="background-color: red">i</span>f (!\preg_match_all(&#039;/[\xC0-\xF7][\x80-\xBF]+/&#039;, $str, $matches)) {
+            return $str; // plain ascii string
+        <span style="background-color: red">}</span>
+
+        // update the encoding map with the characters not already met
+        $mapCount = \count($map);
+        <span style="background-color: red">f</span>oreach ($matches[0] as $mbc) {
+            <span style="background-color: red">i</span>f (!isset($map[$mbc])) {
+                $map[$mbc] = \chr(128 + $mapCount);
+                ++$mapCount;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        // finally, remap non-ascii characters
+        return \strtr($str, $map);
+    }
+
+    /**
+     * Get the language from a string.
+     *
+     * e.g.: de_at -&gt; de_at
+     *       de_DE -&gt; de
+     *       DE_DE -&gt; de
+     *       de-de -&gt; de
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rivate static function get_language(string $language)
+    {
+        <span style="background-color: red">i</span>f ($language === &#039;&#039;) {
+            return &#039;&#039;;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (
+            \strpos($language, &#039;_&#039;) === false
+            &amp;&amp;
+            <span style="background-color: green">\</span>strpos($language, &#039;-&#039;) === false
+        ) {
+            return \strtolower($language);
+        <span style="background-color: red">}</span>
+
+        $language = \str_replace(&#039;-&#039;, &#039;_&#039;, \strtolower($language));
+
+        $regex = &#039;/(?&lt;first&gt;[a-z]+)_\g{first}/&#039;;
+
+        return (string) \preg_replace($regex, &#039;$1&#039;, $language);
+    }
+
+    /**
+     * Get data from &quot;/data/*.php&quot;.
+     *
+     * @return array&lt;array-key,mixed&gt;
+     */
+    <span style="background-color: green">p</span>rivate static function getData(string $file)
+    {
+        return include __DIR__ . &#039;/data/&#039; . $file . &#039;.php&#039;;
+    }
+
+    /**
+     * Get data from &quot;/data/*.php&quot;.
+     *
+     * @return array&lt;array-key,mixed&gt;
+     */
+    <span style="background-color: red">p</span>rivate static function getDataIfExists(string $file): array
+    {
+        $file = __DIR__ . &#039;/data/&#039; . $file . &#039;.php&#039;;
+        <span style="background-color: red">i</span>f (\is_file($file)) {
+            return include $file;
+        <span style="background-color: red">}</span>
+
+        return [];
+    }
+
+    /**
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate static function prepareAsciiAndExtrasMaps()
+    {
+        <span style="background-color: red">i</span>f (self::$ASCII_MAPS_AND_EXTRAS === null) {
+            self::prepareAsciiMaps();
+            self::prepareAsciiExtras();
+
+            self::$ASCII_MAPS_AND_EXTRAS = \array_merge_recursive(
+                self::$ASCII_MAPS ?? <span style="background-color: red">[</span>],
+                self::$ASCII_EXTRAS ?? <span style="background-color: red">[</span>]
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * @return void
+     */
+    <span style="background-color: green">p</span>rivate static function prepareAsciiMaps()
+    {
+        <span style="background-color: green">i</span>f (self::$ASCII_MAPS === null) {
+            self::$ASCII_MAPS = self::getData(&#039;ascii_by_languages&#039;);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate static function prepareAsciiExtras()
+    {
+        <span style="background-color: red">i</span>f (self::$ASCII_EXTRAS === null) {
+            self::$ASCII_EXTRAS = self::getData(&#039;ascii_extras_by_languages&#039;);
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

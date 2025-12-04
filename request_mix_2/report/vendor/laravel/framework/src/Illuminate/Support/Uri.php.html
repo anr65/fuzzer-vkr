@@ -1,0 +1,405 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use Closure;
+use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Dumpable;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\Tappable;
+use League\Uri\Contracts\UriInterface;
+use League\Uri\Uri as LeagueUri;
+use SensitiveParameter;
+use Stringable;
+
+class Uri implements Htmlable, Responsable, Stringable
+{
+    use Conditionable, Dumpable, Macroable, Tappable;
+
+    /**
+     * The URI instance.
+     */
+    protected UriInterface $uri;
+
+    /**
+     * The URL generator resolver.
+     */
+    protected static ?Closure $urlGeneratorResolver = null;
+
+    /**
+     * Create a new parsed URI instance.
+     */
+    <span style="background-color: red">p</span>ublic function __construct(UriInterface|Stringable|string $uri = &#039;&#039;)
+    {
+        $this-&gt;uri = $uri instanceof UriInterface ? $uri : <span style="background-color: red">L</span>eagueUri::new((string) $uri);
+    }
+
+    /**
+     * Create a new URI instance.
+     */
+    <span style="background-color: red">p</span>ublic static function of(UriInterface|Stringable|string $uri = &#039;&#039;): static
+    {
+        return new static($uri);
+    }
+
+    /**
+     * Get a URI instance of an absolute URL for the given path.
+     */
+    <span style="background-color: red">p</span>ublic static function to(string $path): static
+    {
+        return new static(call_user_func(static::$urlGeneratorResolver)-&gt;to($path));
+    }
+
+    /**
+     * Get a URI instance for a named route.
+     *
+     * @param  \BackedEnum|string  $name
+     * @param  mixed  $parameters
+     * @param  bool  $absolute
+     * @return static
+     *
+     * @throws \Symfony\Component\Routing\Exception\RouteNotFoundException|\InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic static function route($name, $parameters = [], $absolute = true): static
+    {
+        return new static(call_user_func(static::$urlGeneratorResolver)-&gt;route($name, $parameters, $absolute));
+    }
+
+    /**
+     * Create a signed route URI instance for a named route.
+     *
+     * @param  \BackedEnum|string  $name
+     * @param  mixed  $parameters
+     * @param  \DateTimeInterface|\DateInterval|int|null  $expiration
+     * @param  bool  $absolute
+     * @return static
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic static function signedRoute($name, $parameters = [], $expiration = null, $absolute = true): static
+    {
+        return new static(call_user_func(static::$urlGeneratorResolver)-&gt;signedRoute($name, $parameters, $expiration, $absolute));
+    }
+
+    /**
+     * Create a temporary signed route URI instance for a named route.
+     *
+     * @param  \BackedEnum|string  $name
+     * @param  \DateTimeInterface|\DateInterval|int  $expiration
+     * @param  array  $parameters
+     * @param  bool  $absolute
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function temporarySignedRoute($name, $expiration, $parameters = [], $absolute = true): static
+    {
+        return static::signedRoute($name, $parameters, $expiration, $absolute);
+    }
+
+    /**
+     * Get the URI&#039;s scheme.
+     */
+    <span style="background-color: red">p</span>ublic function scheme(): ?string
+    {
+        return $this-&gt;uri-&gt;getScheme();
+    }
+
+    /**
+     * Get the user from the URI.
+     */
+    <span style="background-color: red">p</span>ublic function user(bool $withPassword = false): ?string
+    {
+        return $withPassword
+            ? $this-&gt;uri-&gt;getUserInfo()
+            : <span style="background-color: red">$</span>this-&gt;uri-&gt;getUsername();
+    }
+
+    /**
+     * Get the password from the URI.
+     */
+    <span style="background-color: red">p</span>ublic function password(): ?string
+    {
+        return $this-&gt;uri-&gt;getPassword();
+    }
+
+    /**
+     * Get the URI&#039;s host.
+     */
+    <span style="background-color: red">p</span>ublic function host(): ?string
+    {
+        return $this-&gt;uri-&gt;getHost();
+    }
+
+    /**
+     * Get the URI&#039;s port.
+     */
+    <span style="background-color: red">p</span>ublic function port(): ?int
+    {
+        return $this-&gt;uri-&gt;getPort();
+    }
+
+    /**
+     * Get the URI&#039;s path.
+     *
+     * Empty or missing paths are returned as a single &quot;/&quot;.
+     */
+    <span style="background-color: red">p</span>ublic function path(): ?string
+    {
+        $path = trim((string) $this-&gt;uri-&gt;getPath(), &#039;/&#039;);
+
+        return $path === &#039;&#039; ? &#039;/&#039; : <span style="background-color: red">$</span>path;
+    }
+
+    /**
+     * Get the URI&#039;s path segments.
+     *
+     * Empty or missing paths are returned as an empty collection.
+     */
+    <span style="background-color: red">p</span>ublic function pathSegments(): Collection
+    {
+        $path = $this-&gt;path();
+
+        return $path === &#039;/&#039; ? new Collection : <span style="background-color: red">n</span>ew Collection(explode(&#039;/&#039;, $path));
+    }
+
+    /**
+     * Get the URI&#039;s query string.
+     */
+    <span style="background-color: red">p</span>ublic function query(): UriQueryString
+    {
+        return new UriQueryString($this);
+    }
+
+    /**
+     * Get the URI&#039;s fragment.
+     */
+    <span style="background-color: red">p</span>ublic function fragment(): ?string
+    {
+        return $this-&gt;uri-&gt;getFragment();
+    }
+
+    /**
+     * Specify the scheme of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withScheme(Stringable|string $scheme): static
+    {
+        return new static($this-&gt;uri-&gt;withScheme($scheme));
+    }
+
+    /**
+     * Specify the user and password for the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withUser(Stringable|string|null $user, #[SensitiveParameter] Stringable|string|null $password = null): static
+    {
+        return new static($this-&gt;uri-&gt;withUserInfo($user, $password));
+    }
+
+    /**
+     * Specify the host of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withHost(Stringable|string $host): static
+    {
+        return new static($this-&gt;uri-&gt;withHost($host));
+    }
+
+    /**
+     * Specify the port of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withPort(?int $port): static
+    {
+        return new static($this-&gt;uri-&gt;withPort($port));
+    }
+
+    /**
+     * Specify the path of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withPath(Stringable|string $path): static
+    {
+        return new static($this-&gt;uri-&gt;withPath(Str::start((string) $path, &#039;/&#039;)));
+    }
+
+    /**
+     * Merge new query parameters into the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withQuery(array $query, bool $merge = true): static
+    {
+        <span style="background-color: red">f</span>oreach ($query as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f ($value instanceof UrlRoutable) {
+                $query[$key] = $value-&gt;getRouteKey();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($merge) {
+            $mergedQuery = $this-&gt;query()-&gt;all();
+
+            <span style="background-color: red">f</span>oreach ($query as $key =&gt; $value) {
+                data_set($mergedQuery, $key, $value);
+            <span style="background-color: red">}</span>
+
+            $newQuery = $mergedQuery;
+        } <span style="background-color: red">e</span>lse {
+            $newQuery = [];
+
+            <span style="background-color: red">f</span>oreach ($query as $key =&gt; $value) {
+                data_set($newQuery, $key, $value);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return new static($this-&gt;uri-&gt;withQuery(Arr::query($newQuery) ?: <span style="background-color: red">n</span>ull));
+    }
+
+    /**
+     * Merge new query parameters into the URI if they are not already in the query string.
+     */
+    <span style="background-color: red">p</span>ublic function withQueryIfMissing(array $query): static
+    {
+        $currentQuery = $this-&gt;query();
+
+        <span style="background-color: red">f</span>oreach ($query as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (! $currentQuery-&gt;missing($key)) {
+                Arr::forget($query, $key);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;withQuery($query);
+    }
+
+    /**
+     * Push a value onto the end of a query string parameter that is a list.
+     */
+    <span style="background-color: red">p</span>ublic function pushOntoQuery(string $key, mixed $value): static
+    {
+        $currentValue = data_get($this-&gt;query()-&gt;all(), $key);
+
+        $values = Arr::wrap($value);
+
+        return $this-&gt;withQuery([$key =&gt; match (true) {
+            is_array($currentValue) &amp;&amp; <span style="background-color: red">a</span>rray_is_list($currentValue) =&gt; <span style="background-color: red">a</span>rray_values(array_unique([...$currentValue, ...$values])),
+            is_array($currentValue) =&gt; <span style="background-color: red">[</span>...$currentValue, ...$values],
+            ! is_null($currentValue) =&gt; <span style="background-color: red">[</span>$currentValue, ...$values],
+            default =&gt; <span style="background-color: red">$</span>values,
+        }]);
+    }
+
+    /**
+     * Remove the given query parameters from the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withoutQuery(array|string $keys): static
+    {
+        return $this-&gt;replaceQuery(Arr::except($this-&gt;query()-&gt;all(), $keys));
+    }
+
+    /**
+     * Specify new query parameters for the URI.
+     */
+    <span style="background-color: red">p</span>ublic function replaceQuery(array $query): static
+    {
+        return $this-&gt;withQuery($query, merge: false);
+    }
+
+    /**
+     * Specify the fragment of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function withFragment(string $fragment): static
+    {
+        return new static($this-&gt;uri-&gt;withFragment($fragment));
+    }
+
+    /**
+     * Create a redirect HTTP response for the given URI.
+     */
+    <span style="background-color: red">p</span>ublic function redirect(int $status = 302, array $headers = []): RedirectResponse
+    {
+        return new RedirectResponse($this-&gt;value(), $status, $headers);
+    }
+
+    /**
+     * Create an HTTP response that represents the object.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    <span style="background-color: red">p</span>ublic function toResponse($request)
+    {
+        return new RedirectResponse($this-&gt;value());
+    }
+
+    /**
+     * Get content as a string of HTML.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function toHtml()
+    {
+        return $this-&gt;value();
+    }
+
+    /**
+     * Get the decoded string representation of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function decode(): string
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;query()-&gt;toArray())) {
+            return $this-&gt;value();
+        <span style="background-color: red">}</span>
+
+        return Str::replace(Str::after($this-&gt;value(), &#039;?&#039;), $this-&gt;query()-&gt;decode(), $this-&gt;value());
+    }
+
+    /**
+     * Get the string representation of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function value(): string
+    {
+        return (string) $this;
+    }
+
+    /**
+     * Determine if the URI is currently an empty string.
+     */
+    <span style="background-color: red">p</span>ublic function isEmpty(): bool
+    {
+        return trim($this-&gt;value()) === &#039;&#039;;
+    }
+
+    /**
+     * Dump the string representation of the URI.
+     *
+     * @param  mixed  ...$args
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function dump(...$args)
+    {
+        dump($this-&gt;value(), ...$args);
+
+        return $this;
+    }
+
+    /**
+     * Set the URL generator resolver.
+     */
+    <span style="background-color: green">p</span>ublic static function setUrlGeneratorResolver(Closure $urlGeneratorResolver): void
+    {
+        static::$urlGeneratorResolver = $urlGeneratorResolver;
+    }
+
+    /**
+     * Get the underlying URI instance.
+     */
+    <span style="background-color: red">p</span>ublic function getUri(): UriInterface
+    {
+        return $this-&gt;uri;
+    }
+
+    /**
+     * Get the string representation of the URI.
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        return $this-&gt;uri-&gt;toString();
+    }
+}
+</pre>

@@ -1,0 +1,422 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Traits;
+
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Str;
+use stdClass;
+
+trait InteractsWithData
+{
+    /**
+     * Retrieve all data from the instance.
+     *
+     * @param  array|mixed|null  $keys
+     * @return array
+     */
+    abstract public function all($keys = null);
+
+    /**
+     * Retrieve data from the instance.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    abstract protected function data($key = null, $default = null);
+
+    /**
+     * Determine if the data contains a given key.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function exists($key)
+    {
+        return $this-&gt;has($key);
+    }
+
+    /**
+     * Determine if the data contains a given key.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function has($key)
+    {
+        $keys = is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args();
+
+        $data = $this-&gt;all();
+
+        <span style="background-color: red">f</span>oreach ($keys as $value) {
+            <span style="background-color: red">i</span>f (! Arr::has($data, $value)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Determine if the instance contains any of the given keys.
+     *
+     * @param  string|array  $keys
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasAny($keys)
+    {
+        $keys = is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args();
+
+        $data = $this-&gt;all();
+
+        return Arr::hasAny($data, $keys);
+    }
+
+    /**
+     * Apply the callback if the instance contains the given key.
+     *
+     * @param  string  $key
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this|mixed
+     */
+    <span style="background-color: red">p</span>ublic function whenHas($key, callable $callback, ?callable $default = null)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;has($key)) {
+            return $callback(data_get($this-&gt;all(), $key)) ?: <span style="background-color: red">$</span>this;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($default) {
+            return $default();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Determine if the instance contains a non-empty value for the given key.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function filled($key)
+    {
+        $keys = is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args();
+
+        <span style="background-color: red">f</span>oreach ($keys as $value) {
+            <span style="background-color: red">i</span>f ($this-&gt;isEmptyString($value)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Determine if the instance contains an empty value for the given key.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isNotFilled($key)
+    {
+        $keys = is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args();
+
+        <span style="background-color: red">f</span>oreach ($keys as $value) {
+            <span style="background-color: red">i</span>f (! $this-&gt;isEmptyString($value)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Determine if the instance contains a non-empty value for any of the given keys.
+     *
+     * @param  string|array  $keys
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function anyFilled($keys)
+    {
+        $keys = is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args();
+
+        <span style="background-color: red">f</span>oreach ($keys as $key) {
+            <span style="background-color: red">i</span>f ($this-&gt;filled($key)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Apply the callback if the instance contains a non-empty value for the given key.
+     *
+     * @param  string  $key
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this|mixed
+     */
+    <span style="background-color: red">p</span>ublic function whenFilled($key, callable $callback, ?callable $default = null)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;filled($key)) {
+            return $callback(data_get($this-&gt;all(), $key)) ?: <span style="background-color: red">$</span>this;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($default) {
+            return $default();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Determine if the instance is missing a given key.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function missing($key)
+    {
+        $keys = is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args();
+
+        return ! $this-&gt;has($keys);
+    }
+
+    /**
+     * Apply the callback if the instance is missing the given key.
+     *
+     * @param  string  $key
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this|mixed
+     */
+    <span style="background-color: red">p</span>ublic function whenMissing($key, callable $callback, ?callable $default = null)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;missing($key)) {
+            return $callback(data_get($this-&gt;all(), $key)) ?: <span style="background-color: red">$</span>this;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($default) {
+            return $default();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Determine if the given key is an empty string for &quot;filled&quot;.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isEmptyString($key)
+    {
+        $value = $this-&gt;data($key);
+
+        return ! is_bool($value) &amp;&amp; <span style="background-color: red">!</span> is_array($value) &amp;&amp; <span style="background-color: red">t</span>rim((string) $value) === &#039;&#039;;
+    }
+
+    /**
+     * Retrieve data from the instance as a Stringable instance.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Support\Stringable
+     */
+    <span style="background-color: red">p</span>ublic function str($key, $default = null)
+    {
+        return $this-&gt;string($key, $default);
+    }
+
+    /**
+     * Retrieve data from the instance as a Stringable instance.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Support\Stringable
+     */
+    <span style="background-color: red">p</span>ublic function string($key, $default = null)
+    {
+        return Str::of($this-&gt;data($key, $default));
+    }
+
+    /**
+     * Retrieve data as a boolean value.
+     *
+     * Returns true when value is &quot;1&quot;, &quot;true&quot;, &quot;on&quot;, and &quot;yes&quot;. Otherwise, returns false.
+     *
+     * @param  string|null  $key
+     * @param  bool  $default
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function boolean($key = null, $default = false)
+    {
+        return filter_var($this-&gt;data($key, $default), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Retrieve data as an integer value.
+     *
+     * @param  string  $key
+     * @param  int  $default
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function integer($key, $default = 0)
+    {
+        return intval($this-&gt;data($key, $default));
+    }
+
+    /**
+     * Retrieve data as a float value.
+     *
+     * @param  string  $key
+     * @param  float  $default
+     * @return float
+     */
+    <span style="background-color: red">p</span>ublic function float($key, $default = 0.0)
+    {
+        return floatval($this-&gt;data($key, $default));
+    }
+
+    /**
+     * Retrieve data from the instance as a Carbon instance.
+     *
+     * @param  string  $key
+     * @param  string|null  $format
+     * @param  string|null  $tz
+     * @return \Illuminate\Support\Carbon|null
+     *
+     * @throws \Carbon\Exceptions\InvalidFormatException
+     */
+    <span style="background-color: red">p</span>ublic function date($key, $format = null, $tz = null)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isNotFilled($key)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_null($format)) {
+            return Date::parse($this-&gt;data($key), $tz);
+        <span style="background-color: red">}</span>
+
+        return Date::createFromFormat($format, $this-&gt;data($key), $tz);
+    }
+
+    /**
+     * Retrieve data from the instance as an enum.
+     *
+     * @template TEnum of \BackedEnum
+     *
+     * @param  string  $key
+     * @param  class-string&lt;TEnum&gt;  $enumClass
+     * @return TEnum|null
+     */
+    <span style="background-color: red">p</span>ublic function enum($key, $enumClass)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isNotFilled($key) || <span style="background-color: red">!</span> $this-&gt;isBackedEnum($enumClass)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        return $enumClass::tryFrom($this-&gt;data($key));
+    }
+
+    /**
+     * Retrieve data from the instance as an array of enums.
+     *
+     * @template TEnum of \BackedEnum
+     *
+     * @param  string  $key
+     * @param  class-string&lt;TEnum&gt;  $enumClass
+     * @return TEnum[]
+     */
+    <span style="background-color: red">p</span>ublic function enums($key, $enumClass)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isNotFilled($key) || <span style="background-color: red">!</span> $this-&gt;isBackedEnum($enumClass)) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;collect($key)
+            -&gt;map(fn ($value) =&gt; <span style="background-color: red">$</span>enumClass::tryFrom($value))
+            -&gt;filter()
+            -&gt;all();
+    }
+
+    /**
+     * Determine if the given enum class is backed.
+     *
+     * @param  class-string  $enumClass
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isBackedEnum($enumClass)
+    {
+        return enum_exists($enumClass) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($enumClass, &#039;tryFrom&#039;);
+    }
+
+    /**
+     * Retrieve data from the instance as an array.
+     *
+     * @param  array|string|null  $key
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function array($key = null)
+    {
+        return (array) (is_array($key) ? $this-&gt;only($key) : <span style="background-color: red">$</span>this-&gt;data($key));
+    }
+
+    /**
+     * Retrieve data from the instance as a collection.
+     *
+     * @param  array|string|null  $key
+     * @return \Illuminate\Support\Collection
+     */
+    <span style="background-color: red">p</span>ublic function collect($key = null)
+    {
+        return new Collection(is_array($key) ? $this-&gt;only($key) : <span style="background-color: red">$</span>this-&gt;data($key));
+    }
+
+    /**
+     * Get a subset containing the provided keys with values from the instance data.
+     *
+     * @param  array|mixed  $keys
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function only($keys)
+    {
+        $results = [];
+
+        $data = $this-&gt;all();
+
+        $placeholder = new stdClass;
+
+        <span style="background-color: red">f</span>oreach (is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args() as $key) {
+            $value = data_get($data, $key, $placeholder);
+
+            <span style="background-color: red">i</span>f ($value !== $placeholder) {
+                Arr::set($results, $key, $value);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $results;
+    }
+
+    /**
+     * Get all of the data except for a specified array of items.
+     *
+     * @param  array|mixed  $keys
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function except($keys)
+    {
+        $keys = is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args();
+
+        $results = $this-&gt;all();
+
+        Arr::forget($results, $keys);
+
+        return $results;
+    }
+}
+</pre>

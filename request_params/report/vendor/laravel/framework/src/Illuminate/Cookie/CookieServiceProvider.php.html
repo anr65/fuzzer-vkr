@@ -1,0 +1,25 @@
+<pre>&lt;?php
+
+namespace Illuminate\Cookie;
+
+use Illuminate\Support\ServiceProvider;
+
+class CookieServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;app-&gt;singleton(&#039;cookie&#039;, <span style="background-color: green">f</span>unction ($app) {
+            $config = $app-&gt;make(&#039;config&#039;)-&gt;get(&#039;session&#039;);
+
+            return (new CookieJar)-&gt;setDefaultPathAndDomain(
+                $config[&#039;path&#039;], $config[&#039;domain&#039;], $config[&#039;secure&#039;], $config[&#039;same_site&#039;] ?? <span style="background-color: red">n</span>ull
+            );
+        });
+    }
+}
+</pre>

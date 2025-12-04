@@ -1,0 +1,209 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonInterface;
+use Carbon\CarbonInterval;
+use Carbon\CarbonPeriod;
+use Closure;
+use Generator;
+use ReflectionClass;
+use ReflectionException;
+use ReflectionMethod;
+use Throwable;
+
+/**
+ * Trait Mixin.
+ *
+ * Allows mixing in entire classes with multiple macros.
+ */
+trait Mixin
+{
+    /**
+     * Stack of macro instance contexts.
+     */
+    protected static array $macroContextStack = [];
+
+    /**
+     * Mix another object into the class.
+     *
+     * @example
+     * ```
+     * Carbon::mixin(new class {
+     *   public function addMoon() {
+     *     return function () {
+     *       return $this-&gt;addDays(30);
+     *     };
+     *   }
+     *   public function subMoon() {
+     *     return function () {
+     *       return $this-&gt;subDays(30);
+     *     };
+     *   }
+     * });
+     * $fullMoon = Carbon::create(&#039;2018-12-22&#039;);
+     * $nextFullMoon = $fullMoon-&gt;addMoon();
+     * $blackMoon = Carbon::create(&#039;2019-01-06&#039;);
+     * $previousBlackMoon = $blackMoon-&gt;subMoon();
+     * echo &quot;$nextFullMoon\n&quot;;
+     * echo &quot;$previousBlackMoon\n&quot;;
+     * ```
+     *
+     * @throws ReflectionException
+     */
+    <span style="background-color: red">p</span>ublic static function mixin(object|string $mixin): void
+    {
+        \is_string($mixin) &amp;&amp; <span style="background-color: red">t</span>rait_exists($mixin)
+            ? self::loadMixinTrait($mixin)
+            : <span style="background-color: red">s</span>elf::loadMixinClass($mixin);
+    }
+
+    /**
+     * @throws ReflectionException
+     */
+    <span style="background-color: red">p</span>rivate static function loadMixinClass(object|string $mixin): void
+    {
+        $methods = (new ReflectionClass($mixin))-&gt;getMethods(
+            ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED,
+        );
+
+        <span style="background-color: red">f</span>oreach ($methods as $method) {
+            <span style="background-color: red">i</span>f ($method-&gt;isConstructor() || <span style="background-color: red">$</span>method-&gt;isDestructor()) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $macro = $method-&gt;invoke($mixin);
+
+            <span style="background-color: red">i</span>f (\is_callable($macro)) {
+                static::macro($method-&gt;name, $macro);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate static function loadMixinTrait(string $trait): void
+    {
+        $context = eval(self::getAnonymousClassCodeForTrait($trait));
+        $className = \get_class($context);
+        $baseClass = static::class;
+
+        <span style="background-color: red">f</span>oreach (self::getMixableMethods($context) as $name) {
+            $closureBase = Closure::fromCallable([$context, $name]);
+
+            static::macro($name, <span style="background-color: red">f</span>unction (...$parameters) use ($closureBase, $className, $baseClass) {
+                $downContext = isset($this) ? ($this) : <span style="background-color: red">n</span>ew $baseClass();
+                $context = isset($this) ? $this-&gt;cast($className) : <span style="background-color: red">n</span>ew $className();
+
+                try {
+                    // @ is required to handle error if not converted into exceptions
+                    $closure = @$closureBase-&gt;bindTo($context);
+                } <span style="background-color: red">c</span>atch (Throwable) { // @codeCoverageIgnore
+                    $closure = $closureBase; // @codeCoverageIgnore
+                <span style="background-color: red">}</span>
+
+                // in case of errors not converted into exceptions
+                $closure = $closure ?: <span style="background-color: red">$</span>closureBase;
+
+                $result = $closure(...$parameters);
+
+                <span style="background-color: red">i</span>f (!($result instanceof $className)) {
+                    return $result;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($downContext instanceof CarbonInterface &amp;&amp; <span style="background-color: red">$</span>result instanceof CarbonInterface) {
+                    <span style="background-color: red">i</span>f ($context !== $result) {
+                        $downContext = $downContext-&gt;copy();
+                    <span style="background-color: red">}</span>
+
+                    return $downContext
+                        -&gt;setTimezone($result-&gt;getTimezone())
+                        -&gt;modify($result-&gt;format(&#039;Y-m-d H:i:s.u&#039;))
+                        -&gt;settings($result-&gt;getSettings());
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($downContext instanceof CarbonInterval &amp;&amp; <span style="background-color: red">$</span>result instanceof CarbonInterval) {
+                    <span style="background-color: red">i</span>f ($context !== $result) {
+                        $downContext = $downContext-&gt;copy();
+                    <span style="background-color: red">}</span>
+
+                    $downContext-&gt;copyProperties($result);
+                    self::copyStep($downContext, $result);
+                    self::copyNegativeUnits($downContext, $result);
+
+                    return $downContext-&gt;settings($result-&gt;getSettings());
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($downContext instanceof CarbonPeriod &amp;&amp; <span style="background-color: red">$</span>result instanceof CarbonPeriod) {
+                    <span style="background-color: red">i</span>f ($context !== $result) {
+                        $downContext = $downContext-&gt;copy();
+                    <span style="background-color: red">}</span>
+
+                    return $downContext
+                        -&gt;setDates($result-&gt;getStartDate(), $result-&gt;getEndDate())
+                        -&gt;setRecurrences($result-&gt;getRecurrences())
+                        -&gt;setOptions($result-&gt;getOptions())
+                        -&gt;settings($result-&gt;getSettings());
+                <span style="background-color: red">}</span>
+
+                return $result;
+            });
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate static function getAnonymousClassCodeForTrait(string $trait): string
+    {
+        return &#039;return new class() extends &#039;.static::class.&#039; {use &#039;.$trait.&#039;;};&#039;;
+    }
+
+    <span style="background-color: red">p</span>rivate static function getMixableMethods(self $context): Generator
+    {
+        <span style="background-color: red">f</span>oreach (get_class_methods($context) as $name) {
+            <span style="background-color: red">i</span>f (method_exists(static::class, $name)) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">y</span>ield $name;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Stack a Carbon context from inside calls of self::this() and execute a given action.
+     */
+    <span style="background-color: red">p</span>rotected static function bindMacroContext(?self $context, callable $callable): mixed
+    {
+        static::$macroContextStack[] = $context;
+
+        try {
+            return $callable();
+        } <span style="background-color: red">f</span>inally {
+            array_pop(static::$macroContextStack);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Return the current context from inside a macro callee or a null if static.
+     */
+    <span style="background-color: red">p</span>rotected static function context(): ?static
+    {
+        return end(static::$macroContextStack) ?: <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Return the current context from inside a macro callee or a new one if static.
+     */
+    <span style="background-color: red">p</span>rotected static function this(): static
+    {
+        return end(static::$macroContextStack) ?: <span style="background-color: red">n</span>ew static();
+    }
+}
+</pre>

@@ -1,0 +1,84 @@
+<pre>&lt;?php
+
+namespace Illuminate\Auth;
+
+use Exception;
+use Illuminate\Http\Request;
+
+class AuthenticationException extends Exception
+{
+    /**
+     * All of the guards that were checked.
+     *
+     * @var array
+     */
+    protected $guards;
+
+    /**
+     * The path the user should be redirected to.
+     *
+     * @var string|null
+     */
+    protected $redirectTo;
+
+    /**
+     * The callback that should be used to generate the authentication redirect path.
+     *
+     * @var callable
+     */
+    protected static $redirectToCallback;
+
+    /**
+     * Create a new authentication exception.
+     *
+     * @param  string  $message
+     * @param  array  $guards
+     * @param  string|null  $redirectTo
+     */
+    <span style="background-color: red">p</span>ublic function __construct($message = &#039;Unauthenticated.&#039;, array $guards = [], $redirectTo = null)
+    {
+        parent::__construct($message);
+
+        $this-&gt;guards = $guards;
+        $this-&gt;redirectTo = $redirectTo;
+    }
+
+    /**
+     * Get the guards that were checked.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function guards()
+    {
+        return $this-&gt;guards;
+    }
+
+    /**
+     * Get the path the user should be redirected to.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function redirectTo(Request $request)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;redirectTo) {
+            return $this-&gt;redirectTo;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::$redirectToCallback) {
+            return call_user_func(static::$redirectToCallback, $request);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Specify the callback that should be used to generate the redirect path.
+     *
+     * @param  callable  $redirectToCallback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function redirectUsing(callable $redirectToCallback)
+    {
+        static::$redirectToCallback = $redirectToCallback;
+    }
+}
+</pre>

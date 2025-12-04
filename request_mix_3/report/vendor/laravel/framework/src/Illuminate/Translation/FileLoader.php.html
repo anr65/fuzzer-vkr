@@ -1,0 +1,226 @@
+<pre>&lt;?php
+
+namespace Illuminate\Translation;
+
+use Illuminate\Contracts\Translation\Loader;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Collection;
+use RuntimeException;
+
+class FileLoader implements Loader
+{
+    /**
+     * The filesystem instance.
+     *
+     * @var \Illuminate\Filesystem\Filesystem
+     */
+    protected $files;
+
+    /**
+     * The default paths for the loader.
+     *
+     * @var array
+     */
+    protected $paths;
+
+    /**
+     * All of the registered paths to JSON translation files.
+     *
+     * @var array
+     */
+    protected $jsonPaths = [];
+
+    /**
+     * All of the namespace hints.
+     *
+     * @var array
+     */
+    protected $hints = [];
+
+    /**
+     * Create a new file loader instance.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem  $files
+     * @param  array|string  $path
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Filesystem $files, array|string $path)
+    {
+        $this-&gt;files = $files;
+
+        $this-&gt;paths = is_string($path) ? [$path] : <span style="background-color: green">$</span>path;
+    }
+
+    /**
+     * Load the messages for the given locale.
+     *
+     * @param  string  $locale
+     * @param  string  $group
+     * @param  string|null  $namespace
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function load($locale, $group, $namespace = null)
+    {
+        <span style="background-color: green">i</span>f ($group === &#039;*&#039; &amp;&amp; <span style="background-color: green">$</span>namespace === &#039;*&#039;) {
+            return $this-&gt;loadJsonPaths($locale);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (is_null($namespace) || <span style="background-color: green">$</span>namespace === &#039;*&#039;) {
+            return $this-&gt;loadPaths($this-&gt;paths, $locale, $group);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;loadNamespaced($locale, $group, $namespace);
+    }
+
+    /**
+     * Load a namespaced translation group.
+     *
+     * @param  string  $locale
+     * @param  string  $group
+     * @param  string  $namespace
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function loadNamespaced($locale, $group, $namespace)
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;hints[$namespace])) {
+            $lines = $this-&gt;loadPaths([$this-&gt;hints[$namespace]], $locale, $group);
+
+            return $this-&gt;loadNamespaceOverrides($lines, $locale, $group, $namespace);
+        <span style="background-color: red">}</span>
+
+        return [];
+    }
+
+    /**
+     * Load a local namespaced translation group for overrides.
+     *
+     * @param  array  $lines
+     * @param  string  $locale
+     * @param  string  $group
+     * @param  string  $namespace
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function loadNamespaceOverrides(array $lines, $locale, $group, $namespace)
+    {
+        return (new Collection($this-&gt;paths))
+            -&gt;reduce(<span style="background-color: red">f</span>unction ($output, $path) use ($lines, $locale, $group, $namespace) {
+                $file = &quot;{$path}/vendor/{$namespace}/{$locale}/{$group}.php&quot;;
+
+                <span style="background-color: red">i</span>f ($this-&gt;files-&gt;exists($file)) {
+                    $lines = array_replace_recursive($lines, $this-&gt;files-&gt;getRequire($file));
+                <span style="background-color: red">}</span>
+
+                return $lines;
+            }, []);
+    }
+
+    /**
+     * Load a locale from a given path.
+     *
+     * @param  array  $paths
+     * @param  string  $locale
+     * @param  string  $group
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function loadPaths(array $paths, $locale, $group)
+    {
+        return (new Collection($paths))
+            -&gt;reduce(<span style="background-color: green">f</span>unction ($output, $path) use ($locale, $group) {
+                <span style="background-color: red">i</span>f ($this-&gt;files-&gt;exists($full = &quot;{$path}/{$locale}/{$group}.php&quot;)) {
+                    $output = array_replace_recursive($output, $this-&gt;files-&gt;getRequire($full));
+                <span style="background-color: green">}</span>
+
+                return $output;
+            }, []);
+    }
+
+    /**
+     * Load a locale from the given JSON file path.
+     *
+     * @param  string  $locale
+     * @return array
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: green">p</span>rotected function loadJsonPaths($locale)
+    {
+        return (new Collection(array_merge($this-&gt;jsonPaths, $this-&gt;paths)))
+            -&gt;reduce(<span style="background-color: green">f</span>unction ($output, $path) use ($locale) {
+                <span style="background-color: red">i</span>f ($this-&gt;files-&gt;exists($full = &quot;{$path}/{$locale}.json&quot;)) {
+                    $decoded = json_decode($this-&gt;files-&gt;get($full), true);
+
+                    <span style="background-color: red">i</span>f (is_null($decoded) || <span style="background-color: red">j</span>son_last_error() !== JSON_ERROR_NONE) {
+                        throw new RuntimeException(&quot;Translation file [{$full}] contains an invalid JSON structure.&quot;);
+                    <span style="background-color: red">}</span>
+
+                    $output = array_merge($output, $decoded);
+                <span style="background-color: green">}</span>
+
+                return $output;
+            }, []);
+    }
+
+    /**
+     * Add a new namespace to the loader.
+     *
+     * @param  string  $namespace
+     * @param  string  $hint
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addNamespace($namespace, $hint)
+    {
+        $this-&gt;hints[$namespace] = $hint;
+    }
+
+    /**
+     * Get an array of all the registered namespaces.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function namespaces()
+    {
+        return $this-&gt;hints;
+    }
+
+    /**
+     * Add a new path to the loader.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addPath($path)
+    {
+        $this-&gt;paths[] = $path;
+    }
+
+    /**
+     * Add a new JSON path to the loader.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function addJsonPath($path)
+    {
+        $this-&gt;jsonPaths[] = $path;
+    }
+
+    /**
+     * Get an array of all the registered paths to translation files.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function paths()
+    {
+        return $this-&gt;paths;
+    }
+
+    /**
+     * Get an array of all the registered paths to JSON translation files.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function jsonPaths()
+    {
+        return $this-&gt;jsonPaths;
+    }
+}
+</pre>

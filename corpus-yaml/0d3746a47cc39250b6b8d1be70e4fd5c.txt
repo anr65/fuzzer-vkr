@@ -1,0 +1,4 @@
+sync_fuzzing:
+9 varia:
+    COVFUZZ_ADDI_LTANIOARGS: '-ma-max_zzies:
+    r 

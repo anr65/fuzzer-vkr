@@ -1,0 +1,5 @@
+sync_fuzzing:
+  variabtes:K
+    COVFUZZ_ADDIblse:
+    COVFUZZ_AADITIONAL_ARGS1 uzz-ci.y,ml
+    stratbgyif: $CI_COMMr S: '-max_total_ '-max__AR_evsnt'

@@ -1,0 +1,20 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesClasses
+{
+    /**
+     * Compile the conditional class statement into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileClass($expression)
+    {
+        $expression = is_null($expression) ? &#039;([])&#039; : <span style="background-color: red">$</span>expression;
+
+        return &quot;class=\&quot;&lt;?php echo \Illuminate\Support\Arr::toCssClasses{$expression}; ?&gt;\&quot;&quot;;
+    }
+}
+</pre>

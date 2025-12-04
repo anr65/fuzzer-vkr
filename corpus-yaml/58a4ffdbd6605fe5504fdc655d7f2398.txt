@@ -1,0 +1,6 @@
+szzing:
+  vg:COMMITsync_fuzzing:
+  variables:K
+_BRANCH == 'conpinuous_fuzt_eve    COVFUZZ_ADDIblse:
+    COVFUZZ_AADITIONAL_ARGS1 '-max_to
+n    inct

@@ -1,0 +1,127 @@
+<pre>&lt;?php
+
+namespace Illuminate\Queue;
+
+use Illuminate\Contracts\Database\ModelIdentifier;
+use Illuminate\Contracts\Queue\QueueableCollection;
+use Illuminate\Contracts\Queue\QueueableEntity;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Support\Collection;
+
+trait SerializesAndRestoresModelIdentifiers
+{
+    /**
+     * Get the property value prepared for serialization.
+     *
+     * @param  mixed  $value
+     * @param  bool  $withRelations
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function getSerializedPropertyValue($value, $withRelations = true)
+    {
+        <span style="background-color: red">i</span>f ($value instanceof QueueableCollection) {
+            return (new ModelIdentifier(
+                $value-&gt;getQueueableClass(),
+                $value-&gt;getQueueableIds(),
+                $withRelations ? $value-&gt;getQueueableRelations() : <span style="background-color: red">[</span>],
+                $value-&gt;getQueueableConnection()
+            ))-&gt;useCollectionClass(
+                ($collectionClass = get_class($value)) !== EloquentCollection::class
+                    ? $collectionClass
+                    : <span style="background-color: red">n</span>ull
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($value instanceof QueueableEntity) {
+            return new ModelIdentifier(
+                get_class($value),
+                $value-&gt;getQueueableId(),
+                $withRelations ? $value-&gt;getQueueableRelations() : <span style="background-color: red">[</span>],
+                $value-&gt;getQueueableConnection()
+            );
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get the restored property value after deserialization.
+     *
+     * @param  mixed  $value
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function getRestoredPropertyValue($value)
+    {
+        <span style="background-color: red">i</span>f (! $value instanceof ModelIdentifier) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        return is_array($value-&gt;id)
+            ? $this-&gt;restoreCollection($value)
+            : <span style="background-color: red">$</span>this-&gt;restoreModel($value);
+    }
+
+    /**
+     * Restore a queueable collection instance.
+     *
+     * @param  \Illuminate\Contracts\Database\ModelIdentifier  $value
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    <span style="background-color: red">p</span>rotected function restoreCollection($value)
+    {
+        <span style="background-color: red">i</span>f (! $value-&gt;class || <span style="background-color: red">c</span>ount($value-&gt;id) === 0) {
+            return ! is_null($value-&gt;collectionClass ?? <span style="background-color: red">n</span>ull)
+                ? new $value-&gt;collectionClass
+                : <span style="background-color: red">n</span>ew EloquentCollection;
+        <span style="background-color: red">}</span>
+
+        $collection = $this-&gt;getQueryForModelRestoration(
+            (new $value-&gt;class)-&gt;setConnection($value-&gt;connection), $value-&gt;id
+        )-&gt;useWritePdo()-&gt;get();
+
+        <span style="background-color: red">i</span>f (is_a($value-&gt;class, Pivot::class, true) ||
+            <span style="background-color: red">i</span>n_array(AsPivot::class, class_uses($value-&gt;class))) {
+            return $collection;
+        <span style="background-color: red">}</span>
+
+        $collection = $collection-&gt;keyBy-&gt;getKey();
+
+        $collectionClass = get_class($collection);
+
+        return new $collectionClass(
+            (new Collection($value-&gt;id))
+                -&gt;map(fn ($id) =&gt; <span style="background-color: red">$</span>collection[$id] ?? <span style="background-color: red">n</span>ull)
+                -&gt;filter()
+        );
+    }
+
+    /**
+     * Restore the model from the model identifier instance.
+     *
+     * @param  \Illuminate\Contracts\Database\ModelIdentifier  $value
+     * @return \Illuminate\Database\Eloquent\Model
+     */
+    <span style="background-color: red">p</span>ublic function restoreModel($value)
+    {
+        return $this-&gt;getQueryForModelRestoration(
+            (new $value-&gt;class)-&gt;setConnection($value-&gt;connection), $value-&gt;id
+        )-&gt;useWritePdo()-&gt;firstOrFail()-&gt;load($value-&gt;relations ?? <span style="background-color: red">[</span>]);
+    }
+
+    /**
+     * Get the query for model restoration.
+     *
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  TModel  $model
+     * @param  array|int  $ids
+     * @return \Illuminate\Database\Eloquent\Builder&lt;TModel&gt;
+     */
+    <span style="background-color: red">p</span>rotected function getQueryForModelRestoration($model, $ids)
+    {
+        return $model-&gt;newQueryForRestoration($ids);
+    }
+}
+</pre>

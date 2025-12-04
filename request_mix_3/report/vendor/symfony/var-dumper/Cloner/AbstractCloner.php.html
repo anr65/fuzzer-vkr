@@ -1,0 +1,407 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Cloner;
+
+use Symfony\Component\VarDumper\Caster\Caster;
+use Symfony\Component\VarDumper\Exception\ThrowingCasterException;
+
+/**
+ * AbstractCloner implements a generic caster mechanism for objects and resources.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+abstract class AbstractCloner implements ClonerInterface
+{
+    public static array $defaultCasters = [
+        &#039;__PHP_Incomplete_Class&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\Caster&#039;, &#039;castPhpIncompleteClass&#039;],
+
+        &#039;Symfony\Component\VarDumper\Caster\CutStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;castStub&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\CutArrayStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;castCutArray&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\ConstStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;castStub&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\EnumStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;castEnum&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\ScalarStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;castScalar&#039;],
+
+        &#039;Fiber&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\FiberCaster&#039;, &#039;castFiber&#039;],
+
+        &#039;Closure&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castClosure&#039;],
+        &#039;Generator&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castGenerator&#039;],
+        &#039;ReflectionType&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castType&#039;],
+        &#039;ReflectionAttribute&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castAttribute&#039;],
+        &#039;ReflectionGenerator&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castReflectionGenerator&#039;],
+        &#039;ReflectionClass&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castClass&#039;],
+        &#039;ReflectionClassConstant&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castClassConstant&#039;],
+        &#039;ReflectionFunctionAbstract&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castFunctionAbstract&#039;],
+        &#039;ReflectionMethod&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castMethod&#039;],
+        &#039;ReflectionParameter&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castParameter&#039;],
+        &#039;ReflectionProperty&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castProperty&#039;],
+        &#039;ReflectionReference&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castReference&#039;],
+        &#039;ReflectionExtension&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castExtension&#039;],
+        &#039;ReflectionZendExtension&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ReflectionCaster&#039;, &#039;castZendExtension&#039;],
+
+        &#039;Doctrine\Common\Persistence\ObjectManager&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Doctrine\Common\Proxy\Proxy&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DoctrineCaster&#039;, &#039;castCommonProxy&#039;],
+        &#039;Doctrine\ORM\Proxy\Proxy&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DoctrineCaster&#039;, &#039;castOrmProxy&#039;],
+        &#039;Doctrine\ORM\PersistentCollection&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DoctrineCaster&#039;, &#039;castPersistentCollection&#039;],
+        &#039;Doctrine\Persistence\ObjectManager&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+
+        &#039;DOMException&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castException&#039;],
+        &#039;Dom\Exception&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castException&#039;],
+        &#039;DOMStringList&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;DOMNameList&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;DOMImplementation&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castImplementation&#039;],
+        &#039;Dom\Implementation&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castImplementation&#039;],
+        &#039;DOMImplementationList&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;DOMNode&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castNode&#039;],
+        &#039;Dom\Node&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castNode&#039;],
+        &#039;DOMNameSpaceNode&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castNameSpaceNode&#039;],
+        &#039;DOMDocument&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castDocument&#039;],
+        &#039;Dom\XMLDocument&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castXMLDocument&#039;],
+        &#039;Dom\HTMLDocument&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castHTMLDocument&#039;],
+        &#039;DOMNodeList&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;Dom\NodeList&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;DOMNamedNodeMap&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;Dom\DTDNamedNodeMap&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castLength&#039;],
+        &#039;DOMCharacterData&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castCharacterData&#039;],
+        &#039;Dom\CharacterData&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castCharacterData&#039;],
+        &#039;DOMAttr&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castAttr&#039;],
+        &#039;Dom\Attr&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castAttr&#039;],
+        &#039;DOMElement&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castElement&#039;],
+        &#039;Dom\Element&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castElement&#039;],
+        &#039;DOMText&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castText&#039;],
+        &#039;Dom\Text&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castText&#039;],
+        &#039;DOMDocumentType&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castDocumentType&#039;],
+        &#039;Dom\DocumentType&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castDocumentType&#039;],
+        &#039;DOMNotation&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castNotation&#039;],
+        &#039;Dom\Notation&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castNotation&#039;],
+        &#039;DOMEntity&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castEntity&#039;],
+        &#039;Dom\Entity&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castEntity&#039;],
+        &#039;DOMProcessingInstruction&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castProcessingInstruction&#039;],
+        &#039;Dom\ProcessingInstruction&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castProcessingInstruction&#039;],
+        &#039;DOMXPath&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DOMCaster&#039;, &#039;castXPath&#039;],
+
+        &#039;XMLReader&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\XmlReaderCaster&#039;, &#039;castXmlReader&#039;],
+
+        &#039;ErrorException&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castErrorException&#039;],
+        &#039;Exception&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castException&#039;],
+        &#039;Error&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castError&#039;],
+        &#039;Symfony\Bridge\Monolog\Logger&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Symfony\Component\DependencyInjection\ContainerInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Symfony\Component\EventDispatcher\EventDispatcherInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Symfony\Component\HttpClient\AmpHttpClient&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClient&#039;],
+        &#039;Symfony\Component\HttpClient\CurlHttpClient&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClient&#039;],
+        &#039;Symfony\Component\HttpClient\NativeHttpClient&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClient&#039;],
+        &#039;Symfony\Component\HttpClient\Response\AmpResponse&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClientResponse&#039;],
+        &#039;Symfony\Component\HttpClient\Response\AmpResponseV4&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClientResponse&#039;],
+        &#039;Symfony\Component\HttpClient\Response\AmpResponseV5&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClientResponse&#039;],
+        &#039;Symfony\Component\HttpClient\Response\CurlResponse&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClientResponse&#039;],
+        &#039;Symfony\Component\HttpClient\Response\NativeResponse&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castHttpClientResponse&#039;],
+        &#039;Symfony\Component\HttpFoundation\Request&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castRequest&#039;],
+        &#039;Symfony\Component\Uid\Ulid&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castUlid&#039;],
+        &#039;Symfony\Component\Uid\Uuid&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castUuid&#039;],
+        &#039;Symfony\Component\VarExporter\Internal\LazyObjectState&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SymfonyCaster&#039;, &#039;castLazyObjectState&#039;],
+        &#039;Symfony\Component\VarDumper\Exception\ThrowingCasterException&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castThrowingCasterException&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\TraceStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castTraceStub&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\FrameStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castFrameStub&#039;],
+        &#039;Symfony\Component\VarDumper\Cloner\AbstractCloner&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Symfony\Component\ErrorHandler\Exception\FlattenException&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castFlattenException&#039;],
+        &#039;Symfony\Component\ErrorHandler\Exception\SilencedErrorContext&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ExceptionCaster&#039;, &#039;castSilencedErrorContext&#039;],
+
+        &#039;Imagine\Image\ImageInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ImagineCaster&#039;, &#039;castImage&#039;],
+
+        &#039;Ramsey\Uuid\UuidInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\UuidCaster&#039;, &#039;castRamseyUuid&#039;],
+
+        &#039;ProxyManager\Proxy\ProxyInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ProxyManagerCaster&#039;, &#039;castProxy&#039;],
+        &#039;PHPUnit_Framework_MockObject_MockObject&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;PHPUnit\Framework\MockObject\MockObject&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;PHPUnit\Framework\MockObject\Stub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Prophecy\Prophecy\ProphecySubjectInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+        &#039;Mockery\MockInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\StubCaster&#039;, &#039;cutInternals&#039;],
+
+        &#039;PDO&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\PdoCaster&#039;, &#039;castPdo&#039;],
+        &#039;PDOStatement&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\PdoCaster&#039;, &#039;castPdoStatement&#039;],
+
+        &#039;AMQPConnection&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\AmqpCaster&#039;, &#039;castConnection&#039;],
+        &#039;AMQPChannel&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\AmqpCaster&#039;, &#039;castChannel&#039;],
+        &#039;AMQPQueue&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\AmqpCaster&#039;, &#039;castQueue&#039;],
+        &#039;AMQPExchange&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\AmqpCaster&#039;, &#039;castExchange&#039;],
+        &#039;AMQPEnvelope&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\AmqpCaster&#039;, &#039;castEnvelope&#039;],
+
+        &#039;ArrayObject&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castArrayObject&#039;],
+        &#039;ArrayIterator&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castArrayIterator&#039;],
+        &#039;SplDoublyLinkedList&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castDoublyLinkedList&#039;],
+        &#039;SplFileInfo&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castFileInfo&#039;],
+        &#039;SplFileObject&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castFileObject&#039;],
+        &#039;SplHeap&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castHeap&#039;],
+        &#039;SplObjectStorage&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castObjectStorage&#039;],
+        &#039;SplPriorityQueue&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castHeap&#039;],
+        &#039;OuterIterator&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castOuterIterator&#039;],
+        &#039;WeakMap&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castWeakMap&#039;],
+        &#039;WeakReference&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\SplCaster&#039;, &#039;castWeakReference&#039;],
+
+        &#039;Redis&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RedisCaster&#039;, &#039;castRedis&#039;],
+        &#039;Relay\Relay&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RedisCaster&#039;, &#039;castRedis&#039;],
+        &#039;RedisArray&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RedisCaster&#039;, &#039;castRedisArray&#039;],
+        &#039;RedisCluster&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RedisCaster&#039;, &#039;castRedisCluster&#039;],
+
+        &#039;DateTimeInterface&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DateCaster&#039;, &#039;castDateTime&#039;],
+        &#039;DateInterval&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DateCaster&#039;, &#039;castInterval&#039;],
+        &#039;DateTimeZone&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DateCaster&#039;, &#039;castTimeZone&#039;],
+        &#039;DatePeriod&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DateCaster&#039;, &#039;castPeriod&#039;],
+
+        &#039;GMP&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\GmpCaster&#039;, &#039;castGmp&#039;],
+
+        &#039;MessageFormatter&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\IntlCaster&#039;, &#039;castMessageFormatter&#039;],
+        &#039;NumberFormatter&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\IntlCaster&#039;, &#039;castNumberFormatter&#039;],
+        &#039;IntlTimeZone&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\IntlCaster&#039;, &#039;castIntlTimeZone&#039;],
+        &#039;IntlCalendar&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\IntlCaster&#039;, &#039;castIntlCalendar&#039;],
+        &#039;IntlDateFormatter&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\IntlCaster&#039;, &#039;castIntlDateFormatter&#039;],
+
+        &#039;Memcached&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\MemcachedCaster&#039;, &#039;castMemcached&#039;],
+
+        &#039;Ds\Collection&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DsCaster&#039;, &#039;castCollection&#039;],
+        &#039;Ds\Map&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DsCaster&#039;, &#039;castMap&#039;],
+        &#039;Ds\Pair&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DsCaster&#039;, &#039;castPair&#039;],
+        &#039;Symfony\Component\VarDumper\Caster\DsPairStub&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\DsCaster&#039;, &#039;castPairStub&#039;],
+
+        &#039;mysqli_driver&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\MysqliCaster&#039;, &#039;castMysqliDriver&#039;],
+
+        &#039;CurlHandle&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castCurl&#039;],
+
+        &#039;:dba&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castDba&#039;],
+        &#039;:dba persistent&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castDba&#039;],
+
+        &#039;GdImage&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castGd&#039;],
+        &#039;:gd&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castGd&#039;],
+
+        &#039;:pgsql large object&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\PgSqlCaster&#039;, &#039;castLargeObject&#039;],
+        &#039;:pgsql link&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\PgSqlCaster&#039;, &#039;castLink&#039;],
+        &#039;:pgsql link persistent&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\PgSqlCaster&#039;, &#039;castLink&#039;],
+        &#039;:pgsql result&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\PgSqlCaster&#039;, &#039;castResult&#039;],
+        &#039;:process&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castProcess&#039;],
+        &#039;:stream&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castStream&#039;],
+
+        &#039;OpenSSLCertificate&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castOpensslX509&#039;],
+        &#039;:OpenSSL X.509&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castOpensslX509&#039;],
+
+        &#039;:persistent stream&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castStream&#039;],
+        &#039;:stream-context&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\ResourceCaster&#039;, &#039;castStreamContext&#039;],
+
+        &#039;XmlParser&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\XmlResourceCaster&#039;, &#039;castXml&#039;],
+        &#039;:xml&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\XmlResourceCaster&#039;, &#039;castXml&#039;],
+
+        &#039;RdKafka&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castRdKafka&#039;],
+        &#039;RdKafka\Conf&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castConf&#039;],
+        &#039;RdKafka\KafkaConsumer&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castKafkaConsumer&#039;],
+        &#039;RdKafka\Metadata\Broker&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castBrokerMetadata&#039;],
+        &#039;RdKafka\Metadata\Collection&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castCollectionMetadata&#039;],
+        &#039;RdKafka\Metadata\Partition&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castPartitionMetadata&#039;],
+        &#039;RdKafka\Metadata\Topic&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castTopicMetadata&#039;],
+        &#039;RdKafka\Message&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castMessage&#039;],
+        &#039;RdKafka\Topic&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castTopic&#039;],
+        &#039;RdKafka\TopicPartition&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castTopicPartition&#039;],
+        &#039;RdKafka\TopicConf&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\RdKafkaCaster&#039;, &#039;castTopicConf&#039;],
+
+        &#039;FFI\CData&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\FFICaster&#039;, &#039;castCTypeOrCData&#039;],
+        &#039;FFI\CType&#039; =&gt; [&#039;Symfony\Component\VarDumper\Caster\FFICaster&#039;, &#039;castCTypeOrCData&#039;],
+    ];
+
+    protected int $maxItems = 2500;
+    protected int $maxString = -1;
+    protected int $minDepth = 1;
+
+    /**
+     * @var array&lt;string, list&lt;callable&gt;&gt;
+     */
+    private array $casters = [];
+
+    /**
+     * @var callable|null
+     */
+    private $prevErrorHandler;
+
+    private array $classInfo = [];
+    private int $filter = 0;
+
+    /**
+     * @param callable[]|null $casters A map of casters
+     *
+     * @see addCasters
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?array $casters = null)
+    {
+        $this-&gt;addCasters($casters ?? <span style="background-color: green">s</span>tatic::$defaultCasters);
+    }
+
+    /**
+     * Adds casters for resources and objects.
+     *
+     * Maps resources or objects types to a callback.
+     * Types are in the key, with a callable caster for value.
+     * Resource types are to be prefixed with a `:`,
+     * see e.g. static::$defaultCasters.
+     *
+     * @param callable[] $casters A map of casters
+     */
+    <span style="background-color: green">p</span>ublic function addCasters(array $casters): void
+    {
+        <span style="background-color: green">f</span>oreach ($casters as $type =&gt; $callback) {
+            $this-&gt;casters[$type][] = $callback;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Sets the maximum number of items to clone past the minimum depth in nested structures.
+     */
+    <span style="background-color: red">p</span>ublic function setMaxItems(int $maxItems): void
+    {
+        $this-&gt;maxItems = $maxItems;
+    }
+
+    /**
+     * Sets the maximum cloned length for strings.
+     */
+    <span style="background-color: red">p</span>ublic function setMaxString(int $maxString): void
+    {
+        $this-&gt;maxString = $maxString;
+    }
+
+    /**
+     * Sets the minimum tree depth where we are guaranteed to clone all the items.  After this
+     * depth is reached, only setMaxItems items will be cloned.
+     */
+    <span style="background-color: red">p</span>ublic function setMinDepth(int $minDepth): void
+    {
+        $this-&gt;minDepth = $minDepth;
+    }
+
+    /**
+     * Clones a PHP variable.
+     *
+     * @param int $filter A bit field of Caster::EXCLUDE_* constants
+     */
+    <span style="background-color: green">p</span>ublic function cloneVar(mixed $var, int $filter = 0): Data
+    {
+        $this-&gt;prevErrorHandler = set_error_handler(<span style="background-color: red">f</span>unction ($type, $msg, $file, $line, $context = []) {
+            <span style="background-color: red">i</span>f (\E_RECOVERABLE_ERROR === $type || <span style="background-color: red">\</span>E_USER_ERROR === $type) {
+                // Cloner never dies
+                throw new \ErrorException($msg, 0, $type, $file, $line);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;prevErrorHandler) {
+                return ($this-&gt;prevErrorHandler)($type, $msg, $file, $line, $context);
+            <span style="background-color: red">}</span>
+
+            return false;
+        });
+        $this-&gt;filter = $filter;
+
+        <span style="background-color: green">i</span>f ($gc = gc_enabled()) {
+            gc_disable();
+        <span style="background-color: green">}</span>
+        try {
+            return new Data($this-&gt;doClone($var));
+        } <span style="background-color: green">f</span>inally {
+            <span style="background-color: green">i</span>f ($gc) {
+                gc_enable();
+            <span style="background-color: green">}</span>
+            restore_error_handler();
+            $this-&gt;prevErrorHandler = null;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Effectively clones the PHP variable.
+     */
+    abstract protected function doClone(mixed $var): array;
+
+    /**
+     * Casts an object to an array representation.
+     *
+     * @param bool $isNested True if the object is nested in the dumped structure
+     */
+    <span style="background-color: green">p</span>rotected function castObject(Stub $stub, bool $isNested): array
+    {
+        $obj = $stub-&gt;value;
+        $class = $stub-&gt;class;
+
+        <span style="background-color: red">i</span>f (str_contains($class, &quot;@anonymous\0&quot;)) {
+            $stub-&gt;class = get_debug_type($obj);
+        <span style="background-color: green">}</span>
+        <span style="background-color: green">i</span>f (isset($this-&gt;classInfo[$class])) {
+            [$i, $parents, $hasDebugInfo, $fileInfo] = $this-&gt;classInfo[$class];
+        } <span style="background-color: green">e</span>lse {
+            $i = 2;
+            $parents = [$class];
+            $hasDebugInfo = method_exists($class, &#039;__debugInfo&#039;);
+
+            <span style="background-color: green">f</span>oreach (class_parents($class) as $p) {
+                $parents[] = $p;
+                ++$i;
+            <span style="background-color: green">}</span>
+            <span style="background-color: green">f</span>oreach (class_implements($class) as $p) {
+                $parents[] = $p;
+                ++$i;
+            <span style="background-color: green">}</span>
+            $parents[] = &#039;*&#039;;
+
+            $r = new \ReflectionClass($class);
+            $fileInfo = $r-&gt;isInternal() || <span style="background-color: green">$</span>r-&gt;isSubclassOf(Stub::class) ? [] : <span style="background-color: green">[</span>
+                &#039;file&#039; =&gt; $r-&gt;getFileName(),
+                &#039;line&#039; =&gt; $r-&gt;getStartLine(),
+            ];
+
+            $this-&gt;classInfo[$class] = [$i, $parents, $hasDebugInfo, $fileInfo];
+        <span style="background-color: green">}</span>
+
+        $stub-&gt;attr += $fileInfo;
+        $a = Caster::castObject($obj, $class, $hasDebugInfo, $stub-&gt;class);
+
+        try {
+            <span style="background-color: green">w</span>hile ($i--) {
+                <span style="background-color: green">i</span>f (!empty($this-&gt;casters[$p = $parents[$i]])) {
+                    <span style="background-color: green">f</span>oreach ($this-&gt;casters[$p] as $callback) {
+                        $a = $callback($obj, $a, $stub, $isNested, $this-&gt;filter);
+                    <span style="background-color: green">}</span>
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        } <span style="background-color: red">c</span>atch (\Exception $e) {
+            $a = [(Stub::TYPE_OBJECT === $stub-&gt;type ? Caster::PREFIX_VIRTUAL : <span style="background-color: red">'</span>&#039;).&#039;⚠&#039; =&gt; new ThrowingCasterException($e)] + $a;
+        <span style="background-color: green">}</span>
+
+        return $a;
+    }
+
+    /**
+     * Casts a resource to an array representation.
+     *
+     * @param bool $isNested True if the object is nested in the dumped structure
+     */
+    <span style="background-color: red">p</span>rotected function castResource(Stub $stub, bool $isNested): array
+    {
+        $a = [];
+        $res = $stub-&gt;value;
+        $type = $stub-&gt;class;
+
+        try {
+            <span style="background-color: red">i</span>f (!empty($this-&gt;casters[&#039;:&#039;.$type])) {
+                <span style="background-color: red">f</span>oreach ($this-&gt;casters[&#039;:&#039;.$type] as $callback) {
+                    $a = $callback($res, $a, $stub, $isNested, $this-&gt;filter);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">c</span>atch (\Exception $e) {
+            $a = [(Stub::TYPE_OBJECT === $stub-&gt;type ? Caster::PREFIX_VIRTUAL : <span style="background-color: red">'</span>&#039;).&#039;⚠&#039; =&gt; new ThrowingCasterException($e)] + $a;
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+}
+</pre>

@@ -1,0 +1,6 @@
+ariab  COVFUZZ_ADDIIONAL_ARGSes:
+-   '
+  trigger:
+    injlude: s:
+  
+  ' tr\gg r g

@@ -1,0 +1,66 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Concerns;
+
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+
+trait CompilesJsonPaths
+{
+    /**
+     * Split the given JSON selector into the field and the optional path and wrap them separately.
+     *
+     * @param  string  $column
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function wrapJsonFieldAndPath($column)
+    {
+        $parts = explode(&#039;-&gt;&#039;, $column, 2);
+
+        $field = $this-&gt;wrap($parts[0]);
+
+        $path = count($parts) &gt; 1 ? &#039;, &#039;.$this-&gt;wrapJsonPath($parts[1], &#039;-&gt;&#039;) : <span style="background-color: red">'</span>&#039;;
+
+        return [$field, $path];
+    }
+
+    /**
+     * Wrap the given JSON path.
+     *
+     * @param  string  $value
+     * @param  string  $delimiter
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapJsonPath($value, $delimiter = &#039;-&gt;&#039;)
+    {
+        $value = preg_replace(&quot;/([\\\\]+)?\\&#039;/&quot;, &quot;&#039;&#039;&quot;, $value);
+
+        $jsonPath = (new Collection(explode($delimiter, $value)))
+            -&gt;map(fn ($segment) =&gt; <span style="background-color: red">$</span>this-&gt;wrapJsonPathSegment($segment))
+            -&gt;join(&#039;.&#039;);
+
+        return &quot;&#039;$&quot;.(str_starts_with($jsonPath, &#039;[&#039;) ? &#039;&#039; : <span style="background-color: red">'</span>.&#039;).$jsonPath.&quot;&#039;&quot;;
+    }
+
+    /**
+     * Wrap the given JSON path segment.
+     *
+     * @param  string  $segment
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function wrapJsonPathSegment($segment)
+    {
+        <span style="background-color: red">i</span>f (preg_match(&#039;/(\[[^\]]+\])+$/&#039;, $segment, $parts)) {
+            $key = Str::beforeLast($segment, $parts[0]);
+
+            <span style="background-color: red">i</span>f (! empty($key)) {
+                return &#039;&quot;&#039;.$key.&#039;&quot;&#039;.$parts[0];
+            <span style="background-color: red">}</span>
+
+            return $parts[0];
+        <span style="background-color: red">}</span>
+
+        return &#039;&quot;&#039;.$segment.&#039;&quot;&#039;;
+    }
+}
+</pre>

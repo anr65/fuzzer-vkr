@@ -1,0 +1,23 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesUseStatements
+{
+    /**
+     * Compile the use statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUse($expression)
+    {
+        $segments = explode(&#039;,&#039;, preg_replace(&quot;/[\(\)]/&quot;, &#039;&#039;, $expression));
+
+        $use = ltrim(trim($segments[0], &quot; &#039;\&quot;&quot;), &#039;\\&#039;);
+        $as = isset($segments[1]) ? &#039; as &#039;.trim($segments[1], &quot; &#039;\&quot;&quot;) : <span style="background-color: red">'</span>&#039;;
+
+        return &quot;&lt;?php use \\{$use}{$as}; ?&gt;&quot;;
+    }
+}
+</pre>

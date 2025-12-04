@@ -1,0 +1,243 @@
+<pre>&lt;?php
+
+namespace Illuminate\Cookie;
+
+use Illuminate\Contracts\Cookie\QueueingFactory as JarContract;
+use Illuminate\Support\Arr;
+use Illuminate\Support\InteractsWithTime;
+use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\HttpFoundation\Cookie;
+
+class CookieJar implements JarContract
+{
+    use InteractsWithTime, Macroable;
+
+    /**
+     * The default path (if specified).
+     *
+     * @var string
+     */
+    protected $path = &#039;/&#039;;
+
+    /**
+     * The default domain (if specified).
+     *
+     * @var string|null
+     */
+    protected $domain;
+
+    /**
+     * The default secure setting (defaults to null).
+     *
+     * @var bool|null
+     */
+    protected $secure;
+
+    /**
+     * The default SameSite option (defaults to lax).
+     *
+     * @var string
+     */
+    protected $sameSite = &#039;lax&#039;;
+
+    /**
+     * All of the cookies queued for sending.
+     *
+     * @var \Symfony\Component\HttpFoundation\Cookie[]
+     */
+    protected $queued = [];
+
+    /**
+     * Create a new cookie instance.
+     *
+     * @param  string  $name
+     * @param  string  $value
+     * @param  int  $minutes
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @param  bool|null  $secure
+     * @param  bool  $httpOnly
+     * @param  bool  $raw
+     * @param  string|null  $sameSite
+     * @return \Symfony\Component\HttpFoundation\Cookie
+     */
+    <span style="background-color: red">p</span>ublic function make($name, $value, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null)
+    {
+        [$path, $domain, $secure, $sameSite] = $this-&gt;getPathAndDomain($path, $domain, $secure, $sameSite);
+
+        $time = ($minutes == 0) ? 0 : <span style="background-color: red">$</span>this-&gt;availableAt($minutes * 60);
+
+        return new Cookie($name, $value, $time, $path, $domain, $secure, $httpOnly, $raw, $sameSite);
+    }
+
+    /**
+     * Create a cookie that lasts &quot;forever&quot; (400 days).
+     *
+     * @param  string  $name
+     * @param  string  $value
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @param  bool|null  $secure
+     * @param  bool  $httpOnly
+     * @param  bool  $raw
+     * @param  string|null  $sameSite
+     * @return \Symfony\Component\HttpFoundation\Cookie
+     */
+    <span style="background-color: red">p</span>ublic function forever($name, $value, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null)
+    {
+        return $this-&gt;make($name, $value, 576000, $path, $domain, $secure, $httpOnly, $raw, $sameSite);
+    }
+
+    /**
+     * Expire the given cookie.
+     *
+     * @param  string  $name
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @return \Symfony\Component\HttpFoundation\Cookie
+     */
+    <span style="background-color: red">p</span>ublic function forget($name, $path = null, $domain = null)
+    {
+        return $this-&gt;make($name, null, -2628000, $path, $domain);
+    }
+
+    /**
+     * Determine if a cookie has been queued.
+     *
+     * @param  string  $key
+     * @param  string|null  $path
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasQueued($key, $path = null)
+    {
+        return ! is_null($this-&gt;queued($key, null, $path));
+    }
+
+    /**
+     * Get a queued cookie instance.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @param  string|null  $path
+     * @return \Symfony\Component\HttpFoundation\Cookie|null
+     */
+    <span style="background-color: red">p</span>ublic function queued($key, $default = null, $path = null)
+    {
+        $queued = Arr::get($this-&gt;queued, $key, $default);
+
+        <span style="background-color: red">i</span>f ($path === null) {
+            return Arr::last($queued, null, $default);
+        <span style="background-color: red">}</span>
+
+        return Arr::get($queued, $path, $default);
+    }
+
+    /**
+     * Queue a cookie to send with the next response.
+     *
+     * @param  mixed  ...$parameters
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function queue(...$parameters)
+    {
+        <span style="background-color: red">i</span>f (isset($parameters[0]) &amp;&amp; <span style="background-color: red">$</span>parameters[0] instanceof Cookie) {
+            $cookie = $parameters[0];
+        } <span style="background-color: red">e</span>lse {
+            $cookie = $this-&gt;make(...array_values($parameters));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($this-&gt;queued[$cookie-&gt;getName()])) {
+            $this-&gt;queued[$cookie-&gt;getName()] = [];
+        <span style="background-color: red">}</span>
+
+        $this-&gt;queued[$cookie-&gt;getName()][$cookie-&gt;getPath()] = $cookie;
+    }
+
+    /**
+     * Queue a cookie to expire with the next response.
+     *
+     * @param  string  $name
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function expire($name, $path = null, $domain = null)
+    {
+        $this-&gt;queue($this-&gt;forget($name, $path, $domain));
+    }
+
+    /**
+     * Remove a cookie from the queue.
+     *
+     * @param  string  $name
+     * @param  string|null  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function unqueue($name, $path = null)
+    {
+        <span style="background-color: red">i</span>f ($path === null) {
+            unset($this-&gt;queued[$name]);
+
+            return;
+        <span style="background-color: red">}</span>
+
+        unset($this-&gt;queued[$name][$path]);
+
+        <span style="background-color: red">i</span>f (empty($this-&gt;queued[$name])) {
+            unset($this-&gt;queued[$name]);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the path and domain, or the default values.
+     *
+     * @param  string  $path
+     * @param  string|null  $domain
+     * @param  bool|null  $secure
+     * @param  string|null  $sameSite
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getPathAndDomain($path, $domain, $secure = null, $sameSite = null)
+    {
+        return [$path ?: <span style="background-color: red">$</span>this-&gt;path, $domain ?: <span style="background-color: red">$</span>this-&gt;domain, is_bool($secure) ? $secure : <span style="background-color: red">$</span>this-&gt;secure, $sameSite ?: <span style="background-color: red">$</span>this-&gt;sameSite];
+    }
+
+    /**
+     * Set the default path and domain for the jar.
+     *
+     * @param  string  $path
+     * @param  string|null  $domain
+     * @param  bool|null  $secure
+     * @param  string|null  $sameSite
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setDefaultPathAndDomain($path, $domain, $secure = false, $sameSite = null)
+    {
+        [$this-&gt;path, $this-&gt;domain, $this-&gt;secure, $this-&gt;sameSite] = [$path, $domain, $secure, $sameSite];
+
+        return $this;
+    }
+
+    /**
+     * Get the cookies which have been queued for the next request.
+     *
+     * @return \Symfony\Component\HttpFoundation\Cookie[]
+     */
+    <span style="background-color: red">p</span>ublic function getQueuedCookies()
+    {
+        return Arr::flatten($this-&gt;queued);
+    }
+
+    /**
+     * Flush the cookies which have been queued for the next request.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function flushQueuedCookies()
+    {
+        $this-&gt;queued = [];
+
+        return $this;
+    }
+}
+</pre>

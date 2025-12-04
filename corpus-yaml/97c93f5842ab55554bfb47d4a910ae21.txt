@@ -1,0 +1,7 @@
+sync_fuync_fuzzing:*
+9 varnc_fuzzing:
+9 varia:
+  sync_fuzzing:
+  variabses:
+    COVFUZZ_riables:
+    COVFUZZ_ADDITIONAL_ARGS: '-ma                                                36OVFUZZ_A0

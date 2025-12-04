@@ -1,0 +1,22 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Exceptions;
+
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\View;
+
+class RegisterErrorViewPaths
+{
+    /**
+     * Register the error view paths.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function __invoke()
+    {
+        View::replaceNamespace(&#039;errors&#039;, (new Collection(config(&#039;view.paths&#039;)))-&gt;map(<span style="background-color: green">f</span>unction ($path) {
+            return &quot;{$path}/errors&quot;;
+        })-&gt;push(__DIR__.&#039;/views&#039;)-&gt;all());
+    }
+}
+</pre>

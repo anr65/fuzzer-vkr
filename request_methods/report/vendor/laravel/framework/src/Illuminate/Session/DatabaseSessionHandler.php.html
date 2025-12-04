@@ -1,0 +1,319 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session;
+
+use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\InteractsWithTime;
+use SessionHandlerInterface;
+
+class DatabaseSessionHandler implements ExistenceAwareInterface, SessionHandlerInterface
+{
+    use InteractsWithTime;
+
+    /**
+     * The database connection instance.
+     *
+     * @var \Illuminate\Database\ConnectionInterface
+     */
+    protected $connection;
+
+    /**
+     * The name of the session table.
+     *
+     * @var string
+     */
+    protected $table;
+
+    /**
+     * The number of minutes the session should be valid.
+     *
+     * @var int
+     */
+    protected $minutes;
+
+    /**
+     * The container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container|null
+     */
+    protected $container;
+
+    /**
+     * The existence state of the session.
+     *
+     * @var bool
+     */
+    protected $exists;
+
+    /**
+     * Create a new database session handler instance.
+     *
+     * @param  \Illuminate\Database\ConnectionInterface  $connection
+     * @param  string  $table
+     * @param  int  $minutes
+     * @param  \Illuminate\Contracts\Container\Container|null  $container
+     */
+    <span style="background-color: green">p</span>ublic function __construct(ConnectionInterface $connection, $table, $minutes, ?Container $container = null)
+    {
+        $this-&gt;table = $table;
+        $this-&gt;minutes = $minutes;
+        $this-&gt;container = $container;
+        $this-&gt;connection = $connection;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function open($savePath, $sessionName): bool
+    {
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function close(): bool
+    {
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>ublic function read($sessionId): string|false
+    {
+        $session = (object) $this-&gt;getQuery()-&gt;find($sessionId);
+
+        <span style="background-color: red">i</span>f ($this-&gt;expired($session)) {
+            $this-&gt;exists = true;
+
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($session-&gt;payload)) {
+            $this-&gt;exists = true;
+
+            return base64_decode($session-&gt;payload);
+        <span style="background-color: red">}</span>
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * Determine if the session is expired.
+     *
+     * @param  \stdClass  $session
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function expired($session)
+    {
+        return isset($session-&gt;last_activity) &amp;&amp;
+            <span style="background-color: red">$</span>session-&gt;last_activity &lt; Carbon::now()-&gt;subMinutes($this-&gt;minutes)-&gt;getTimestamp();
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function write($sessionId, $data): bool
+    {
+        $payload = $this-&gt;getDefaultPayload($data);
+
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            $this-&gt;read($sessionId);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;exists) {
+            $this-&gt;performUpdate($sessionId, $payload);
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;performInsert($sessionId, $payload);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;exists = true;
+    }
+
+    /**
+     * Perform an insert operation on the session ID.
+     *
+     * @param  string  $sessionId
+     * @param  array&lt;string, mixed&gt;  $payload
+     * @return bool|null
+     */
+    <span style="background-color: red">p</span>rotected function performInsert($sessionId, $payload)
+    {
+        try {
+            return $this-&gt;getQuery()-&gt;insert(Arr::set($payload, &#039;id&#039;, $sessionId));
+        } <span style="background-color: red">c</span>atch (QueryException) {
+            $this-&gt;performUpdate($sessionId, $payload);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Perform an update operation on the session ID.
+     *
+     * @param  string  $sessionId
+     * @param  array&lt;string, mixed&gt;  $payload
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function performUpdate($sessionId, $payload)
+    {
+        return $this-&gt;getQuery()-&gt;where(&#039;id&#039;, $sessionId)-&gt;update($payload);
+    }
+
+    /**
+     * Get the default payload for the session.
+     *
+     * @param  string  $data
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getDefaultPayload($data)
+    {
+        $payload = [
+            &#039;payload&#039; =&gt; base64_encode($data),
+            &#039;last_activity&#039; =&gt; $this-&gt;currentTime(),
+        ];
+
+        <span style="background-color: red">i</span>f (! $this-&gt;container) {
+            return $payload;
+        <span style="background-color: red">}</span>
+
+        return tap($payload, <span style="background-color: red">f</span>unction (&amp;$payload) {
+            $this-&gt;addUserInformation($payload)
+                -&gt;addRequestInformation($payload);
+        });
+    }
+
+    /**
+     * Add the user information to the session payload.
+     *
+     * @param  array  $payload
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function addUserInformation(&amp;$payload)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container-&gt;bound(Guard::class)) {
+            $payload[&#039;user_id&#039;] = $this-&gt;userId();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Get the currently authenticated user&#039;s ID.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function userId()
+    {
+        return $this-&gt;container-&gt;make(Guard::class)-&gt;id();
+    }
+
+    /**
+     * Add the request information to the session payload.
+     *
+     * @param  array  $payload
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function addRequestInformation(&amp;$payload)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container-&gt;bound(&#039;request&#039;)) {
+            $payload = array_merge($payload, [
+                &#039;ip_address&#039; =&gt; $this-&gt;ipAddress(),
+                &#039;user_agent&#039; =&gt; $this-&gt;userAgent(),
+            ]);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Get the IP address for the current request.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function ipAddress()
+    {
+        return $this-&gt;container-&gt;make(&#039;request&#039;)-&gt;ip();
+    }
+
+    /**
+     * Get the user agent for the current request.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function userAgent()
+    {
+        return substr((string) $this-&gt;container-&gt;make(&#039;request&#039;)-&gt;header(&#039;User-Agent&#039;), 0, 500);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function destroy($sessionId): bool
+    {
+        $this-&gt;getQuery()-&gt;where(&#039;id&#039;, $sessionId)-&gt;delete();
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function gc($lifetime): int
+    {
+        return $this-&gt;getQuery()-&gt;where(&#039;last_activity&#039;, &#039;&lt;=&#039;, $this-&gt;currentTime() - $lifetime)-&gt;delete();
+    }
+
+    /**
+     * Get a fresh query builder instance for the table.
+     *
+     * @return \Illuminate\Database\Query\Builder
+     */
+    <span style="background-color: red">p</span>rotected function getQuery()
+    {
+        return $this-&gt;connection-&gt;table($this-&gt;table)-&gt;useWritePdo();
+    }
+
+    /**
+     * Set the application instance used by the handler.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $container
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setContainer($container)
+    {
+        $this-&gt;container = $container;
+
+        return $this;
+    }
+
+    /**
+     * Set the existence state for the session.
+     *
+     * @param  bool  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setExists($value)
+    {
+        $this-&gt;exists = $value;
+
+        return $this;
+    }
+}
+</pre>

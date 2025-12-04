@@ -1,0 +1,40 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Providers;
+
+use Illuminate\Contracts\Validation\ValidatesWhenResolved;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Routing\Redirector;
+use Illuminate\Support\ServiceProvider;
+
+class FormRequestServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function register()
+    {
+        //
+    }
+
+    /**
+     * Bootstrap the application services.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        $this-&gt;app-&gt;afterResolving(ValidatesWhenResolved::class, <span style="background-color: red">f</span>unction ($resolved) {
+            $resolved-&gt;validateResolved();
+        });
+
+        $this-&gt;app-&gt;resolving(FormRequest::class, <span style="background-color: red">f</span>unction ($request, $app) {
+            $request = FormRequest::createFrom($app[&#039;request&#039;], $request);
+
+            $request-&gt;setContainer($app)-&gt;setRedirector($app-&gt;make(Redirector::class));
+        });
+    }
+}
+</pre>

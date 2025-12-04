@@ -1,0 +1,128 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog;
+
+use ArrayAccess;
+
+/**
+ * Monolog log record
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ * @template-implements ArrayAccess&lt;&#039;message&#039;|&#039;level&#039;|&#039;context&#039;|&#039;level_name&#039;|&#039;channel&#039;|&#039;datetime&#039;|&#039;extra&#039;|&#039;formatted&#039;, int|string|\DateTimeImmutable|array&lt;mixed&gt;&gt;
+ */
+class LogRecord implements ArrayAccess
+{
+    private const MODIFIABLE_FIELDS = [
+        &#039;extra&#039; =&gt; true,
+        &#039;formatted&#039; =&gt; true,
+    ];
+
+    <span style="background-color: green">p</span>ublic function __construct(
+        public readonly \DateTimeImmutable $datetime,
+        public readonly string $channel,
+        public readonly Level $level,
+        public readonly string $message,
+        /** @var array&lt;mixed&gt; */
+        public readonly array $context = [],
+        /** @var array&lt;mixed&gt; */
+        public array $extra = [],
+        public mixed $formatted = null,
+    ) {
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetSet(mixed $offset, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f ($offset === &#039;extra&#039;) {
+            <span style="background-color: red">i</span>f (!\is_array($value)) {
+                throw new \InvalidArgumentException(&#039;extra must be an array&#039;);
+            <span style="background-color: red">}</span>
+
+            $this-&gt;extra = $value;
+
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($offset === &#039;formatted&#039;) {
+            $this-&gt;formatted = $value;
+
+            return;
+        <span style="background-color: red">}</span>
+
+        throw new \LogicException(&#039;Unsupported operation: setting &#039;.$offset);
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetExists(mixed $offset): bool
+    {
+        <span style="background-color: red">i</span>f ($offset === &#039;level_name&#039;) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        return isset($this-&gt;{$offset});
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetUnset(mixed $offset): void
+    {
+        throw new \LogicException(&#039;Unsupported operation&#039;);
+    }
+
+    <span style="background-color: red">p</span>ublic function &amp;offsetGet(mixed $offset): mixed
+    {
+        // handle special cases for the level enum
+        <span style="background-color: red">i</span>f ($offset === &#039;level_name&#039;) {
+            // avoid returning readonly props by ref as this is illegal
+            $copy = $this-&gt;level-&gt;getName();
+
+            return $copy;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f ($offset === &#039;level&#039;) {
+            // avoid returning readonly props by ref as this is illegal
+            $copy = $this-&gt;level-&gt;value;
+
+            return $copy;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset(self::MODIFIABLE_FIELDS[$offset])) {
+            return $this-&gt;{$offset};
+        <span style="background-color: red">}</span>
+
+        // avoid returning readonly props by ref as this is illegal
+        $copy = $this-&gt;{$offset};
+
+        return $copy;
+    }
+
+    /**
+     * @phpstan-return array{message: string, context: mixed[], level: value-of&lt;Level::VALUES&gt;, level_name: value-of&lt;Level::NAMES&gt;, channel: string, datetime: \DateTimeImmutable, extra: mixed[]}
+     */
+    <span style="background-color: green">p</span>ublic function toArray(): array
+    {
+        return [
+            &#039;message&#039; =&gt; $this-&gt;message,
+            &#039;context&#039; =&gt; $this-&gt;context,
+            &#039;level&#039; =&gt; $this-&gt;level-&gt;value,
+            &#039;level_name&#039; =&gt; $this-&gt;level-&gt;getName(),
+            &#039;channel&#039; =&gt; $this-&gt;channel,
+            &#039;datetime&#039; =&gt; $this-&gt;datetime,
+            &#039;extra&#039; =&gt; $this-&gt;extra,
+        ];
+    }
+
+    <span style="background-color: green">p</span>ublic function with(mixed ...$args): self
+    {
+        <span style="background-color: green">f</span>oreach ([&#039;message&#039;, &#039;context&#039;, &#039;level&#039;, &#039;channel&#039;, &#039;datetime&#039;, &#039;extra&#039;] as $prop) {
+            $args[$prop] ??= <span style="background-color: green">$</span>this-&gt;{$prop};
+        <span style="background-color: green">}</span>
+
+        return new self(...$args);
+    }
+}
+</pre>

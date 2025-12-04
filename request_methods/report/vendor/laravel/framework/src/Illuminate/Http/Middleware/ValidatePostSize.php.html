@@ -1,0 +1,53 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Exceptions\PostTooLargeException;
+
+class ValidatePostSize
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     *
+     * @throws \Illuminate\Http\Exceptions\PostTooLargeException
+     */
+    <span style="background-color: green">p</span>ublic function handle($request, Closure $next)
+    {
+        $max = $this-&gt;getPostMaxSize();
+
+        <span style="background-color: red">i</span>f ($max &gt; 0 &amp;&amp; <span style="background-color: green">$</span>request-&gt;server(&#039;CONTENT_LENGTH&#039;) &gt; $max) {
+            throw new PostTooLargeException(&#039;The POST data is too large.&#039;);
+        <span style="background-color: green">}</span>
+
+        return $next($request);
+    }
+
+    /**
+     * Determine the server &#039;post_max_size&#039; as bytes.
+     *
+     * @return int
+     */
+    <span style="background-color: green">p</span>rotected function getPostMaxSize()
+    {
+        <span style="background-color: red">i</span>f (is_numeric($postMaxSize = ini_get(&#039;post_max_size&#039;))) {
+            return (int) $postMaxSize;
+        <span style="background-color: green">}</span>
+
+        $metric = strtoupper(substr($postMaxSize, -1));
+
+        $postMaxSize = (int) $postMaxSize;
+
+        return match ($metric) {
+            &#039;K&#039; =&gt; <span style="background-color: red">$</span>postMaxSize * 1024,
+            &#039;M&#039; =&gt; <span style="background-color: green">$</span>postMaxSize * 1048576,
+            &#039;G&#039; =&gt; <span style="background-color: red">$</span>postMaxSize * 1073741824,
+            default =&gt; <span style="background-color: red">$</span>postMaxSize,
+        };
+    }
+}
+</pre>

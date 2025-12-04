@@ -1,0 +1,240 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpFoundation\Exception\UnexpectedValueException;
+
+/**
+ * ParameterBag is a container for key/value pairs.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @implements \IteratorAggregate&lt;string, mixed&gt;
+ */
+class ParameterBag implements \IteratorAggregate, \Countable
+{
+    <span style="background-color: green">p</span>ublic function __construct(
+        protected array $parameters = [],
+    ) {
+    }
+
+    /**
+     * Returns the parameters.
+     *
+     * @param string|null $key The name of the parameter to return or null to get them all
+     */
+    <span style="background-color: green">p</span>ublic function all(?string $key = null): array
+    {
+        <span style="background-color: green">i</span>f (null === $key) {
+            return $this-&gt;parameters;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!\is_array($value = $this-&gt;parameters[$key] ?? <span style="background-color: red">[</span>])) {
+            throw new BadRequestException(\sprintf(&#039;Unexpected value for parameter &quot;%s&quot;: expecting &quot;array&quot;, got &quot;%s&quot;.&#039;, $key, get_debug_type($value)));
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Returns the parameter keys.
+     */
+    <span style="background-color: red">p</span>ublic function keys(): array
+    {
+        return array_keys($this-&gt;parameters);
+    }
+
+    /**
+     * Replaces the current parameters by a new set.
+     */
+    <span style="background-color: red">p</span>ublic function replace(array $parameters = []): void
+    {
+        $this-&gt;parameters = $parameters;
+    }
+
+    /**
+     * Adds parameters.
+     */
+    <span style="background-color: red">p</span>ublic function add(array $parameters = []): void
+    {
+        $this-&gt;parameters = array_replace($this-&gt;parameters, $parameters);
+    }
+
+    <span style="background-color: green">p</span>ublic function get(string $key, mixed $default = null): mixed
+    {
+        return \array_key_exists($key, $this-&gt;parameters) ? $this-&gt;parameters[$key] : <span style="background-color: green">$</span>default;
+    }
+
+    <span style="background-color: green">p</span>ublic function set(string $key, mixed $value): void
+    {
+        $this-&gt;parameters[$key] = $value;
+    }
+
+    /**
+     * Returns true if the parameter is defined.
+     */
+    <span style="background-color: green">p</span>ublic function has(string $key): bool
+    {
+        return \array_key_exists($key, $this-&gt;parameters);
+    }
+
+    /**
+     * Removes a parameter.
+     */
+    <span style="background-color: red">p</span>ublic function remove(string $key): void
+    {
+        unset($this-&gt;parameters[$key]);
+    }
+
+    /**
+     * Returns the alphabetic characters of the parameter value.
+     */
+    <span style="background-color: red">p</span>ublic function getAlpha(string $key, string $default = &#039;&#039;): string
+    {
+        return preg_replace(&#039;/[^[:alpha:]]/&#039;, &#039;&#039;, $this-&gt;getString($key, $default));
+    }
+
+    /**
+     * Returns the alphabetic characters and digits of the parameter value.
+     */
+    <span style="background-color: red">p</span>ublic function getAlnum(string $key, string $default = &#039;&#039;): string
+    {
+        return preg_replace(&#039;/[^[:alnum:]]/&#039;, &#039;&#039;, $this-&gt;getString($key, $default));
+    }
+
+    /**
+     * Returns the digits of the parameter value.
+     */
+    <span style="background-color: red">p</span>ublic function getDigits(string $key, string $default = &#039;&#039;): string
+    {
+        return preg_replace(&#039;/[^[:digit:]]/&#039;, &#039;&#039;, $this-&gt;getString($key, $default));
+    }
+
+    /**
+     * Returns the parameter as string.
+     */
+    <span style="background-color: red">p</span>ublic function getString(string $key, string $default = &#039;&#039;): string
+    {
+        $value = $this-&gt;get($key, $default);
+        <span style="background-color: red">i</span>f (!\is_scalar($value) &amp;&amp; <span style="background-color: red">!</span>$value instanceof \Stringable) {
+            throw new UnexpectedValueException(\sprintf(&#039;Parameter value &quot;%s&quot; cannot be converted to &quot;string&quot;.&#039;, $key));
+        <span style="background-color: red">}</span>
+
+        return (string) $value;
+    }
+
+    /**
+     * Returns the parameter value converted to integer.
+     */
+    <span style="background-color: green">p</span>ublic function getInt(string $key, int $default = 0): int
+    {
+        return $this-&gt;filter($key, $default, \FILTER_VALIDATE_INT, [&#039;flags&#039; =&gt; \FILTER_REQUIRE_SCALAR]);
+    }
+
+    /**
+     * Returns the parameter value converted to boolean.
+     */
+    <span style="background-color: red">p</span>ublic function getBoolean(string $key, bool $default = false): bool
+    {
+        return $this-&gt;filter($key, $default, \FILTER_VALIDATE_BOOL, [&#039;flags&#039; =&gt; \FILTER_REQUIRE_SCALAR]);
+    }
+
+    /**
+     * Returns the parameter value converted to an enum.
+     *
+     * @template T of \BackedEnum
+     *
+     * @param class-string&lt;T&gt; $class
+     * @param ?T              $default
+     *
+     * @return ?T
+     *
+     * @psalm-return ($default is null ? T|null : T)
+     */
+    <span style="background-color: red">p</span>ublic function getEnum(string $key, string $class, ?\BackedEnum $default = null): ?\BackedEnum
+    {
+        $value = $this-&gt;get($key);
+
+        <span style="background-color: red">i</span>f (null === $value) {
+            return $default;
+        <span style="background-color: red">}</span>
+
+        try {
+            return $class::from($value);
+        } <span style="background-color: red">c</span>atch (\ValueError|\TypeError $e) {
+            throw new UnexpectedValueException(\sprintf(&#039;Parameter &quot;%s&quot; cannot be converted to enum: %s.&#039;, $key, $e-&gt;getMessage()), $e-&gt;getCode(), $e);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Filter key.
+     *
+     * @param int                                     $filter  FILTER_* constant
+     * @param int|array{flags?: int, options?: array} $options Flags from FILTER_* constants
+     *
+     * @see https://php.net/filter-var
+     */
+    <span style="background-color: green">p</span>ublic function filter(string $key, mixed $default = null, int $filter = \FILTER_DEFAULT, mixed $options = []): mixed
+    {
+        $value = $this-&gt;get($key, $default);
+
+        // Always turn $options into an array - this allows filter_var option shortcuts.
+        <span style="background-color: red">i</span>f (!\is_array($options) &amp;&amp; <span style="background-color: red">$</span>options) {
+            $options = [&#039;flags&#039; =&gt; $options];
+        <span style="background-color: green">}</span>
+
+        // Add a convenience check for arrays.
+        <span style="background-color: red">i</span>f (\is_array($value) &amp;&amp; <span style="background-color: red">!</span>isset($options[&#039;flags&#039;])) {
+            $options[&#039;flags&#039;] = \FILTER_REQUIRE_ARRAY;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (\is_object($value) &amp;&amp; <span style="background-color: red">!</span>$value instanceof \Stringable) {
+            throw new UnexpectedValueException(\sprintf(&#039;Parameter value &quot;%s&quot; cannot be filtered.&#039;, $key));
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ((\FILTER_CALLBACK &amp; $filter) &amp;&amp; <span style="background-color: red">!</span>(($options[&#039;options&#039;] ?? <span style="background-color: red">n</span>ull) instanceof \Closure)) {
+            throw new \InvalidArgumentException(\sprintf(&#039;A Closure must be passed to &quot;%s()&quot; when FILTER_CALLBACK is used, &quot;%s&quot; given.&#039;, __METHOD__, get_debug_type($options[&#039;options&#039;] ?? <span style="background-color: red">n</span>ull)));
+        <span style="background-color: green">}</span>
+
+        $options[&#039;flags&#039;] ??= <span style="background-color: red">0</span>;
+        $nullOnFailure = $options[&#039;flags&#039;] &amp; \FILTER_NULL_ON_FAILURE;
+        $options[&#039;flags&#039;] |= \FILTER_NULL_ON_FAILURE;
+
+        $value = filter_var($value, $filter, $options);
+
+        <span style="background-color: green">i</span>f (null !== $value || <span style="background-color: red">$</span>nullOnFailure) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        throw new \UnexpectedValueException(\sprintf(&#039;Parameter value &quot;%s&quot; is invalid and flag &quot;FILTER_NULL_ON_FAILURE&quot; was not set.&#039;, $key));
+    }
+
+    /**
+     * Returns an iterator for parameters.
+     *
+     * @return \ArrayIterator&lt;string, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getIterator(): \ArrayIterator
+    {
+        return new \ArrayIterator($this-&gt;parameters);
+    }
+
+    /**
+     * Returns the number of parameters.
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return \count($this-&gt;parameters);
+    }
+}
+</pre>

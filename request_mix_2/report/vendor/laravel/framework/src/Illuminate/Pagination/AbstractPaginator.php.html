@@ -1,0 +1,827 @@
+<pre>&lt;?php
+
+namespace Illuminate\Pagination;
+
+use Closure;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Tappable;
+use Illuminate\Support\Traits\TransformsToResourceCollection;
+use Stringable;
+use Traversable;
+
+/**
+ * @template TKey of array-key
+ *
+ * @template-covariant TValue
+ *
+ * @mixin \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+ */
+abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, Htmlable, Stringable
+{
+    use ForwardsCalls, Tappable, TransformsToResourceCollection;
+
+    /**
+     * All of the items being paginated.
+     *
+     * @var \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+     */
+    protected $items;
+
+    /**
+     * The number of items to be shown per page.
+     *
+     * @var int
+     */
+    protected $perPage;
+
+    /**
+     * The current page being &quot;viewed&quot;.
+     *
+     * @var int
+     */
+    protected $currentPage;
+
+    /**
+     * The base path to assign to all URLs.
+     *
+     * @var string
+     */
+    protected $path = &#039;/&#039;;
+
+    /**
+     * The query parameters to add to all URLs.
+     *
+     * @var array
+     */
+    protected $query = [];
+
+    /**
+     * The URL fragment to add to all URLs.
+     *
+     * @var string|null
+     */
+    protected $fragment;
+
+    /**
+     * The query string variable used to store the page.
+     *
+     * @var string
+     */
+    protected $pageName = &#039;page&#039;;
+
+    /**
+     * Indicates that the paginator&#039;s string representation should be escaped when __toString is invoked.
+     *
+     * @var bool
+     */
+    protected $escapeWhenCastingToString = false;
+
+    /**
+     * The number of links to display on each side of current page link.
+     *
+     * @var int
+     */
+    public $onEachSide = 3;
+
+    /**
+     * The paginator options.
+     *
+     * @var array
+     */
+    protected $options;
+
+    /**
+     * The current path resolver callback.
+     *
+     * @var \Closure
+     */
+    protected static $currentPathResolver;
+
+    /**
+     * The current page resolver callback.
+     *
+     * @var \Closure
+     */
+    protected static $currentPageResolver;
+
+    /**
+     * The query string resolver callback.
+     *
+     * @var \Closure
+     */
+    protected static $queryStringResolver;
+
+    /**
+     * The view factory resolver callback.
+     *
+     * @var \Closure
+     */
+    protected static $viewFactoryResolver;
+
+    /**
+     * The default pagination view.
+     *
+     * @var string
+     */
+    public static $defaultView = &#039;pagination::tailwind&#039;;
+
+    /**
+     * The default &quot;simple&quot; pagination view.
+     *
+     * @var string
+     */
+    public static $defaultSimpleView = &#039;pagination::simple-tailwind&#039;;
+
+    /**
+     * Determine if the given value is a valid page number.
+     *
+     * @param  int  $page
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isValidPageNumber($page)
+    {
+        return $page &gt;= 1 &amp;&amp; <span style="background-color: red">f</span>ilter_var($page, FILTER_VALIDATE_INT) !== false;
+    }
+
+    /**
+     * Get the URL for the previous page.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function previousPageUrl()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;currentPage() &gt; 1) {
+            return $this-&gt;url($this-&gt;currentPage() - 1);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a range of pagination URLs.
+     *
+     * @param  int  $start
+     * @param  int  $end
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getUrlRange($start, $end)
+    {
+        return Collection::range($start, $end)
+            -&gt;mapWithKeys(fn ($page) =&gt; <span style="background-color: red">[</span>$page =&gt; $this-&gt;url($page)])
+            -&gt;all();
+    }
+
+    /**
+     * Get the URL for a given page number.
+     *
+     * @param  int  $page
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function url($page)
+    {
+        <span style="background-color: red">i</span>f ($page &lt;= 0) {
+            $page = 1;
+        <span style="background-color: red">}</span>
+
+        // If we have any extra query string key / value pairs that need to be added
+        // onto the URL, we will put them in query string form and then attach it
+        // to the URL. This allows for extra information like sortings storage.
+        $parameters = [$this-&gt;pageName =&gt; $page];
+
+        <span style="background-color: red">i</span>f (count($this-&gt;query) &gt; 0) {
+            $parameters = array_merge($this-&gt;query, $parameters);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;path()
+                        .(str_contains($this-&gt;path(), &#039;?&#039;) ? &#039;&amp;&#039; : <span style="background-color: red">'</span>?&#039;)
+                        .Arr::query($parameters)
+                        .$this-&gt;buildFragment();
+    }
+
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * @param  string|null  $fragment
+     * @return $this|string|null
+     */
+    <span style="background-color: red">p</span>ublic function fragment($fragment = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($fragment)) {
+            return $this-&gt;fragment;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;fragment = $fragment;
+
+        return $this;
+    }
+
+    /**
+     * Add a set of query string values to the paginator.
+     *
+     * @param  array|string|null  $key
+     * @param  string|null  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function appends($key, $value = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($key)) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_array($key)) {
+            return $this-&gt;appendArray($key);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;addQuery($key, $value);
+    }
+
+    /**
+     * Add an array of query string values.
+     *
+     * @param  array  $keys
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function appendArray(array $keys)
+    {
+        <span style="background-color: red">f</span>oreach ($keys as $key =&gt; $value) {
+            $this-&gt;addQuery($key, $value);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add all current query string values to the paginator.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withQueryString()
+    {
+        <span style="background-color: red">i</span>f (isset(static::$queryStringResolver)) {
+            return $this-&gt;appends(call_user_func(static::$queryStringResolver));
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Add a query string value to the paginator.
+     *
+     * @param  string  $key
+     * @param  string  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function addQuery($key, $value)
+    {
+        <span style="background-color: red">i</span>f ($key !== $this-&gt;pageName) {
+            $this-&gt;query[$key] = $value;
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Build the full fragment portion of a URL.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function buildFragment()
+    {
+        return $this-&gt;fragment ? &#039;#&#039;.$this-&gt;fragment : <span style="background-color: red">'</span>&#039;;
+    }
+
+    /**
+     * Load a set of relationships onto the mixed relationship collection.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorph($relation, $relations)
+    {
+        $this-&gt;getCollection()-&gt;loadMorph($relation, $relations);
+
+        return $this;
+    }
+
+    /**
+     * Load a set of relationship counts onto the mixed relationship collection.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphCount($relation, $relations)
+    {
+        $this-&gt;getCollection()-&gt;loadMorphCount($relation, $relations);
+
+        return $this;
+    }
+
+    /**
+     * Get the slice of items being paginated.
+     *
+     * @return array&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function items()
+    {
+        return $this-&gt;items-&gt;all();
+    }
+
+    /**
+     * Get the number of the first item in the slice.
+     *
+     * @return int|null
+     */
+    <span style="background-color: red">p</span>ublic function firstItem()
+    {
+        return count($this-&gt;items) &gt; 0 ? ($this-&gt;currentPage - 1) * $this-&gt;perPage + 1 : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get the number of the last item in the slice.
+     *
+     * @return int|null
+     */
+    <span style="background-color: red">p</span>ublic function lastItem()
+    {
+        return count($this-&gt;items) &gt; 0 ? $this-&gt;firstItem() + $this-&gt;count() - 1 : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Transform each item in the slice of items using a callback.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function through(callable $callback)
+    {
+        $this-&gt;items-&gt;transform($callback);
+
+        return $this;
+    }
+
+    /**
+     * Get the number of items shown per page.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function perPage()
+    {
+        return $this-&gt;perPage;
+    }
+
+    /**
+     * Determine if there are enough items to split into multiple pages.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasPages()
+    {
+        return $this-&gt;currentPage() != 1 || <span style="background-color: red">$</span>this-&gt;hasMorePages();
+    }
+
+    /**
+     * Determine if the paginator is on the first page.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function onFirstPage()
+    {
+        return $this-&gt;currentPage() &lt;= 1;
+    }
+
+    /**
+     * Determine if the paginator is on the last page.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function onLastPage()
+    {
+        return ! $this-&gt;hasMorePages();
+    }
+
+    /**
+     * Get the current page.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function currentPage()
+    {
+        return $this-&gt;currentPage;
+    }
+
+    /**
+     * Get the query string variable used to store the page.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getPageName()
+    {
+        return $this-&gt;pageName;
+    }
+
+    /**
+     * Set the query string variable used to store the page.
+     *
+     * @param  string  $name
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setPageName($name)
+    {
+        $this-&gt;pageName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Set the base path to assign to all URLs.
+     *
+     * @param  string  $path
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withPath($path)
+    {
+        return $this-&gt;setPath($path);
+    }
+
+    /**
+     * Set the base path to assign to all URLs.
+     *
+     * @param  string  $path
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setPath($path)
+    {
+        $this-&gt;path = $path;
+
+        return $this;
+    }
+
+    /**
+     * Set the number of links to display on each side of current page link.
+     *
+     * @param  int  $count
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function onEachSide($count)
+    {
+        $this-&gt;onEachSide = $count;
+
+        return $this;
+    }
+
+    /**
+     * Get the base path for paginator generated URLs.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function path()
+    {
+        return $this-&gt;path;
+    }
+
+    /**
+     * Resolve the current request path or return the default value.
+     *
+     * @param  string  $default
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function resolveCurrentPath($default = &#039;/&#039;)
+    {
+        <span style="background-color: red">i</span>f (isset(static::$currentPathResolver)) {
+            return call_user_func(static::$currentPathResolver);
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+
+    /**
+     * Set the current request path resolver callback.
+     *
+     * @param  \Closure  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function currentPathResolver(Closure $resolver)
+    {
+        static::$currentPathResolver = $resolver;
+    }
+
+    /**
+     * Resolve the current page or return the default value.
+     *
+     * @param  string  $pageName
+     * @param  int  $default
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic static function resolveCurrentPage($pageName = &#039;page&#039;, $default = 1)
+    {
+        <span style="background-color: red">i</span>f (isset(static::$currentPageResolver)) {
+            return (int) call_user_func(static::$currentPageResolver, $pageName);
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+
+    /**
+     * Set the current page resolver callback.
+     *
+     * @param  \Closure  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function currentPageResolver(Closure $resolver)
+    {
+        static::$currentPageResolver = $resolver;
+    }
+
+    /**
+     * Resolve the query string or return the default value.
+     *
+     * @param  string|array|null  $default
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function resolveQueryString($default = null)
+    {
+        <span style="background-color: red">i</span>f (isset(static::$queryStringResolver)) {
+            return (static::$queryStringResolver)();
+        <span style="background-color: red">}</span>
+
+        return $default;
+    }
+
+    /**
+     * Set with query string resolver callback.
+     *
+     * @param  \Closure  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function queryStringResolver(Closure $resolver)
+    {
+        static::$queryStringResolver = $resolver;
+    }
+
+    /**
+     * Get an instance of the view factory from the resolver.
+     *
+     * @return \Illuminate\Contracts\View\Factory
+     */
+    <span style="background-color: red">p</span>ublic static function viewFactory()
+    {
+        return call_user_func(static::$viewFactoryResolver);
+    }
+
+    /**
+     * Set the view factory resolver callback.
+     *
+     * @param  \Closure  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function viewFactoryResolver(Closure $resolver)
+    {
+        static::$viewFactoryResolver = $resolver;
+    }
+
+    /**
+     * Set the default pagination view.
+     *
+     * @param  string  $view
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function defaultView($view)
+    {
+        static::$defaultView = $view;
+    }
+
+    /**
+     * Set the default &quot;simple&quot; pagination view.
+     *
+     * @param  string  $view
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function defaultSimpleView($view)
+    {
+        static::$defaultSimpleView = $view;
+    }
+
+    /**
+     * Indicate that Tailwind styling should be used for generated links.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function useTailwind()
+    {
+        static::defaultView(&#039;pagination::tailwind&#039;);
+        static::defaultSimpleView(&#039;pagination::simple-tailwind&#039;);
+    }
+
+    /**
+     * Indicate that Bootstrap 4 styling should be used for generated links.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function useBootstrap()
+    {
+        static::useBootstrapFour();
+    }
+
+    /**
+     * Indicate that Bootstrap 3 styling should be used for generated links.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function useBootstrapThree()
+    {
+        static::defaultView(&#039;pagination::default&#039;);
+        static::defaultSimpleView(&#039;pagination::simple-default&#039;);
+    }
+
+    /**
+     * Indicate that Bootstrap 4 styling should be used for generated links.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function useBootstrapFour()
+    {
+        static::defaultView(&#039;pagination::bootstrap-4&#039;);
+        static::defaultSimpleView(&#039;pagination::simple-bootstrap-4&#039;);
+    }
+
+    /**
+     * Indicate that Bootstrap 5 styling should be used for generated links.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function useBootstrapFive()
+    {
+        static::defaultView(&#039;pagination::bootstrap-5&#039;);
+        static::defaultSimpleView(&#039;pagination::simple-bootstrap-5&#039;);
+    }
+
+    /**
+     * Get an iterator for the items.
+     *
+     * @return \ArrayIterator&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getIterator(): Traversable
+    {
+        return $this-&gt;items-&gt;getIterator();
+    }
+
+    /**
+     * Determine if the list of items is empty.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isEmpty()
+    {
+        return $this-&gt;items-&gt;isEmpty();
+    }
+
+    /**
+     * Determine if the list of items is not empty.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isNotEmpty()
+    {
+        return $this-&gt;items-&gt;isNotEmpty();
+    }
+
+    /**
+     * Get the number of items for the current page.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return $this-&gt;items-&gt;count();
+    }
+
+    /**
+     * Get the paginator&#039;s underlying collection.
+     *
+     * @return \Illuminate\Support\Collection&lt;TKey, TValue&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getCollection()
+    {
+        return $this-&gt;items;
+    }
+
+    /**
+     * Set the paginator&#039;s underlying collection.
+     *
+     * @param  \Illuminate\Support\Collection&lt;TKey, TValue&gt;  $collection
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setCollection(Collection $collection)
+    {
+        $this-&gt;items = $collection;
+
+        return $this;
+    }
+
+    /**
+     * Get the paginator options.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getOptions()
+    {
+        return $this-&gt;options;
+    }
+
+    /**
+     * Determine if the given item exists.
+     *
+     * @param  TKey  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function offsetExists($key): bool
+    {
+        return $this-&gt;items-&gt;has($key);
+    }
+
+    /**
+     * Get the item at the given offset.
+     *
+     * @param  TKey  $key
+     * @return TValue|null
+     */
+    <span style="background-color: red">p</span>ublic function offsetGet($key): mixed
+    {
+        return $this-&gt;items-&gt;get($key);
+    }
+
+    /**
+     * Set the item at the given offset.
+     *
+     * @param  TKey|null  $key
+     * @param  TValue  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet($key, $value): void
+    {
+        $this-&gt;items-&gt;put($key, $value);
+    }
+
+    /**
+     * Unset the item at the given key.
+     *
+     * @param  TKey  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset($key): void
+    {
+        $this-&gt;items-&gt;forget($key);
+    }
+
+    /**
+     * Render the contents of the paginator to HTML.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function toHtml()
+    {
+        return (string) $this-&gt;render();
+    }
+
+    /**
+     * Make dynamic calls into the collection.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;forwardCallTo($this-&gt;getCollection(), $method, $parameters);
+    }
+
+    /**
+     * Render the contents of the paginator when casting to a string.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function __toString()
+    {
+        return $this-&gt;escapeWhenCastingToString
+            ? e((string) $this-&gt;render())
+            : <span style="background-color: red">(</span>string) $this-&gt;render();
+    }
+
+    /**
+     * Indicate that the paginator&#039;s string representation should be escaped when __toString is invoked.
+     *
+     * @param  bool  $escape
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function escapeWhenCastingToString($escape = true)
+    {
+        $this-&gt;escapeWhenCastingToString = $escape;
+
+        return $this;
+    }
+}
+</pre>

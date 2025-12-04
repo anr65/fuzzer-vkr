@@ -1,0 +1,194 @@
+<pre>&lt;?php
+
+namespace Illuminate\Testing\Concerns;
+
+use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Testing;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\ParallelTesting;
+use Illuminate\Support\Facades\Schema;
+
+trait TestDatabases
+{
+    /**
+     * Indicates if the test database schema is up to date.
+     *
+     * @var bool
+     */
+    protected static $schemaIsUpToDate = false;
+
+    /**
+     * Boot a test database.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function bootTestDatabase()
+    {
+        ParallelTesting::setUpProcess(<span style="background-color: red">f</span>unction () {
+            $this-&gt;whenNotUsingInMemoryDatabase(<span style="background-color: red">f</span>unction ($database) {
+                <span style="background-color: red">i</span>f (ParallelTesting::option(&#039;recreate_databases&#039;)) {
+                    Schema::dropDatabaseIfExists(
+                        $this-&gt;testDatabase($database)
+                    );
+                <span style="background-color: red">}</span>
+            });
+        });
+
+        ParallelTesting::setUpTestCase(<span style="background-color: red">f</span>unction ($testCase) {
+            $uses = array_flip(class_uses_recursive(get_class($testCase)));
+
+            $databaseTraits = [
+                Testing\DatabaseMigrations::class,
+                Testing\DatabaseTransactions::class,
+                Testing\DatabaseTruncation::class,
+                Testing\RefreshDatabase::class,
+            ];
+
+            <span style="background-color: red">i</span>f (Arr::hasAny($uses, $databaseTraits) &amp;&amp; <span style="background-color: red">!</span> ParallelTesting::option(&#039;without_databases&#039;)) {
+                $this-&gt;whenNotUsingInMemoryDatabase(<span style="background-color: red">f</span>unction ($database) use ($uses) {
+                    [$testDatabase, $created] = $this-&gt;ensureTestDatabaseExists($database);
+
+                    $this-&gt;switchToDatabase($testDatabase);
+
+                    <span style="background-color: red">i</span>f (isset($uses[Testing\DatabaseTransactions::class])) {
+                        $this-&gt;ensureSchemaIsUpToDate();
+                    <span style="background-color: red">}</span>
+
+                    <span style="background-color: red">i</span>f ($created) {
+                        ParallelTesting::callSetUpTestDatabaseCallbacks($testDatabase);
+                    <span style="background-color: red">}</span>
+                });
+            <span style="background-color: red">}</span>
+        });
+
+        ParallelTesting::tearDownProcess(<span style="background-color: red">f</span>unction () {
+            $this-&gt;whenNotUsingInMemoryDatabase(<span style="background-color: red">f</span>unction ($database) {
+                <span style="background-color: red">i</span>f (ParallelTesting::option(&#039;drop_databases&#039;)) {
+                    Schema::dropDatabaseIfExists(
+                        $this-&gt;testDatabase($database)
+                    );
+                <span style="background-color: red">}</span>
+            });
+        });
+    }
+
+    /**
+     * Ensure a test database exists and returns its name.
+     *
+     * @param  string  $database
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function ensureTestDatabaseExists($database)
+    {
+        $testDatabase = $this-&gt;testDatabase($database);
+
+        try {
+            $this-&gt;usingDatabase($testDatabase, <span style="background-color: red">f</span>unction () {
+                Schema::hasTable(&#039;dummy&#039;);
+            });
+        } <span style="background-color: red">c</span>atch (QueryException) {
+            $this-&gt;usingDatabase($database, <span style="background-color: red">f</span>unction () use ($testDatabase) {
+                Schema::dropDatabaseIfExists($testDatabase);
+                Schema::createDatabase($testDatabase);
+            });
+
+            return [$testDatabase, true];
+        <span style="background-color: red">}</span>
+
+        return [$testDatabase, false];
+    }
+
+    /**
+     * Ensure the current database test schema is up to date.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function ensureSchemaIsUpToDate()
+    {
+        <span style="background-color: red">i</span>f (! static::$schemaIsUpToDate) {
+            Artisan::call(&#039;migrate&#039;);
+
+            static::$schemaIsUpToDate = true;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Runs the given callable using the given database.
+     *
+     * @param  string  $database
+     * @param  callable  $callable
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function usingDatabase($database, $callable)
+    {
+        $original = DB::getConfig(&#039;database&#039;);
+
+        try {
+            $this-&gt;switchToDatabase($database);
+            $callable();
+        } <span style="background-color: red">f</span>inally {
+            $this-&gt;switchToDatabase($original);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Apply the given callback when tests are not using in memory database.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function whenNotUsingInMemoryDatabase($callback)
+    {
+        <span style="background-color: red">i</span>f (ParallelTesting::option(&#039;without_databases&#039;)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $database = DB::getConfig(&#039;database&#039;);
+
+        <span style="background-color: red">i</span>f ($database !== &#039;:memory:&#039;) {
+            $callback($database);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Switch to the given database.
+     *
+     * @param  string  $database
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function switchToDatabase($database)
+    {
+        DB::purge();
+
+        $default = config(&#039;database.default&#039;);
+
+        $url = config(&quot;database.connections.{$default}.url&quot;);
+
+        <span style="background-color: red">i</span>f ($url) {
+            config()-&gt;set(
+                &quot;database.connections.{$default}.url&quot;,
+                preg_replace(&#039;/^(.*)(\/[\w-]*)(\??.*)$/&#039;, &quot;$1/{$database}$3&quot;, $url),
+            );
+        } <span style="background-color: red">e</span>lse {
+            config()-&gt;set(
+                &quot;database.connections.{$default}.database&quot;,
+                $database,
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns the test database name.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function testDatabase($database)
+    {
+        $token = ParallelTesting::token();
+
+        return &quot;{$database}_test_{$token}&quot;;
+    }
+}
+</pre>

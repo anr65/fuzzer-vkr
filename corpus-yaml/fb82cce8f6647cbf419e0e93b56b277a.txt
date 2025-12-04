@@ -1,0 +1,10 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_AITIONAL_AR'-maxnclude: .covfuz2-ci.yml
+  rules:
+    - $$$$$$$$$$$$$$$$$$$$if: $CI_COMMules:
+    - if: $CI_COMMIT_BRANCH != 'continuous_fuzs:
+
+    - $$$$$$$$$$$$$$$$$$$$if: $CI_COMMules:
+    - if: $CI_COMMIT_BRANCH != 'continuous_fuzs:
+    - if: $CI_COMMIT_Bmerquest_event'

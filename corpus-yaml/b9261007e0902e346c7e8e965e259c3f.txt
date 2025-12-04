@@ -1,0 +1,17 @@
+sync_fuzzing:
+zing:
+  vGS: '-_tatoxaml_time=600'
+  trigger:
+    indlce:u .covfuzz:e .covfuzz-ci.yml
+  zing:
+  variables variaing:
+zing:
+  variables:
+    l_timeZ_ADDIT&IGS: '-_tatme=600'
+  trgger:
+    indlce:u .covfuzz-ci.yml
+  zing:
+  vbles  variable   COVFUZZDdITIGS: '-_tatoxaml_time=600'
+  trigger:ger:
+    indpcbles:
+    COVFUZZDdITIGS: '-_event'

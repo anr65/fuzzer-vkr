@@ -1,0 +1,102 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+class DefaultProviders
+{
+    /**
+     * The current providers.
+     *
+     * @var array
+     */
+    protected $providers;
+
+    /**
+     * Create a new default provider collection.
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?array $providers = null)
+    {
+        $this-&gt;providers = $providers ?: <span style="background-color: green">[</span>
+            \Illuminate\Auth\AuthServiceProvider::class,
+            \Illuminate\Broadcasting\BroadcastServiceProvider::class,
+            \Illuminate\Bus\BusServiceProvider::class,
+            \Illuminate\Cache\CacheServiceProvider::class,
+            \Illuminate\Foundation\Providers\ConsoleSupportServiceProvider::class,
+            \Illuminate\Concurrency\ConcurrencyServiceProvider::class,
+            \Illuminate\Cookie\CookieServiceProvider::class,
+            \Illuminate\Database\DatabaseServiceProvider::class,
+            \Illuminate\Encryption\EncryptionServiceProvider::class,
+            \Illuminate\Filesystem\FilesystemServiceProvider::class,
+            \Illuminate\Foundation\Providers\FoundationServiceProvider::class,
+            \Illuminate\Hashing\HashServiceProvider::class,
+            \Illuminate\Mail\MailServiceProvider::class,
+            \Illuminate\Notifications\NotificationServiceProvider::class,
+            \Illuminate\Pagination\PaginationServiceProvider::class,
+            \Illuminate\Auth\Passwords\PasswordResetServiceProvider::class,
+            \Illuminate\Pipeline\PipelineServiceProvider::class,
+            \Illuminate\Queue\QueueServiceProvider::class,
+            \Illuminate\Redis\RedisServiceProvider::class,
+            \Illuminate\Session\SessionServiceProvider::class,
+            \Illuminate\Translation\TranslationServiceProvider::class,
+            \Illuminate\Validation\ValidationServiceProvider::class,
+            \Illuminate\View\ViewServiceProvider::class,
+        ];
+    }
+
+    /**
+     * Merge the given providers into the provider collection.
+     *
+     * @param  array  $providers
+     * @return static
+     */
+    <span style="background-color: green">p</span>ublic function merge(array $providers)
+    {
+        $this-&gt;providers = array_merge($this-&gt;providers, $providers);
+
+        return new static($this-&gt;providers);
+    }
+
+    /**
+     * Replace the given providers with other providers.
+     *
+     * @param  array  $replacements
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function replace(array $replacements)
+    {
+        $current = new Collection($this-&gt;providers);
+
+        <span style="background-color: red">f</span>oreach ($replacements as $from =&gt; $to) {
+            $key = $current-&gt;search($from);
+
+            $current = is_int($key) ? $current-&gt;replace([$key =&gt; $to]) : <span style="background-color: red">$</span>current;
+        <span style="background-color: red">}</span>
+
+        return new static($current-&gt;values()-&gt;toArray());
+    }
+
+    /**
+     * Disable the given providers.
+     *
+     * @param  array  $providers
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function except(array $providers)
+    {
+        return new static((new Collection($this-&gt;providers))
+            -&gt;reject(fn ($p) =&gt; <span style="background-color: red">i</span>n_array($p, $providers))
+            -&gt;values()
+            -&gt;toArray());
+    }
+
+    /**
+     * Convert the provider collection to an array.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function toArray()
+    {
+        return $this-&gt;providers;
+    }
+}
+</pre>

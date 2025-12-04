@@ -1,0 +1,319 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Exceptions\InvalidFormatException;
+use Carbon\FactoryImmutable;
+use DateTimeZone;
+use ReturnTypeWillChange;
+use Throwable;
+
+/**
+ * Trait Serialization.
+ *
+ * Serialization and JSON stuff.
+ *
+ * Depends on the following properties:
+ *
+ * @property int $year
+ * @property int $month
+ * @property int $daysInMonth
+ * @property int $quarter
+ *
+ * Depends on the following methods:
+ *
+ * @method string|static locale(string $locale = null, string ...$fallbackLocales)
+ * @method string        toJSON()
+ */
+trait Serialization
+{
+    use ObjectInitialisation;
+
+    /**
+     * List of key to use for dump/serialization.
+     *
+     * @var string[]
+     */
+    protected array $dumpProperties = [&#039;date&#039;, &#039;timezone_type&#039;, &#039;timezone&#039;];
+
+    /**
+     * Locale to dump comes here before serialization.
+     *
+     * @var string|null
+     */
+    protected $dumpLocale;
+
+    /**
+     * Embed date properties to dump in a dedicated variables so it won&#039;t overlap native
+     * DateTime ones.
+     *
+     * @var array|null
+     */
+    protected $dumpDateProperties;
+
+    /**
+     * Return a serialized string of the instance.
+     */
+    <span style="background-color: red">p</span>ublic function serialize(): string
+    {
+        return serialize($this);
+    }
+
+    /**
+     * Create an instance from a serialized string.
+     *
+     * @param string $value
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function fromSerialized($value): static
+    {
+        $instance = @unserialize((string) $value);
+
+        <span style="background-color: red">i</span>f (!$instance instanceof static) {
+            throw new InvalidFormatException(&quot;Invalid serialized value: $value&quot;);
+        <span style="background-color: red">}</span>
+
+        return $instance;
+    }
+
+    /**
+     * The __set_state handler.
+     *
+     * @param string|array $dump
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[ReturnTypeWillChange]
+    public static function __set_state($dump): static
+    {
+        <span style="background-color: red">i</span>f (\is_string($dump)) {
+            return static::parse($dump);
+        <span style="background-color: red">}</span>
+
+        /** @var \DateTimeInterface $date */
+        $date = get_parent_class(static::class) &amp;&amp; <span style="background-color: red">m</span>ethod_exists(parent::class, &#039;__set_state&#039;)
+            ? parent::__set_state((array) $dump)
+            : <span style="background-color: red">(</span>object) $dump;
+
+        return static::instance($date);
+    }
+
+    /**
+     * Returns the list of properties to dump on serialize() called on.
+     *
+     * Only used by PHP &lt; 7.4.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function __sleep()
+    {
+        $properties = $this-&gt;getSleepProperties();
+
+        <span style="background-color: red">i</span>f ($this-&gt;localTranslator ?? <span style="background-color: red">n</span>ull) {
+            $properties[] = &#039;dumpLocale&#039;;
+            $this-&gt;dumpLocale = $this-&gt;locale ?? <span style="background-color: red">n</span>ull;
+        <span style="background-color: red">}</span>
+
+        return $properties;
+    }
+
+    /**
+     * Returns the values to dump on serialize() called on.
+     *
+     * Only used by PHP &gt;= 7.4.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function __serialize(): array
+    {
+        // @codeCoverageIgnoreStart
+        <span style="background-color: red">i</span>f (isset($this-&gt;timezone_type, $this-&gt;timezone, $this-&gt;date)) {
+            return [
+                &#039;date&#039; =&gt; $this-&gt;date,
+                &#039;timezone_type&#039; =&gt; $this-&gt;timezone_type,
+                &#039;timezone&#039; =&gt; $this-&gt;dumpTimezone($this-&gt;timezone),
+            ];
+        <span style="background-color: red">}</span>
+        // @codeCoverageIgnoreEnd
+
+        $timezone = $this-&gt;getTimezone();
+        $export = [
+            &#039;date&#039; =&gt; $this-&gt;format(&#039;Y-m-d H:i:s.u&#039;),
+            &#039;timezone_type&#039; =&gt; $timezone-&gt;getType(),
+            &#039;timezone&#039; =&gt; $timezone-&gt;getName(),
+        ];
+
+        // @codeCoverageIgnoreStart
+        <span style="background-color: red">i</span>f (\extension_loaded(&#039;msgpack&#039;) &amp;&amp; <span style="background-color: red">i</span>sset($this-&gt;constructedObjectId)) {
+            $timezone = $this-&gt;timezone ?? <span style="background-color: red">n</span>ull;
+            $export[&#039;dumpDateProperties&#039;] = [
+                &#039;date&#039; =&gt; $this-&gt;format(&#039;Y-m-d H:i:s.u&#039;),
+                &#039;timezone&#039; =&gt; $this-&gt;dumpTimezone($timezone),
+            ];
+        <span style="background-color: red">}</span>
+        // @codeCoverageIgnoreEnd
+
+        <span style="background-color: red">i</span>f ($this-&gt;localTranslator ?? <span style="background-color: red">n</span>ull) {
+            $export[&#039;dumpLocale&#039;] = $this-&gt;locale ?? <span style="background-color: red">n</span>ull;
+        <span style="background-color: red">}</span>
+
+        return $export;
+    }
+
+    /**
+     * Set locale if specified on unserialize() called.
+     *
+     * Only used by PHP &lt; 7.4.
+     */
+    <span style="background-color: red">p</span>ublic function __wakeup(): void
+    {
+        <span style="background-color: red">i</span>f (parent::class &amp;&amp; <span style="background-color: red">m</span>ethod_exists(parent::class, &#039;__wakeup&#039;)) {
+            // @codeCoverageIgnoreStart
+            try {
+                parent::__wakeup();
+            } <span style="background-color: red">c</span>atch (Throwable $exception) {
+                try {
+                    // FatalError occurs when calling msgpack_unpack() in PHP 7.4 or later.
+                    [&#039;date&#039; =&gt; $date, &#039;timezone&#039; =&gt; $timezone] = $this-&gt;dumpDateProperties;
+                    parent::__construct($date, $timezone);
+                } <span style="background-color: red">c</span>atch (Throwable) {
+                    throw $exception;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+            // @codeCoverageIgnoreEnd
+        <span style="background-color: red">}</span>
+
+        $this-&gt;constructedObjectId = spl_object_hash($this);
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;dumpLocale)) {
+            $this-&gt;locale($this-&gt;dumpLocale);
+            $this-&gt;dumpLocale = null;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;cleanupDumpProperties();
+    }
+
+    /**
+     * Set locale if specified on unserialize() called.
+     *
+     * Only used by PHP &gt;= 7.4.
+     */
+    <span style="background-color: red">p</span>ublic function __unserialize(array $data): void
+    {
+        // @codeCoverageIgnoreStart
+        try {
+            $this-&gt;__construct($data[&#039;date&#039;] ?? <span style="background-color: red">n</span>ull, $data[&#039;timezone&#039;] ?? <span style="background-color: red">n</span>ull);
+        } <span style="background-color: red">c</span>atch (Throwable $exception) {
+            <span style="background-color: red">i</span>f (!isset($data[&#039;dumpDateProperties&#039;][&#039;date&#039;], $data[&#039;dumpDateProperties&#039;][&#039;timezone&#039;])) {
+                throw $exception;
+            <span style="background-color: red">}</span>
+
+            try {
+                // FatalError occurs when calling msgpack_unpack() in PHP 7.4 or later.
+                [&#039;date&#039; =&gt; $date, &#039;timezone&#039; =&gt; $timezone] = $data[&#039;dumpDateProperties&#039;];
+                $this-&gt;__construct($date, $timezone);
+            } <span style="background-color: red">c</span>atch (Throwable) {
+                throw $exception;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+        // @codeCoverageIgnoreEnd
+
+        <span style="background-color: red">i</span>f (isset($data[&#039;dumpLocale&#039;])) {
+            $this-&gt;locale($data[&#039;dumpLocale&#039;]);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Prepare the object for JSON serialization.
+     */
+    <span style="background-color: red">p</span>ublic function jsonSerialize(): mixed
+    {
+        $serializer = $this-&gt;localSerializer
+            ?? <span style="background-color: red">$</span>this-&gt;getFactory()-&gt;getSettings()[&#039;toJsonFormat&#039;]
+            ?? <span style="background-color: red">n</span>ull;
+
+        <span style="background-color: red">i</span>f ($serializer) {
+            return \is_string($serializer)
+                ? $this-&gt;rawFormat($serializer)
+                : <span style="background-color: red">$</span>serializer($this);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;toJSON();
+    }
+
+    /**
+     * @deprecated To avoid conflict between different third-party libraries, static setters should not be used.
+     *             You should rather transform Carbon object before the serialization.
+     *
+     * JSON serialize all Carbon instances using the given callback.
+     */
+    <span style="background-color: red">p</span>ublic static function serializeUsing(string|callable|null $format): void
+    {
+        FactoryImmutable::getDefaultInstance()-&gt;serializeUsing($format);
+    }
+
+    /**
+     * Cleanup properties attached to the public scope of DateTime when a dump of the date is requested.
+     * foreach ($date as $_) {}
+     * serializer($date)
+     * var_export($date)
+     * get_object_vars($date)
+     */
+    <span style="background-color: red">p</span>ublic function cleanupDumpProperties(): self
+    {
+        // @codeCoverageIgnoreStart
+        <span style="background-color: red">i</span>f (PHP_VERSION &lt; 8.2) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;dumpProperties as $property) {
+                <span style="background-color: red">i</span>f (isset($this-&gt;$property)) {
+                    unset($this-&gt;$property);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+        // @codeCoverageIgnoreEnd
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>rivate function getSleepProperties(): array
+    {
+        $properties = $this-&gt;dumpProperties;
+
+        // @codeCoverageIgnoreStart
+        <span style="background-color: red">i</span>f (!\extension_loaded(&#039;msgpack&#039;)) {
+            return $properties;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;constructedObjectId)) {
+            $timezone = $this-&gt;timezone ?? <span style="background-color: red">n</span>ull;
+            $this-&gt;dumpDateProperties = [
+                &#039;date&#039; =&gt; $this-&gt;format(&#039;Y-m-d H:i:s.u&#039;),
+                &#039;timezone&#039; =&gt; $this-&gt;dumpTimezone($timezone),
+            ];
+
+            $properties[] = &#039;dumpDateProperties&#039;;
+        <span style="background-color: red">}</span>
+
+        return $properties;
+        // @codeCoverageIgnoreEnd
+    }
+
+    <span style="background-color: red">p</span>rivate function dumpTimezone(mixed $timezone): mixed
+    {
+        return $timezone instanceof DateTimeZone ? $timezone-&gt;getName() : <span style="background-color: red">$</span>timezone;
+    }
+}
+</pre>

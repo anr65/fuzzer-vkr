@@ -1,0 +1,9 @@
+: s: >
+ gi.yml
+  esc: s: >
+ g escil
+  ,  rst: s: 6
+ gi.yml
+  esc:>
+ s:es:
+   atge: deC

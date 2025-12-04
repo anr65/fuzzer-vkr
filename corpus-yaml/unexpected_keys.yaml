@@ -1,0 +1,14 @@
+user:
+  id: 1
+  name: "admin"
+  access_level: "super"
+  credentials:
+    password: "secret"
+    last_login: "2025-01-01T12:00:00Z"
+  unexpected_key_💥: true
+  list_instead_of_map:
+    - key1
+    - key2
+  nested_list:
+      - item1
+      - item2

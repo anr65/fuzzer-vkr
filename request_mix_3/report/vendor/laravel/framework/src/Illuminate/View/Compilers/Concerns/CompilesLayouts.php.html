@@ -1,0 +1,134 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesLayouts
+{
+    /**
+     * The name of the last section that was started.
+     *
+     * @var string
+     */
+    protected $lastSection;
+
+    /**
+     * Compile the extends statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileExtends($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        $echo = &quot;&lt;?php echo \$__env-&gt;make({$expression}, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1]))-&gt;render(); ?&gt;&quot;;
+
+        $this-&gt;footer[] = $echo;
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * Compile the extends-first statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileExtendsFirst($expression)
+    {
+        $expression = $this-&gt;stripParentheses($expression);
+
+        $echo = &quot;&lt;?php echo \$__env-&gt;first({$expression}, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1]))-&gt;render(); ?&gt;&quot;;
+
+        $this-&gt;footer[] = $echo;
+
+        return &#039;&#039;;
+    }
+
+    /**
+     * Compile the section statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileSection($expression)
+    {
+        $this-&gt;lastSection = trim($expression, &quot;()&#039;\&quot; &quot;);
+
+        return &quot;&lt;?php \$__env-&gt;startSection{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Replace the @parent directive to a placeholder.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileParent()
+    {
+        $escapedLastSection = strtr($this-&gt;lastSection, [&#039;\\&#039; =&gt; &#039;\\\\&#039;, &quot;&#039;&quot; =&gt; &quot;\\&#039;&quot;]);
+
+        return &quot;&lt;?php echo \Illuminate\View\Factory::parentPlaceholder(&#039;{$escapedLastSection}&#039;); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the yield statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileYield($expression)
+    {
+        return &quot;&lt;?php echo \$__env-&gt;yieldContent{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the show statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileShow()
+    {
+        return &#039;&lt;?php echo $__env-&gt;yieldSection(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the append statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileAppend()
+    {
+        return &#039;&lt;?php $__env-&gt;appendSection(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the overwrite statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileOverwrite()
+    {
+        return &#039;&lt;?php $__env-&gt;stopSection(true); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the stop statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileStop()
+    {
+        return &#039;&lt;?php $__env-&gt;stopSection(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-section statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndsection()
+    {
+        return &#039;&lt;?php $__env-&gt;stopSection(); ?&gt;&#039;;
+    }
+}
+</pre>

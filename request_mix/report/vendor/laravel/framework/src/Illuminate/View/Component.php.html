@@ -1,0 +1,492 @@
+<pre>&lt;?php
+
+namespace Illuminate\View;
+
+use Closure;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\View\View as ViewContract;
+use Illuminate\Support\Collection;
+use ReflectionClass;
+use ReflectionMethod;
+use ReflectionProperty;
+
+abstract class Component
+{
+    /**
+     * The properties / methods that should not be exposed to the component.
+     *
+     * @var array
+     */
+    protected $except = [];
+
+    /**
+     * The component alias name.
+     *
+     * @var string
+     */
+    public $componentName;
+
+    /**
+     * The component attributes.
+     *
+     * @var \Illuminate\View\ComponentAttributeBag
+     */
+    public $attributes;
+
+    /**
+     * The view factory instance, if any.
+     *
+     * @var \Illuminate\Contracts\View\Factory|null
+     */
+    protected static $factory;
+
+    /**
+     * The component resolver callback.
+     *
+     * @var (\Closure(string, array): Component)|null
+     */
+    protected static $componentsResolver;
+
+    /**
+     * The cache of blade view names, keyed by contents.
+     *
+     * @var array&lt;string, string&gt;
+     */
+    protected static $bladeViewCache = [];
+
+    /**
+     * The cache of public property names, keyed by class.
+     *
+     * @var array
+     */
+    protected static $propertyCache = [];
+
+    /**
+     * The cache of public method names, keyed by class.
+     *
+     * @var array
+     */
+    protected static $methodCache = [];
+
+    /**
+     * The cache of constructor parameters, keyed by class.
+     *
+     * @var array&lt;class-string, array&lt;int, string&gt;&gt;
+     */
+    protected static $constructorParametersCache = [];
+
+    /**
+     * The cache of ignored parameter names.
+     *
+     * @var array
+     */
+    protected static $ignoredParameterNames = [];
+
+    /**
+     * Get the view / view contents that represent the component.
+     *
+     * @return \Illuminate\Contracts\View\View|\Illuminate\Contracts\Support\Htmlable|\Closure|string
+     */
+    abstract public function render();
+
+    /**
+     * Resolve the component instance with the given data.
+     *
+     * @param  array  $data
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function resolve($data)
+    {
+        <span style="background-color: red">i</span>f (static::$componentsResolver) {
+            return call_user_func(static::$componentsResolver, static::class, $data);
+        <span style="background-color: red">}</span>
+
+        $parameters = static::extractConstructorParameters();
+
+        $dataKeys = array_keys($data);
+
+        <span style="background-color: red">i</span>f (empty(array_diff($parameters, $dataKeys))) {
+            return new static(...array_intersect_key($data, array_flip($parameters)));
+        <span style="background-color: red">}</span>
+
+        return Container::getInstance()-&gt;make(static::class, $data);
+    }
+
+    /**
+     * Extract the constructor parameters for the component.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected static function extractConstructorParameters()
+    {
+        <span style="background-color: red">i</span>f (! isset(static::$constructorParametersCache[static::class])) {
+            $class = new ReflectionClass(static::class);
+
+            $constructor = $class-&gt;getConstructor();
+
+            static::$constructorParametersCache[static::class] = $constructor
+                ? (new Collection($constructor-&gt;getParameters()))-&gt;map-&gt;getName()-&gt;all()
+                : <span style="background-color: red">[</span>];
+        <span style="background-color: red">}</span>
+
+        return static::$constructorParametersCache[static::class];
+    }
+
+    /**
+     * Resolve the Blade view or view file that should be used when rendering the component.
+     *
+     * @return \Illuminate\Contracts\View\View|\Illuminate\Contracts\Support\Htmlable|\Closure|string
+     */
+    <span style="background-color: red">p</span>ublic function resolveView()
+    {
+        $view = $this-&gt;render();
+
+        <span style="background-color: red">i</span>f ($view instanceof ViewContract) {
+            return $view;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($view instanceof Htmlable) {
+            return $view;
+        <span style="background-color: red">}</span>
+
+        $resolver = <span style="background-color: red">f</span>unction ($view) {
+            <span style="background-color: red">i</span>f ($view instanceof ViewContract) {
+                return $view;
+            <span style="background-color: red">}</span>
+
+            return $this-&gt;extractBladeViewFromString($view);
+        };
+
+        return $view instanceof Closure ? <span style="background-color: red">f</span>unction (array $data = []) use ($view, $resolver) {
+            return $resolver($view($data));
+        }
+        : <span style="background-color: red">$</span>resolver($view);
+    }
+
+    /**
+     * Create a Blade view with the raw component string content.
+     *
+     * @param  string  $contents
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function extractBladeViewFromString($contents)
+    {
+        $key = sprintf(&#039;%s::%s&#039;, static::class, $contents);
+
+        <span style="background-color: red">i</span>f (isset(static::$bladeViewCache[$key])) {
+            return static::$bladeViewCache[$key];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;factory()-&gt;exists($contents)) {
+            return static::$bladeViewCache[$key] = $contents;
+        <span style="background-color: red">}</span>
+
+        return static::$bladeViewCache[$key] = $this-&gt;createBladeViewFromString($this-&gt;factory(), $contents);
+    }
+
+    /**
+     * Create a Blade view with the raw component string content.
+     *
+     * @param  \Illuminate\Contracts\View\Factory  $factory
+     * @param  string  $contents
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function createBladeViewFromString($factory, $contents)
+    {
+        $factory-&gt;addNamespace(
+            &#039;__components&#039;,
+            $directory = Container::getInstance()[&#039;config&#039;]-&gt;get(&#039;view.compiled&#039;)
+        );
+
+        <span style="background-color: red">i</span>f (! is_file($viewFile = $directory.&#039;/&#039;.hash(&#039;xxh128&#039;, $contents).&#039;.blade.php&#039;)) {
+            <span style="background-color: red">i</span>f (! is_dir($directory)) {
+                mkdir($directory, 0755, true);
+            <span style="background-color: red">}</span>
+
+            file_put_contents($viewFile, $contents);
+        <span style="background-color: red">}</span>
+
+        return &#039;__components::&#039;.basename($viewFile, &#039;.blade.php&#039;);
+    }
+
+    /**
+     * Get the data that should be supplied to the view.
+     *
+     * @author Freek Van der Herten
+     * @author Brent Roose
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function data()
+    {
+        $this-&gt;attributes = $this-&gt;attributes ?: <span style="background-color: red">$</span>this-&gt;newAttributeBag();
+
+        return array_merge($this-&gt;extractPublicProperties(), $this-&gt;extractPublicMethods());
+    }
+
+    /**
+     * Extract the public properties for the component.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function extractPublicProperties()
+    {
+        $class = get_class($this);
+
+        <span style="background-color: red">i</span>f (! isset(static::$propertyCache[$class])) {
+            $reflection = new ReflectionClass($this);
+
+            static::$propertyCache[$class] = (new Collection($reflection-&gt;getProperties(ReflectionProperty::IS_PUBLIC)))
+                -&gt;reject(fn (ReflectionProperty $property) =&gt; <span style="background-color: red">$</span>property-&gt;isStatic())
+                -&gt;reject(fn (ReflectionProperty $property) =&gt; <span style="background-color: red">$</span>this-&gt;shouldIgnore($property-&gt;getName()))
+                -&gt;map(fn (ReflectionProperty $property) =&gt; <span style="background-color: red">$</span>property-&gt;getName())
+                -&gt;all();
+        <span style="background-color: red">}</span>
+
+        $values = [];
+
+        <span style="background-color: red">f</span>oreach (static::$propertyCache[$class] as $property) {
+            $values[$property] = $this-&gt;{$property};
+        <span style="background-color: red">}</span>
+
+        return $values;
+    }
+
+    /**
+     * Extract the public methods for the component.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function extractPublicMethods()
+    {
+        $class = get_class($this);
+
+        <span style="background-color: red">i</span>f (! isset(static::$methodCache[$class])) {
+            $reflection = new ReflectionClass($this);
+
+            static::$methodCache[$class] = (new Collection($reflection-&gt;getMethods(ReflectionMethod::IS_PUBLIC)))
+                -&gt;reject(fn (ReflectionMethod $method) =&gt; <span style="background-color: red">$</span>this-&gt;shouldIgnore($method-&gt;getName()))
+                -&gt;map(fn (ReflectionMethod $method) =&gt; <span style="background-color: red">$</span>method-&gt;getName());
+        <span style="background-color: red">}</span>
+
+        $values = [];
+
+        <span style="background-color: red">f</span>oreach (static::$methodCache[$class] as $method) {
+            $values[$method] = $this-&gt;createVariableFromMethod(new ReflectionMethod($this, $method));
+        <span style="background-color: red">}</span>
+
+        return $values;
+    }
+
+    /**
+     * Create a callable variable from the given method.
+     *
+     * @param  \ReflectionMethod  $method
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function createVariableFromMethod(ReflectionMethod $method)
+    {
+        return $method-&gt;getNumberOfParameters() === 0
+            ? $this-&gt;createInvokableVariable($method-&gt;getName())
+            : <span style="background-color: red">C</span>losure::fromCallable([$this, $method-&gt;getName()]);
+    }
+
+    /**
+     * Create an invokable, toStringable variable for the given component method.
+     *
+     * @param  string  $method
+     * @return \Illuminate\View\InvokableComponentVariable
+     */
+    <span style="background-color: red">p</span>rotected function createInvokableVariable(string $method)
+    {
+        return new InvokableComponentVariable(<span style="background-color: red">f</span>unction () use ($method) {
+            return $this-&gt;{$method}();
+        });
+    }
+
+    /**
+     * Determine if the given property / method should be ignored.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function shouldIgnore($name)
+    {
+        return str_starts_with($name, &#039;__&#039;) ||
+               <span style="background-color: red">i</span>n_array($name, $this-&gt;ignoredMethods());
+    }
+
+    /**
+     * Get the methods that should be ignored.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function ignoredMethods()
+    {
+        return array_merge([
+            &#039;data&#039;,
+            &#039;render&#039;,
+            &#039;resolve&#039;,
+            &#039;resolveView&#039;,
+            &#039;shouldRender&#039;,
+            &#039;view&#039;,
+            &#039;withName&#039;,
+            &#039;withAttributes&#039;,
+            &#039;flushCache&#039;,
+            &#039;forgetFactory&#039;,
+            &#039;forgetComponentsResolver&#039;,
+            &#039;resolveComponentsUsing&#039;,
+        ], $this-&gt;except);
+    }
+
+    /**
+     * Set the component alias name.
+     *
+     * @param  string  $name
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withName($name)
+    {
+        $this-&gt;componentName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Set the extra attributes that the component should make available.
+     *
+     * @param  array  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withAttributes(array $attributes)
+    {
+        $this-&gt;attributes = $this-&gt;attributes ?: <span style="background-color: red">$</span>this-&gt;newAttributeBag();
+
+        $this-&gt;attributes-&gt;setAttributes($attributes);
+
+        return $this;
+    }
+
+    /**
+     * Get a new attribute bag instance.
+     *
+     * @param  array  $attributes
+     * @return \Illuminate\View\ComponentAttributeBag
+     */
+    <span style="background-color: red">p</span>rotected function newAttributeBag(array $attributes = [])
+    {
+        return new ComponentAttributeBag($attributes);
+    }
+
+    /**
+     * Determine if the component should be rendered.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function shouldRender()
+    {
+        return true;
+    }
+
+    /**
+     * Get the evaluated view contents for the given view.
+     *
+     * @param  string|null  $view
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return \Illuminate\Contracts\View\View
+     */
+    <span style="background-color: red">p</span>ublic function view($view, $data = [], $mergeData = [])
+    {
+        return $this-&gt;factory()-&gt;make($view, $data, $mergeData);
+    }
+
+    /**
+     * Get the view factory instance.
+     *
+     * @return \Illuminate\Contracts\View\Factory
+     */
+    <span style="background-color: red">p</span>rotected function factory()
+    {
+        <span style="background-color: red">i</span>f (is_null(static::$factory)) {
+            static::$factory = Container::getInstance()-&gt;make(&#039;view&#039;);
+        <span style="background-color: red">}</span>
+
+        return static::$factory;
+    }
+
+    /**
+     * Get the cached set of anonymous component constructor parameter names to exclude.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function ignoredParameterNames()
+    {
+        <span style="background-color: red">i</span>f (! isset(static::$ignoredParameterNames[static::class])) {
+            $constructor = (new ReflectionClass(
+                static::class
+            ))-&gt;getConstructor();
+
+            <span style="background-color: red">i</span>f (! $constructor) {
+                return static::$ignoredParameterNames[static::class] = [];
+            <span style="background-color: red">}</span>
+
+            static::$ignoredParameterNames[static::class] = (new Collection($constructor-&gt;getParameters()))
+                -&gt;map
+                -&gt;getName()
+                -&gt;all();
+        <span style="background-color: red">}</span>
+
+        return static::$ignoredParameterNames[static::class];
+    }
+
+    /**
+     * Flush the component&#039;s cached state.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function flushCache()
+    {
+        static::$bladeViewCache = [];
+        static::$constructorParametersCache = [];
+        static::$methodCache = [];
+        static::$propertyCache = [];
+    }
+
+    /**
+     * Forget the component&#039;s factory instance.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function forgetFactory()
+    {
+        static::$factory = null;
+    }
+
+    /**
+     * Forget the component&#039;s resolver callback.
+     *
+     * @return void
+     *
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic static function forgetComponentsResolver()
+    {
+        static::$componentsResolver = null;
+    }
+
+    /**
+     * Set the callback that should be used to resolve components within views.
+     *
+     * @param  \Closure(string $component, array $data): Component  $resolver
+     * @return void
+     *
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic static function resolveComponentsUsing($resolver)
+    {
+        static::$componentsResolver = $resolver;
+    }
+}
+</pre>

@@ -1,0 +1,7 @@
+syncs:
+  #  sync_fuzzing:
+  vaOFUc_f[[r)gger:
+   !includariables:
+  #  s7'
+  trigger:
+   !include: .:

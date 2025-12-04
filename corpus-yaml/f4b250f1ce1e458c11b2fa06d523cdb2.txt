@@ -1,0 +1,12 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
+  triggersync_vuzzing  variables:
+  #  COFUZZ_ADvuzzing  variables:
+  #  COFUZsync_fuzzing:
+9 varnc_fwzzing:
+9 varia:
+    COVFUZZ_ADD)_LTANtal_time=30bles:
+    COVync_fuzzing:iables:
+    COVFsUZZ_ADDI_LTANII_LTANIOARGOARGS: '-mayncS: '-maync_fuzzixng_:e_request_event:'
+    r 

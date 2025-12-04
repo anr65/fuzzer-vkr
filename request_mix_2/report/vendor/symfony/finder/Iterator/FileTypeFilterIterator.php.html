@@ -1,0 +1,52 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder\Iterator;
+
+/**
+ * FileTypeFilterIterator only keeps files, directories, or both.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @extends \FilterIterator&lt;string, \SplFileInfo&gt;
+ */
+class FileTypeFilterIterator extends \FilterIterator
+{
+    public const ONLY_FILES = 1;
+    public const ONLY_DIRECTORIES = 2;
+
+    /**
+     * @param \Iterator&lt;string, \SplFileInfo&gt; $iterator The Iterator to filter
+     * @param int                             $mode     The mode (self::ONLY_FILES or self::ONLY_DIRECTORIES)
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        \Iterator $iterator,
+        private int $mode,
+    ) {
+        parent::__construct($iterator);
+    }
+
+    /**
+     * Filters the iterator values.
+     */
+    <span style="background-color: green">p</span>ublic function accept(): bool
+    {
+        $fileinfo = $this-&gt;current();
+        <span style="background-color: red">i</span>f (self::ONLY_DIRECTORIES === (self::ONLY_DIRECTORIES &amp; $this-&gt;mode) &amp;&amp; <span style="background-color: red">$</span>fileinfo-&gt;isFile()) {
+            return false;
+        } <span style="background-color: red">e</span>lseif (self::ONLY_FILES === (self::ONLY_FILES &amp; $this-&gt;mode) &amp;&amp; <span style="background-color: green">$</span>fileinfo-&gt;isDir()) {
+            return false;
+        <span style="background-color: green">}</span>
+
+        return true;
+    }
+}
+</pre>

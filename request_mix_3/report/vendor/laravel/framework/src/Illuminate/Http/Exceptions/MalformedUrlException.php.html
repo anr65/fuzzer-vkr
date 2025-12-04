@@ -1,0 +1,17 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http\Exceptions;
+
+use Symfony\Component\HttpKernel\Exception\HttpException;
+
+class MalformedUrlException extends HttpException
+{
+    /**
+     * Create a new exception instance.
+     */
+    <span style="background-color: green">p</span>ublic function __construct()
+    {
+        parent::__construct(400, &#039;Malformed URL.&#039;);
+    }
+}
+</pre>

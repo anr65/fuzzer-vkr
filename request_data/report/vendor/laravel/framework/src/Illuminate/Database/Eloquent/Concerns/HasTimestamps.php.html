@@ -1,0 +1,233 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+use Illuminate\Support\Facades\Date;
+
+trait HasTimestamps
+{
+    /**
+     * Indicates if the model should be timestamped.
+     *
+     * @var bool
+     */
+    public $timestamps = true;
+
+    /**
+     * The list of models classes that have timestamps temporarily disabled.
+     *
+     * @var array
+     */
+    protected static $ignoreTimestampsOn = [];
+
+    /**
+     * Update the model&#039;s update timestamp.
+     *
+     * @param  string|null  $attribute
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function touch($attribute = null)
+    {
+        <span style="background-color: red">i</span>f ($attribute) {
+            $this-&gt;$attribute = $this-&gt;freshTimestamp();
+
+            return $this-&gt;save();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $this-&gt;usesTimestamps()) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;updateTimestamps();
+
+        return $this-&gt;save();
+    }
+
+    /**
+     * Update the model&#039;s update timestamp without raising any events.
+     *
+     * @param  string|null  $attribute
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function touchQuietly($attribute = null)
+    {
+        return static::withoutEvents(fn () =&gt; <span style="background-color: red">$</span>this-&gt;touch($attribute));
+    }
+
+    /**
+     * Update the creation and update timestamps.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function updateTimestamps()
+    {
+        $time = $this-&gt;freshTimestamp();
+
+        $updatedAtColumn = $this-&gt;getUpdatedAtColumn();
+
+        <span style="background-color: red">i</span>f (! is_null($updatedAtColumn) &amp;&amp; <span style="background-color: red">!</span> $this-&gt;isDirty($updatedAtColumn)) {
+            $this-&gt;setUpdatedAt($time);
+        <span style="background-color: red">}</span>
+
+        $createdAtColumn = $this-&gt;getCreatedAtColumn();
+
+        <span style="background-color: red">i</span>f (! $this-&gt;exists &amp;&amp; <span style="background-color: red">!</span> is_null($createdAtColumn) &amp;&amp; <span style="background-color: red">!</span> $this-&gt;isDirty($createdAtColumn)) {
+            $this-&gt;setCreatedAt($time);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Set the value of the &quot;created at&quot; attribute.
+     *
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setCreatedAt($value)
+    {
+        $this-&gt;{$this-&gt;getCreatedAtColumn()} = $value;
+
+        return $this;
+    }
+
+    /**
+     * Set the value of the &quot;updated at&quot; attribute.
+     *
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setUpdatedAt($value)
+    {
+        $this-&gt;{$this-&gt;getUpdatedAtColumn()} = $value;
+
+        return $this;
+    }
+
+    /**
+     * Get a fresh timestamp for the model.
+     *
+     * @return \Illuminate\Support\Carbon
+     */
+    <span style="background-color: red">p</span>ublic function freshTimestamp()
+    {
+        return Date::now();
+    }
+
+    /**
+     * Get a fresh timestamp for the model.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function freshTimestampString()
+    {
+        return $this-&gt;fromDateTime($this-&gt;freshTimestamp());
+    }
+
+    /**
+     * Determine if the model uses timestamps.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function usesTimestamps()
+    {
+        return $this-&gt;timestamps &amp;&amp; <span style="background-color: red">!</span> static::isIgnoringTimestamps($this::class);
+    }
+
+    /**
+     * Get the name of the &quot;created at&quot; column.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getCreatedAtColumn()
+    {
+        return static::CREATED_AT;
+    }
+
+    /**
+     * Get the name of the &quot;updated at&quot; column.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getUpdatedAtColumn()
+    {
+        return static::UPDATED_AT;
+    }
+
+    /**
+     * Get the fully qualified &quot;created at&quot; column.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getQualifiedCreatedAtColumn()
+    {
+        $column = $this-&gt;getCreatedAtColumn();
+
+        return $column ? $this-&gt;qualifyColumn($column) : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get the fully qualified &quot;updated at&quot; column.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getQualifiedUpdatedAtColumn()
+    {
+        $column = $this-&gt;getUpdatedAtColumn();
+
+        return $column ? $this-&gt;qualifyColumn($column) : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Disable timestamps for the current class during the given callback scope.
+     *
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function withoutTimestamps(callable $callback)
+    {
+        return static::withoutTimestampsOn([static::class], $callback);
+    }
+
+    /**
+     * Disable timestamps for the given model classes during the given callback scope.
+     *
+     * @param  array  $models
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function withoutTimestampsOn($models, $callback)
+    {
+        static::$ignoreTimestampsOn = array_values(array_merge(static::$ignoreTimestampsOn, $models));
+
+        try {
+            return $callback();
+        } <span style="background-color: red">f</span>inally {
+            <span style="background-color: red">f</span>oreach ($models as $model) {
+                <span style="background-color: red">i</span>f (($key = array_search($model, static::$ignoreTimestampsOn, true)) !== false) {
+                    unset(static::$ignoreTimestampsOn[$key]);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the given model is ignoring timestamps / touches.
+     *
+     * @param  string|null  $class
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isIgnoringTimestamps($class = null)
+    {
+        $class ??= <span style="background-color: red">s</span>tatic::class;
+
+        <span style="background-color: red">f</span>oreach (static::$ignoreTimestampsOn as $ignoredClass) {
+            <span style="background-color: red">i</span>f ($class === $ignoredClass || <span style="background-color: red">i</span>s_subclass_of($class, $ignoredClass)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+}
+</pre>

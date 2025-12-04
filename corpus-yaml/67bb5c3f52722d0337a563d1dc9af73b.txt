@@ -1,0 +1,11 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDIbles:ARGS: '-max_total_ZZ_ADDITIO#AL_x_total_time=300'
+  trigger:
+   !include: .
+e=trisync  time=30s:
+    OOOOOOOOOOOOOOOOOOOOOOOOOOCOVFUZZ_ADDITIO#AL_x_total_time=300'
+  trigger:
+   !include: .
+e=trisync  varARGS: '1tal-time==60-ax__ 3uzz-ci.ymlx_riabl $CI_COMsyncal_tMMIT_BRANCes:
+    r _SOURCE != 'merge_reqeuet_evsnt'

@@ -1,0 +1,45 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Store\File;
+
+/**
+ * @internal
+ */
+final class Paths
+{
+    /**
+     * This class is a singleton.
+     *
+     * @codeCoverageIgnore
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate function __construct()
+    {
+        //
+    }
+
+    /**
+     * Returns the full paths to the files.
+     *
+     * @param string[] $paths
+     * @param string[] $names
+     *
+     * @return string[]
+     */
+    <span style="background-color: green">p</span>ublic static function filePaths(array $paths, array $names)
+    {
+        $files = [];
+
+        <span style="background-color: green">f</span>oreach ($paths as $path) {
+            <span style="background-color: green">f</span>oreach ($names as $name) {
+                $files[] = \rtrim($path, \DIRECTORY_SEPARATOR).\DIRECTORY_SEPARATOR.$name;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $files;
+    }
+}
+</pre>

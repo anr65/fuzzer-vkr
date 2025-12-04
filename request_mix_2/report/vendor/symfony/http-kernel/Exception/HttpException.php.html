@@ -1,0 +1,67 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpKernel\Exception;
+
+/**
+ * HttpException.
+ *
+ * @author Kris Wallsmith &lt;kris@symfony.com&gt;
+ */
+class HttpException extends \RuntimeException implements HttpExceptionInterface
+{
+    <span style="background-color: green">p</span>ublic function __construct(
+        private int $statusCode,
+        string $message = &#039;&#039;,
+        ?\Throwable $previous = null,
+        private array $headers = [],
+        int $code = 0,
+    ) {
+        parent::__construct($message, $code, $previous);
+    }
+
+    <span style="background-color: red">p</span>ublic static function fromStatusCode(int $statusCode, string $message = &#039;&#039;, ?\Throwable $previous = null, array $headers = [], int $code = 0): self
+    {
+        return match ($statusCode) {
+            400 =&gt; <span style="background-color: red">n</span>ew BadRequestHttpException($message, $previous, $code, $headers),
+            403 =&gt; <span style="background-color: red">n</span>ew AccessDeniedHttpException($message, $previous, $code, $headers),
+            404 =&gt; <span style="background-color: red">n</span>ew NotFoundHttpException($message, $previous, $code, $headers),
+            406 =&gt; <span style="background-color: red">n</span>ew NotAcceptableHttpException($message, $previous, $code, $headers),
+            409 =&gt; <span style="background-color: red">n</span>ew ConflictHttpException($message, $previous, $code, $headers),
+            410 =&gt; <span style="background-color: red">n</span>ew GoneHttpException($message, $previous, $code, $headers),
+            411 =&gt; <span style="background-color: red">n</span>ew LengthRequiredHttpException($message, $previous, $code, $headers),
+            412 =&gt; <span style="background-color: red">n</span>ew PreconditionFailedHttpException($message, $previous, $code, $headers),
+            423 =&gt; <span style="background-color: red">n</span>ew LockedHttpException($message, $previous, $code, $headers),
+            415 =&gt; <span style="background-color: red">n</span>ew UnsupportedMediaTypeHttpException($message, $previous, $code, $headers),
+            422 =&gt; <span style="background-color: red">n</span>ew UnprocessableEntityHttpException($message, $previous, $code, $headers),
+            428 =&gt; <span style="background-color: red">n</span>ew PreconditionRequiredHttpException($message, $previous, $code, $headers),
+            429 =&gt; <span style="background-color: red">n</span>ew TooManyRequestsHttpException(null, $message, $previous, $code, $headers),
+            503 =&gt; <span style="background-color: red">n</span>ew ServiceUnavailableHttpException(null, $message, $previous, $code, $headers),
+            default =&gt; <span style="background-color: red">n</span>ew static($statusCode, $message, $previous, $headers, $code),
+        };
+    }
+
+    <span style="background-color: green">p</span>ublic function getStatusCode(): int
+    {
+        return $this-&gt;statusCode;
+    }
+
+    <span style="background-color: green">p</span>ublic function getHeaders(): array
+    {
+        return $this-&gt;headers;
+    }
+
+    <span style="background-color: red">p</span>ublic function setHeaders(array $headers): void
+    {
+        $this-&gt;headers = $headers;
+    }
+}
+</pre>

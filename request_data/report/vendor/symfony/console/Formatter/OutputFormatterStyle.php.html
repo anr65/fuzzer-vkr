@@ -1,0 +1,90 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Formatter;
+
+use Symfony\Component\Console\Color;
+
+/**
+ * Formatter style class for defining styles.
+ *
+ * @author Konstantin Kudryashov &lt;ever.zet@gmail.com&gt;
+ */
+class OutputFormatterStyle implements OutputFormatterStyleInterface
+{
+    private Color $color;
+    private string $foreground;
+    private string $background;
+    private array $options;
+    private ?string $href = null;
+    private bool $handlesHrefGracefully;
+
+    /**
+     * Initializes output formatter style.
+     *
+     * @param string|null $foreground The style foreground color name
+     * @param string|null $background The style background color name
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?string $foreground = null, ?string $background = null, array $options = [])
+    {
+        $this-&gt;color = new Color($this-&gt;foreground = $foreground ?: <span style="background-color: green">'</span>&#039;, $this-&gt;background = $background ?: <span style="background-color: green">'</span>&#039;, $this-&gt;options = $options);
+    }
+
+    <span style="background-color: red">p</span>ublic function setForeground(?string $color): void
+    {
+        $this-&gt;color = new Color($this-&gt;foreground = $color ?: <span style="background-color: red">'</span>&#039;, $this-&gt;background, $this-&gt;options);
+    }
+
+    <span style="background-color: red">p</span>ublic function setBackground(?string $color): void
+    {
+        $this-&gt;color = new Color($this-&gt;foreground, $this-&gt;background = $color ?: <span style="background-color: red">'</span>&#039;, $this-&gt;options);
+    }
+
+    <span style="background-color: red">p</span>ublic function setHref(string $url): void
+    {
+        $this-&gt;href = $url;
+    }
+
+    <span style="background-color: red">p</span>ublic function setOption(string $option): void
+    {
+        $this-&gt;options[] = $option;
+        $this-&gt;color = new Color($this-&gt;foreground, $this-&gt;background, $this-&gt;options);
+    }
+
+    <span style="background-color: red">p</span>ublic function unsetOption(string $option): void
+    {
+        $pos = array_search($option, $this-&gt;options);
+        <span style="background-color: red">i</span>f (false !== $pos) {
+            unset($this-&gt;options[$pos]);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;color = new Color($this-&gt;foreground, $this-&gt;background, $this-&gt;options);
+    }
+
+    <span style="background-color: red">p</span>ublic function setOptions(array $options): void
+    {
+        $this-&gt;color = new Color($this-&gt;foreground, $this-&gt;background, $this-&gt;options = $options);
+    }
+
+    <span style="background-color: red">p</span>ublic function apply(string $text): string
+    {
+        $this-&gt;handlesHrefGracefully ??= <span style="background-color: red">'</span>JetBrains-JediTerm&#039; !== getenv(&#039;TERMINAL_EMULATOR&#039;)
+            &amp;&amp; (<span style="background-color: red">!</span>getenv(&#039;KONSOLE_VERSION&#039;) || <span style="background-color: red">(</span>int) getenv(&#039;KONSOLE_VERSION&#039;) &gt; 201100)
+            &amp;&amp; <span style="background-color: red">!</span>isset($_SERVER[&#039;IDEA_INITIAL_DIRECTORY&#039;]);
+
+        <span style="background-color: red">i</span>f (null !== $this-&gt;href &amp;&amp; <span style="background-color: red">$</span>this-&gt;handlesHrefGracefully) {
+            $text = &quot;\033]8;;$this-&gt;href\033\\$text\033]8;;\033\\&quot;;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;color-&gt;apply($text);
+    }
+}
+</pre>

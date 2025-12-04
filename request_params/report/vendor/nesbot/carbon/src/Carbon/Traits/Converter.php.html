@@ -1,0 +1,557 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Carbon\CarbonInterval;
+use Carbon\CarbonPeriod;
+use Carbon\CarbonPeriodImmutable;
+use Carbon\Exceptions\UnitException;
+use Closure;
+use DateTime;
+use DateTimeImmutable;
+use DateTimeInterface;
+
+/**
+ * Trait Converter.
+ *
+ * Change date into different string formats and types and
+ * handle the string cast.
+ *
+ * Depends on the following methods:
+ *
+ * @method static copy()
+ */
+trait Converter
+{
+    use ToStringFormat;
+
+    /**
+     * Returns the formatted date string on success or FALSE on failure.
+     *
+     * @see https://php.net/manual/en/datetime.format.php
+     */
+    <span style="background-color: red">p</span>ublic function format(string $format): string
+    {
+        $function = $this-&gt;localFormatFunction
+            ?? <span style="background-color: red">$</span>this-&gt;getFactory()-&gt;getSettings()[&#039;formatFunction&#039;]
+            ?? <span style="background-color: red">s</span>tatic::$formatFunction;
+
+        <span style="background-color: red">i</span>f (!$function) {
+            return $this-&gt;rawFormat($format);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($function) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($this, $function)) {
+            $function = [$this, $function];
+        <span style="background-color: red">}</span>
+
+        return $function(...\func_get_args());
+    }
+
+    /**
+     * @see https://php.net/manual/en/datetime.format.php
+     */
+    <span style="background-color: red">p</span>ublic function rawFormat(string $format): string
+    {
+        return parent::format($format);
+    }
+
+    /**
+     * Format the instance as a string using the set format
+     *
+     * @example
+     * ```
+     * echo Carbon::now(); // Carbon instances can be cast to string
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        $format = $this-&gt;localToStringFormat
+            ?? <span style="background-color: red">$</span>this-&gt;getFactory()-&gt;getSettings()[&#039;toStringFormat&#039;]
+            ?? <span style="background-color: red">n</span>ull;
+
+        return $format instanceof Closure
+            ? $format($this)
+            : <span style="background-color: red">$</span>this-&gt;rawFormat($format ?: (
+                <span style="background-color: red">\</span>defined(&#039;static::DEFAULT_TO_STRING_FORMAT&#039;)
+                    ? static::DEFAULT_TO_STRING_FORMAT
+                    : <span style="background-color: red">C</span>arbonInterface::DEFAULT_TO_STRING_FORMAT
+            ));
+    }
+
+    /**
+     * Format the instance as date
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toDateString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDateString(): string
+    {
+        return $this-&gt;rawFormat(&#039;Y-m-d&#039;);
+    }
+
+    /**
+     * Format the instance as a readable date
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toFormattedDateString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toFormattedDateString(): string
+    {
+        return $this-&gt;rawFormat(&#039;M j, Y&#039;);
+    }
+
+    /**
+     * Format the instance with the day, and a readable date
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toFormattedDayDateString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toFormattedDayDateString(): string
+    {
+        return $this-&gt;rawFormat(&#039;D, M j, Y&#039;);
+    }
+
+    /**
+     * Format the instance as time
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toTimeString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toTimeString(string $unitPrecision = &#039;second&#039;): string
+    {
+        return $this-&gt;rawFormat(static::getTimeFormatByPrecision($unitPrecision));
+    }
+
+    /**
+     * Format the instance as date and time
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toDateTimeString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDateTimeString(string $unitPrecision = &#039;second&#039;): string
+    {
+        return $this-&gt;rawFormat(&#039;Y-m-d &#039;.static::getTimeFormatByPrecision($unitPrecision));
+    }
+
+    /**
+     * Return a format from H:i to H:i:s.u according to given unit precision.
+     *
+     * @param string $unitPrecision &quot;minute&quot;, &quot;second&quot;, &quot;millisecond&quot; or &quot;microsecond&quot;
+     */
+    <span style="background-color: red">p</span>ublic static function getTimeFormatByPrecision(string $unitPrecision): string
+    {
+        return match (static::singularUnit($unitPrecision)) {
+            &#039;minute&#039; =&gt; <span style="background-color: red">'</span>H:i&#039;,
+            &#039;second&#039; =&gt; <span style="background-color: red">'</span>H:i:s&#039;,
+            &#039;m&#039;, &#039;millisecond&#039; =&gt; <span style="background-color: red">'</span>H:i:s.v&#039;,
+            &#039;µ&#039;, &#039;microsecond&#039; =&gt; <span style="background-color: red">'</span>H:i:s.u&#039;,
+            default =&gt; <span style="background-color: red">t</span>hrow new UnitException(&#039;Precision unit expected among: minute, second, millisecond and microsecond.&#039;),
+        };
+    }
+
+    /**
+     * Format the instance as date and time T-separated with no timezone
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toDateTimeLocalString();
+     * echo &quot;\n&quot;;
+     * echo Carbon::now()-&gt;toDateTimeLocalString(&#039;minute&#039;); // You can specify precision among: minute, second, millisecond and microsecond
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDateTimeLocalString(string $unitPrecision = &#039;second&#039;): string
+    {
+        return $this-&gt;rawFormat(&#039;Y-m-d\T&#039;.static::getTimeFormatByPrecision($unitPrecision));
+    }
+
+    /**
+     * Format the instance with day, date and time
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toDayDateTimeString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDayDateTimeString(): string
+    {
+        return $this-&gt;rawFormat(&#039;D, M j, Y g:i A&#039;);
+    }
+
+    /**
+     * Format the instance as ATOM
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toAtomString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toAtomString(): string
+    {
+        return $this-&gt;rawFormat(DateTime::ATOM);
+    }
+
+    /**
+     * Format the instance as COOKIE
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toCookieString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toCookieString(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::COOKIE);
+    }
+
+    /**
+     * Format the instance as ISO8601
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toIso8601String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toIso8601String(): string
+    {
+        return $this-&gt;toAtomString();
+    }
+
+    /**
+     * Format the instance as RFC822
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc822String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc822String(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::RFC822);
+    }
+
+    /**
+     * Convert the instance to UTC and return as Zulu ISO8601
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toIso8601ZuluString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toIso8601ZuluString(string $unitPrecision = &#039;second&#039;): string
+    {
+        return $this-&gt;avoidMutation()
+            -&gt;utc()
+            -&gt;rawFormat(&#039;Y-m-d\T&#039;.static::getTimeFormatByPrecision($unitPrecision).&#039;\Z&#039;);
+    }
+
+    /**
+     * Format the instance as RFC850
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc850String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc850String(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::RFC850);
+    }
+
+    /**
+     * Format the instance as RFC1036
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc1036String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc1036String(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::RFC1036);
+    }
+
+    /**
+     * Format the instance as RFC1123
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc1123String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc1123String(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::RFC1123);
+    }
+
+    /**
+     * Format the instance as RFC2822
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc2822String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc2822String(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::RFC2822);
+    }
+
+    /**
+     * Format the instance as RFC3339.
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc3339String() . &quot;\n&quot;;
+     * echo Carbon::now()-&gt;toRfc3339String(true) . &quot;\n&quot;;
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc3339String(bool $extended = false): string
+    {
+        return $this-&gt;rawFormat($extended ? DateTimeInterface::RFC3339_EXTENDED : <span style="background-color: red">D</span>ateTimeInterface::RFC3339);
+    }
+
+    /**
+     * Format the instance as RSS
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRssString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRssString(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::RSS);
+    }
+
+    /**
+     * Format the instance as W3C
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toW3cString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toW3cString(): string
+    {
+        return $this-&gt;rawFormat(DateTimeInterface::W3C);
+    }
+
+    /**
+     * Format the instance as RFC7231
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toRfc7231String();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toRfc7231String(): string
+    {
+        return $this-&gt;avoidMutation()
+            -&gt;setTimezone(&#039;GMT&#039;)
+            -&gt;rawFormat(\defined(&#039;static::RFC7231_FORMAT&#039;) ? static::RFC7231_FORMAT : <span style="background-color: red">C</span>arbonInterface::RFC7231_FORMAT);
+    }
+
+    /**
+     * Get default array representation.
+     *
+     * @example
+     * ```
+     * var_dump(Carbon::now()-&gt;toArray());
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toArray(): array
+    {
+        return [
+            &#039;year&#039; =&gt; $this-&gt;year,
+            &#039;month&#039; =&gt; $this-&gt;month,
+            &#039;day&#039; =&gt; $this-&gt;day,
+            &#039;dayOfWeek&#039; =&gt; $this-&gt;dayOfWeek,
+            &#039;dayOfYear&#039; =&gt; $this-&gt;dayOfYear,
+            &#039;hour&#039; =&gt; $this-&gt;hour,
+            &#039;minute&#039; =&gt; $this-&gt;minute,
+            &#039;second&#039; =&gt; $this-&gt;second,
+            &#039;micro&#039; =&gt; $this-&gt;micro,
+            &#039;timestamp&#039; =&gt; $this-&gt;timestamp,
+            &#039;formatted&#039; =&gt; $this-&gt;rawFormat(\defined(&#039;static::DEFAULT_TO_STRING_FORMAT&#039;) ? static::DEFAULT_TO_STRING_FORMAT : <span style="background-color: red">C</span>arbonInterface::DEFAULT_TO_STRING_FORMAT),
+            &#039;timezone&#039; =&gt; $this-&gt;timezone,
+        ];
+    }
+
+    /**
+     * Get default object representation.
+     *
+     * @example
+     * ```
+     * var_dump(Carbon::now()-&gt;toObject());
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toObject(): object
+    {
+        return (object) $this-&gt;toArray();
+    }
+
+    /**
+     * Returns english human-readable complete date string.
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;toString();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toString(): string
+    {
+        return $this-&gt;avoidMutation()-&gt;locale(&#039;en&#039;)-&gt;isoFormat(&#039;ddd MMM DD YYYY HH:mm:ss [GMT]ZZ&#039;);
+    }
+
+    /**
+     * Return the ISO-8601 string (ex: 1977-04-22T06:00:00Z, if $keepOffset truthy, offset will be kept:
+     * 1977-04-22T01:00:00-05:00).
+     *
+     * @example
+     * ```
+     * echo Carbon::now(&#039;America/Toronto&#039;)-&gt;toISOString() . &quot;\n&quot;;
+     * echo Carbon::now(&#039;America/Toronto&#039;)-&gt;toISOString(true) . &quot;\n&quot;;
+     * ```
+     *
+     * @param bool $keepOffset Pass true to keep the date offset. Else forced to UTC.
+     */
+    <span style="background-color: red">p</span>ublic function toISOString(bool $keepOffset = false): ?string
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;isValid()) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        $yearFormat = $this-&gt;year &lt; 0 || <span style="background-color: red">$</span>this-&gt;year &gt; 9999 ? &#039;YYYYYY&#039; : <span style="background-color: red">'</span>YYYY&#039;;
+        $timezoneFormat = $keepOffset ? &#039;Z&#039; : <span style="background-color: red">'</span>[Z]&#039;;
+        $date = $keepOffset ? $this : <span style="background-color: red">$</span>this-&gt;avoidMutation()-&gt;utc();
+
+        return $date-&gt;isoFormat(&quot;$yearFormat-MM-DD[T]HH:mm:ss.SSSSSS$timezoneFormat&quot;);
+    }
+
+    /**
+     * Return the ISO-8601 string (ex: 1977-04-22T06:00:00Z) with UTC timezone.
+     *
+     * @example
+     * ```
+     * echo Carbon::now(&#039;America/Toronto&#039;)-&gt;toJSON();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toJSON(): ?string
+    {
+        return $this-&gt;toISOString();
+    }
+
+    /**
+     * Return native DateTime PHP object matching the current instance.
+     *
+     * @example
+     * ```
+     * var_dump(Carbon::now()-&gt;toDateTime());
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDateTime(): DateTime
+    {
+        return DateTime::createFromFormat(&#039;U.u&#039;, $this-&gt;rawFormat(&#039;U.u&#039;))
+            -&gt;setTimezone($this-&gt;getTimezone());
+    }
+
+    /**
+     * Return native toDateTimeImmutable PHP object matching the current instance.
+     *
+     * @example
+     * ```
+     * var_dump(Carbon::now()-&gt;toDateTimeImmutable());
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDateTimeImmutable(): DateTimeImmutable
+    {
+        return DateTimeImmutable::createFromFormat(&#039;U.u&#039;, $this-&gt;rawFormat(&#039;U.u&#039;))
+            -&gt;setTimezone($this-&gt;getTimezone());
+    }
+
+    /**
+     * @alias toDateTime
+     *
+     * Return native DateTime PHP object matching the current instance.
+     *
+     * @example
+     * ```
+     * var_dump(Carbon::now()-&gt;toDate());
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function toDate(): DateTime
+    {
+        return $this-&gt;toDateTime();
+    }
+
+    /**
+     * Create a iterable CarbonPeriod object from current date to a given end date (and optional interval).
+     *
+     * @param \DateTimeInterface|Carbon|CarbonImmutable|int|null $end      period end date or recurrences count if int
+     * @param int|\DateInterval|string|null                      $interval period default interval or number of the given $unit
+     * @param string|null                                        $unit     if specified, $interval must be an integer
+     */
+    <span style="background-color: red">p</span>ublic function toPeriod($end = null, $interval = null, $unit = null): CarbonPeriod
+    {
+        <span style="background-color: red">i</span>f ($unit) {
+            $interval = CarbonInterval::make(&quot;$interval &quot;.static::pluralUnit($unit));
+        <span style="background-color: red">}</span>
+
+        $isDefaultInterval = !$interval;
+        $interval ??= <span style="background-color: red">C</span>arbonInterval::day();
+        $class = $this-&gt;isMutable() ? CarbonPeriod::class : <span style="background-color: red">C</span>arbonPeriodImmutable::class;
+
+        <span style="background-color: red">i</span>f (\is_int($end) || (<span style="background-color: red">\</span>is_string($end) &amp;&amp; <span style="background-color: red">c</span>type_digit($end))) {
+            $end = (int) $end;
+        <span style="background-color: red">}</span>
+
+        $end ??= <span style="background-color: red">1</span>;
+
+        <span style="background-color: red">i</span>f (!\is_int($end)) {
+            $end = $this-&gt;resolveCarbon($end);
+        <span style="background-color: red">}</span>
+
+        return new $class(
+            raw: [$this, CarbonInterval::make($interval), $end],
+            dateClass: static::class,
+            isDefaultInterval: $isDefaultInterval,
+        );
+    }
+
+    /**
+     * Create a iterable CarbonPeriod object from current date to a given end date (and optional interval).
+     *
+     * @param \DateTimeInterface|Carbon|CarbonImmutable|null $end      period end date
+     * @param int|\DateInterval|string|null                  $interval period default interval or number of the given $unit
+     * @param string|null                                    $unit     if specified, $interval must be an integer
+     */
+    <span style="background-color: red">p</span>ublic function range($end = null, $interval = null, $unit = null): CarbonPeriod
+    {
+        return $this-&gt;toPeriod($end, $interval, $unit);
+    }
+}
+</pre>

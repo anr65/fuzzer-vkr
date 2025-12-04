@@ -1,0 +1,18 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository\Adapter;
+
+interface ReaderInterface
+{
+    /**
+     * Read an environment variable, if it exists.
+     *
+     * @param non-empty-string $name
+     *
+     * @return \PhpOption\Option&lt;string&gt;
+     */
+    public function read(string $name);
+}
+</pre>

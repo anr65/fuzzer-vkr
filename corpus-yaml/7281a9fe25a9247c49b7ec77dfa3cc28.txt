@@ -1,0 +1,6 @@
+synng:
+  variables:
+    COVoi30z
+'  trITIONAL_ARGS: '-max_total_time=300,
+  triggieer:
+   CI_COMMI

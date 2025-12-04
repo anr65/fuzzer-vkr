@@ -1,0 +1,1406 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use BackedEnum;
+use Closure;
+use Illuminate\Container\Container;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Contracts\CallableDispatcher;
+use Illuminate\Routing\Contracts\ControllerDispatcher as ControllerDispatcherContract;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Routing\Matching\HostValidator;
+use Illuminate\Routing\Matching\MethodValidator;
+use Illuminate\Routing\Matching\SchemeValidator;
+use Illuminate\Routing\Matching\UriValidator;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+use Laravel\SerializableClosure\SerializableClosure;
+use LogicException;
+use Symfony\Component\Routing\Route as SymfonyRoute;
+
+use function Illuminate\Support\enum_value;
+
+class Route
+{
+    use Conditionable, CreatesRegularExpressionRouteConstraints, FiltersControllerMiddleware, Macroable, ResolvesRouteDependencies;
+
+    /**
+     * The URI pattern the route responds to.
+     *
+     * @var string
+     */
+    public $uri;
+
+    /**
+     * The HTTP methods the route responds to.
+     *
+     * @var array
+     */
+    public $methods;
+
+    /**
+     * The route action array.
+     *
+     * @var array
+     */
+    public $action;
+
+    /**
+     * Indicates whether the route is a fallback route.
+     *
+     * @var bool
+     */
+    public $isFallback = false;
+
+    /**
+     * The controller instance.
+     *
+     * @var mixed
+     */
+    public $controller;
+
+    /**
+     * The default values for the route.
+     *
+     * @var array
+     */
+    public $defaults = [];
+
+    /**
+     * The regular expression requirements.
+     *
+     * @var array
+     */
+    public $wheres = [];
+
+    /**
+     * The array of matched parameters.
+     *
+     * @var array|null
+     */
+    public $parameters;
+
+    /**
+     * The parameter names for the route.
+     *
+     * @var array|null
+     */
+    public $parameterNames;
+
+    /**
+     * The array of the matched parameters&#039; original values.
+     *
+     * @var array
+     */
+    protected $originalParameters;
+
+    /**
+     * Indicates &quot;trashed&quot; models can be retrieved when resolving implicit model bindings for this route.
+     *
+     * @var bool
+     */
+    protected $withTrashedBindings = false;
+
+    /**
+     * Indicates the maximum number of seconds the route should acquire a session lock for.
+     *
+     * @var int|null
+     */
+    protected $lockSeconds;
+
+    /**
+     * Indicates the maximum number of seconds the route should wait while attempting to acquire a session lock.
+     *
+     * @var int|null
+     */
+    protected $waitSeconds;
+
+    /**
+     * The computed gathered middleware.
+     *
+     * @var array|null
+     */
+    public $computedMiddleware;
+
+    /**
+     * The compiled version of the route.
+     *
+     * @var \Symfony\Component\Routing\CompiledRoute
+     */
+    public $compiled;
+
+    /**
+     * The router instance used by the route.
+     *
+     * @var \Illuminate\Routing\Router
+     */
+    protected $router;
+
+    /**
+     * The container instance used by the route.
+     *
+     * @var \Illuminate\Container\Container
+     */
+    protected $container;
+
+    /**
+     * The fields that implicit binding should use for a given parameter.
+     *
+     * @var array
+     */
+    protected $bindingFields = [];
+
+    /**
+     * The validators used by the routes.
+     *
+     * @var array
+     */
+    public static $validators;
+
+    /**
+     * Create a new Route instance.
+     *
+     * @param  array|string  $methods
+     * @param  string  $uri
+     * @param  \Closure|array  $action
+     */
+    <span style="background-color: green">p</span>ublic function __construct($methods, $uri, $action)
+    {
+        $this-&gt;uri = $uri;
+        $this-&gt;methods = (array) $methods;
+        $this-&gt;action = Arr::except($this-&gt;parseAction($action), [&#039;prefix&#039;]);
+
+        <span style="background-color: red">i</span>f (in_array(&#039;GET&#039;, $this-&gt;methods) &amp;&amp; <span style="background-color: green">!</span> in_array(&#039;HEAD&#039;, $this-&gt;methods)) {
+            $this-&gt;methods[] = &#039;HEAD&#039;;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;prefix(is_array($action) ? Arr::get($action, &#039;prefix&#039;) : <span style="background-color: green">'</span>&#039;);
+    }
+
+    /**
+     * Parse the route action into a standard array.
+     *
+     * @param  callable|array|null  $action
+     * @return array
+     *
+     * @throws \UnexpectedValueException
+     */
+    <span style="background-color: green">p</span>rotected function parseAction($action)
+    {
+        return RouteAction::parse($this-&gt;uri, $action);
+    }
+
+    /**
+     * Run the route action and return the response.
+     *
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function run()
+    {
+        $this-&gt;container = $this-&gt;container ?: <span style="background-color: red">n</span>ew Container;
+
+        try {
+            <span style="background-color: red">i</span>f ($this-&gt;isControllerAction()) {
+                return $this-&gt;runController();
+            <span style="background-color: green">}</span>
+
+            return $this-&gt;runCallable();
+        } <span style="background-color: red">c</span>atch (HttpResponseException $e) {
+            return $e-&gt;getResponse();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Checks whether the route&#039;s action is a controller.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function isControllerAction()
+    {
+        return is_string($this-&gt;action[&#039;uses&#039;]) &amp;&amp; <span style="background-color: red">!</span> $this-&gt;isSerializedClosure();
+    }
+
+    /**
+     * Run the route action and return the response.
+     *
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected function runCallable()
+    {
+        $callable = $this-&gt;action[&#039;uses&#039;];
+
+        <span style="background-color: red">i</span>f ($this-&gt;isSerializedClosure()) {
+            $callable = unserialize($this-&gt;action[&#039;uses&#039;])-&gt;getClosure();
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;container[CallableDispatcher::class]-&gt;dispatch($this, $callable);
+    }
+
+    /**
+     * Determine if the route action is a serialized Closure.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function isSerializedClosure()
+    {
+        return RouteAction::containsSerializedClosure($this-&gt;action);
+    }
+
+    /**
+     * Run the route action and return the response.
+     *
+     * @return mixed
+     *
+     * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+     */
+    <span style="background-color: red">p</span>rotected function runController()
+    {
+        return $this-&gt;controllerDispatcher()-&gt;dispatch(
+            $this, $this-&gt;getController(), $this-&gt;getControllerMethod()
+        );
+    }
+
+    /**
+     * Get the controller instance for the route.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getController()
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;isControllerAction()) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $this-&gt;controller) {
+            $class = $this-&gt;getControllerClass();
+
+            $this-&gt;controller = $this-&gt;container-&gt;make(ltrim($class, &#039;\\&#039;));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;controller;
+    }
+
+    /**
+     * Get the controller class used for the route.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getControllerClass()
+    {
+        return $this-&gt;isControllerAction() ? $this-&gt;parseControllerCallback()[0] : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get the controller method used for the route.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function getControllerMethod()
+    {
+        return $this-&gt;parseControllerCallback()[1];
+    }
+
+    /**
+     * Parse the controller.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function parseControllerCallback()
+    {
+        return Str::parseCallback($this-&gt;action[&#039;uses&#039;]);
+    }
+
+    /**
+     * Flush the cached container instance on the route.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flushController()
+    {
+        $this-&gt;computedMiddleware = null;
+        $this-&gt;controller = null;
+    }
+
+    /**
+     * Determine if the route matches a given request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  bool  $includingMethod
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function matches(Request $request, $includingMethod = true)
+    {
+        $this-&gt;compileRoute();
+
+        <span style="background-color: green">f</span>oreach (self::getValidators() as $validator) {
+            <span style="background-color: red">i</span>f (! $includingMethod &amp;&amp; <span style="background-color: green">$</span>validator instanceof MethodValidator) {
+                continue;
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f (! $validator-&gt;matches($this, $request)) {
+                return false;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return true;
+    }
+
+    /**
+     * Compile the route into a Symfony CompiledRoute instance.
+     *
+     * @return \Symfony\Component\Routing\CompiledRoute
+     */
+    <span style="background-color: green">p</span>rotected function compileRoute()
+    {
+        <span style="background-color: green">i</span>f (! $this-&gt;compiled) {
+            $this-&gt;compiled = $this-&gt;toSymfonyRoute()-&gt;compile();
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;compiled;
+    }
+
+    /**
+     * Bind the route to a given request for execution.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function bind(Request $request)
+    {
+        $this-&gt;compileRoute();
+
+        $this-&gt;parameters = (new RouteParameterBinder($this))
+            -&gt;parameters($request);
+
+        $this-&gt;originalParameters = $this-&gt;parameters;
+
+        return $this;
+    }
+
+    /**
+     * Determine if the route has parameters.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasParameters()
+    {
+        return isset($this-&gt;parameters);
+    }
+
+    /**
+     * Determine a given parameter exists from the route.
+     *
+     * @param  string  $name
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasParameter($name)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;hasParameters()) {
+            return array_key_exists($name, $this-&gt;parameters());
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Get a given parameter from the route.
+     *
+     * @param  string  $name
+     * @param  string|object|null  $default
+     * @return string|object|null
+     */
+    <span style="background-color: red">p</span>ublic function parameter($name, $default = null)
+    {
+        return Arr::get($this-&gt;parameters(), $name, $default);
+    }
+
+    /**
+     * Get original value of a given parameter from the route.
+     *
+     * @param  string  $name
+     * @param  string|null  $default
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function originalParameter($name, $default = null)
+    {
+        return Arr::get($this-&gt;originalParameters(), $name, $default);
+    }
+
+    /**
+     * Set a parameter to the given value.
+     *
+     * @param  string  $name
+     * @param  string|object|null  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setParameter($name, $value)
+    {
+        $this-&gt;parameters();
+
+        $this-&gt;parameters[$name] = $value;
+    }
+
+    /**
+     * Unset a parameter on the route if it is set.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forgetParameter($name)
+    {
+        $this-&gt;parameters();
+
+        unset($this-&gt;parameters[$name]);
+    }
+
+    /**
+     * Get the key / value list of parameters for the route.
+     *
+     * @return array
+     *
+     * @throws \LogicException
+     */
+    <span style="background-color: green">p</span>ublic function parameters()
+    {
+        <span style="background-color: green">i</span>f (isset($this-&gt;parameters)) {
+            return $this-&gt;parameters;
+        <span style="background-color: red">}</span>
+
+        throw new LogicException(&#039;Route is not bound.&#039;);
+    }
+
+    /**
+     * Get the key / value list of original parameters for the route.
+     *
+     * @return array
+     *
+     * @throws \LogicException
+     */
+    <span style="background-color: red">p</span>ublic function originalParameters()
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;originalParameters)) {
+            return $this-&gt;originalParameters;
+        <span style="background-color: red">}</span>
+
+        throw new LogicException(&#039;Route is not bound.&#039;);
+    }
+
+    /**
+     * Get the key / value list of parameters without null values.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function parametersWithoutNulls()
+    {
+        return array_filter($this-&gt;parameters(), fn ($p) =&gt; <span style="background-color: red">!</span> is_null($p));
+    }
+
+    /**
+     * Get all of the parameter names for the route.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function parameterNames()
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;parameterNames)) {
+            return $this-&gt;parameterNames;
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;parameterNames = $this-&gt;compileParameterNames();
+    }
+
+    /**
+     * Get the parameter names for the route.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function compileParameterNames()
+    {
+        preg_match_all(&#039;/\{(.*?)\}/&#039;, $this-&gt;getDomain().$this-&gt;uri, $matches);
+
+        return array_map(fn ($m) =&gt; <span style="background-color: red">t</span>rim($m, &#039;?&#039;), $matches[1]);
+    }
+
+    /**
+     * Get the parameters that are listed in the route / controller signature.
+     *
+     * @param  array  $conditions
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function signatureParameters($conditions = [])
+    {
+        <span style="background-color: red">i</span>f (is_string($conditions)) {
+            $conditions = [&#039;subClass&#039; =&gt; $conditions];
+        <span style="background-color: red">}</span>
+
+        return RouteSignatureParameters::fromAction($this-&gt;action, $conditions);
+    }
+
+    /**
+     * Get the binding field for the given parameter.
+     *
+     * @param  string|int  $parameter
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function bindingFieldFor($parameter)
+    {
+        $fields = is_int($parameter) ? array_values($this-&gt;bindingFields) : <span style="background-color: red">$</span>this-&gt;bindingFields;
+
+        return $fields[$parameter] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Get the binding fields for the route.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function bindingFields()
+    {
+        return $this-&gt;bindingFields ?? <span style="background-color: red">[</span>];
+    }
+
+    /**
+     * Set the binding fields for the route.
+     *
+     * @param  array  $bindingFields
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setBindingFields(array $bindingFields)
+    {
+        $this-&gt;bindingFields = $bindingFields;
+
+        return $this;
+    }
+
+    /**
+     * Get the parent parameter of the given parameter.
+     *
+     * @param  string  $parameter
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function parentOfParameter($parameter)
+    {
+        $key = array_search($parameter, array_keys($this-&gt;parameters));
+
+        <span style="background-color: red">i</span>f ($key === 0 || <span style="background-color: red">$</span>key === false) {
+            return;
+        <span style="background-color: red">}</span>
+
+        return array_values($this-&gt;parameters)[$key - 1];
+    }
+
+    /**
+     * Allow &quot;trashed&quot; models to be retrieved when resolving implicit model bindings for this route.
+     *
+     * @param  bool  $withTrashed
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withTrashed($withTrashed = true)
+    {
+        $this-&gt;withTrashedBindings = $withTrashed;
+
+        return $this;
+    }
+
+    /**
+     * Determines if the route allows &quot;trashed&quot; models to be retrieved when resolving implicit model bindings.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function allowsTrashedBindings()
+    {
+        return $this-&gt;withTrashedBindings;
+    }
+
+    /**
+     * Set a default value for the route.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function defaults($key, $value)
+    {
+        $this-&gt;defaults[$key] = $value;
+
+        return $this;
+    }
+
+    /**
+     * Set the default values for the route.
+     *
+     * @param  array  $defaults
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setDefaults(array $defaults)
+    {
+        $this-&gt;defaults = $defaults;
+
+        return $this;
+    }
+
+    /**
+     * Set a regular expression requirement on the route.
+     *
+     * @param  array|string  $name
+     * @param  string|null  $expression
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function where($name, $expression = null)
+    {
+        <span style="background-color: green">f</span>oreach ($this-&gt;parseWhere($name, $expression) as $name =&gt; $expression) {
+            $this-&gt;wheres[$name] = $expression;
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Parse arguments to the where method into an array.
+     *
+     * @param  array|string  $name
+     * @param  string  $expression
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function parseWhere($name, $expression)
+    {
+        return is_array($name) ? $name : <span style="background-color: green">[</span>$name =&gt; $expression];
+    }
+
+    /**
+     * Set a list of regular expression requirements on the route.
+     *
+     * @param  array  $wheres
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setWheres(array $wheres)
+    {
+        <span style="background-color: red">f</span>oreach ($wheres as $name =&gt; $expression) {
+            $this-&gt;where($name, $expression);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Mark this route as a fallback route.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function fallback()
+    {
+        $this-&gt;isFallback = true;
+
+        return $this;
+    }
+
+    /**
+     * Set the fallback value.
+     *
+     * @param  bool  $isFallback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setFallback($isFallback)
+    {
+        $this-&gt;isFallback = $isFallback;
+
+        return $this;
+    }
+
+    /**
+     * Get the HTTP verbs the route responds to.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function methods()
+    {
+        return $this-&gt;methods;
+    }
+
+    /**
+     * Determine if the route only responds to HTTP requests.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function httpOnly()
+    {
+        return in_array(&#039;http&#039;, $this-&gt;action, true);
+    }
+
+    /**
+     * Determine if the route only responds to HTTPS requests.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function httpsOnly()
+    {
+        return $this-&gt;secure();
+    }
+
+    /**
+     * Determine if the route only responds to HTTPS requests.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function secure()
+    {
+        return in_array(&#039;https&#039;, $this-&gt;action, true);
+    }
+
+    /**
+     * Get or set the domain for the route.
+     *
+     * @param  \BackedEnum|string|null  $domain
+     * @return $this|string|null
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function domain($domain = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($domain)) {
+            return $this-&gt;getDomain();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($domain instanceof BackedEnum &amp;&amp; <span style="background-color: red">!</span> is_string($domain = $domain-&gt;value)) {
+            throw new InvalidArgumentException(&#039;Enum must be string backed.&#039;);
+        <span style="background-color: red">}</span>
+
+        $parsed = RouteUri::parse($domain);
+
+        $this-&gt;action[&#039;domain&#039;] = $parsed-&gt;uri;
+
+        $this-&gt;bindingFields = array_merge(
+            $this-&gt;bindingFields, $parsed-&gt;bindingFields
+        );
+
+        return $this;
+    }
+
+    /**
+     * Get the domain defined for the route.
+     *
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>ublic function getDomain()
+    {
+        return isset($this-&gt;action[&#039;domain&#039;])
+            ? str_replace([&#039;http://&#039;, &#039;https://&#039;], &#039;&#039;, $this-&gt;action[&#039;domain&#039;])
+            : <span style="background-color: green">n</span>ull;
+    }
+
+    /**
+     * Get the prefix of the route instance.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getPrefix()
+    {
+        return $this-&gt;action[&#039;prefix&#039;] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Add a prefix to the route URI.
+     *
+     * @param  string|null  $prefix
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function prefix($prefix)
+    {
+        $prefix ??= <span style="background-color: red">'</span>&#039;;
+
+        $this-&gt;updatePrefixOnAction($prefix);
+
+        $uri = rtrim($prefix, &#039;/&#039;).&#039;/&#039;.ltrim($this-&gt;uri, &#039;/&#039;);
+
+        return $this-&gt;setUri($uri !== &#039;/&#039; ? trim($uri, &#039;/&#039;) : <span style="background-color: green">$</span>uri);
+    }
+
+    /**
+     * Update the &quot;prefix&quot; attribute on the action array.
+     *
+     * @param  string  $prefix
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function updatePrefixOnAction($prefix)
+    {
+        <span style="background-color: red">i</span>f (! empty($newPrefix = trim(rtrim($prefix, &#039;/&#039;).&#039;/&#039;.ltrim($this-&gt;action[&#039;prefix&#039;] ?? <span style="background-color: green">'</span>&#039;, &#039;/&#039;), &#039;/&#039;))) {
+            $this-&gt;action[&#039;prefix&#039;] = $newPrefix;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Get the URI associated with the route.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function uri()
+    {
+        return $this-&gt;uri;
+    }
+
+    /**
+     * Set the URI that the route responds to.
+     *
+     * @param  string  $uri
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setUri($uri)
+    {
+        $this-&gt;uri = $this-&gt;parseUri($uri);
+
+        return $this;
+    }
+
+    /**
+     * Parse the route URI and normalize / store any implicit binding fields.
+     *
+     * @param  string  $uri
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function parseUri($uri)
+    {
+        $this-&gt;bindingFields = [];
+
+        return tap(RouteUri::parse($uri), <span style="background-color: green">f</span>unction ($uri) {
+            $this-&gt;bindingFields = $uri-&gt;bindingFields;
+        })-&gt;uri;
+    }
+
+    /**
+     * Get the name of the route instance.
+     *
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>ublic function getName()
+    {
+        return $this-&gt;action[&#039;as&#039;] ?? <span style="background-color: green">n</span>ull;
+    }
+
+    /**
+     * Add or change the route name.
+     *
+     * @param  \BackedEnum|string  $name
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function name($name)
+    {
+        <span style="background-color: red">i</span>f ($name instanceof BackedEnum &amp;&amp; <span style="background-color: red">!</span> is_string($name = $name-&gt;value)) {
+            throw new InvalidArgumentException(&#039;Enum must be string backed.&#039;);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;action[&#039;as&#039;] = isset($this-&gt;action[&#039;as&#039;]) ? $this-&gt;action[&#039;as&#039;].$name : <span style="background-color: green">$</span>name;
+
+        return $this;
+    }
+
+    /**
+     * Determine whether the route&#039;s name matches the given patterns.
+     *
+     * @param  mixed  ...$patterns
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function named(...$patterns)
+    {
+        <span style="background-color: red">i</span>f (is_null($routeName = $this-&gt;getName())) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($patterns as $pattern) {
+            <span style="background-color: red">i</span>f (Str::is($pattern, $routeName)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Set the handler for the route.
+     *
+     * @param  \Closure|array|string  $action
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function uses($action)
+    {
+        <span style="background-color: red">i</span>f (is_array($action)) {
+            $action = $action[0].&#039;@&#039;.$action[1];
+        <span style="background-color: red">}</span>
+
+        $action = is_string($action) ? $this-&gt;addGroupNamespaceToStringUses($action) : <span style="background-color: red">$</span>action;
+
+        return $this-&gt;setAction(array_merge($this-&gt;action, $this-&gt;parseAction([
+            &#039;uses&#039; =&gt; $action,
+            &#039;controller&#039; =&gt; $action,
+        ])));
+    }
+
+    /**
+     * Parse a string based action for the &quot;uses&quot; fluent method.
+     *
+     * @param  string  $action
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function addGroupNamespaceToStringUses($action)
+    {
+        $groupStack = last($this-&gt;router-&gt;getGroupStack());
+
+        <span style="background-color: red">i</span>f (isset($groupStack[&#039;namespace&#039;]) &amp;&amp; <span style="background-color: red">!</span> str_starts_with($action, &#039;\\&#039;)) {
+            return $groupStack[&#039;namespace&#039;].&#039;\\&#039;.$action;
+        <span style="background-color: red">}</span>
+
+        return $action;
+    }
+
+    /**
+     * Get the action name for the route.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getActionName()
+    {
+        return $this-&gt;action[&#039;controller&#039;] ?? <span style="background-color: red">'</span>Closure&#039;;
+    }
+
+    /**
+     * Get the method name of the route action.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getActionMethod()
+    {
+        return Arr::last(explode(&#039;@&#039;, $this-&gt;getActionName()));
+    }
+
+    /**
+     * Get the action array or one of its properties for the route.
+     *
+     * @param  string|null  $key
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function getAction($key = null)
+    {
+        return Arr::get($this-&gt;action, $key);
+    }
+
+    /**
+     * Set the action array for the route.
+     *
+     * @param  array  $action
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setAction(array $action)
+    {
+        $this-&gt;action = $action;
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;action[&#039;domain&#039;])) {
+            $this-&gt;domain($this-&gt;action[&#039;domain&#039;]);
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Get the value of the action that should be taken on a missing model exception.
+     *
+     * @return \Closure|null
+     */
+    <span style="background-color: red">p</span>ublic function getMissing()
+    {
+        $missing = $this-&gt;action[&#039;missing&#039;] ?? <span style="background-color: red">n</span>ull;
+
+        return is_string($missing) &amp;&amp;
+            <span style="background-color: red">S</span>tr::startsWith($missing, [
+                &#039;O:47:&quot;Laravel\\SerializableClosure\\SerializableClosure&#039;,
+                &#039;O:55:&quot;Laravel\\SerializableClosure\\UnsignedSerializableClosure&#039;,
+            ]) ? unserialize($missing) : <span style="background-color: red">$</span>missing;
+    }
+
+    /**
+     * Define the callable that should be invoked on a missing model exception.
+     *
+     * @param  \Closure  $missing
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function missing($missing)
+    {
+        $this-&gt;action[&#039;missing&#039;] = $missing;
+
+        return $this;
+    }
+
+    /**
+     * Get all middleware, including the ones from the controller.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function gatherMiddleware()
+    {
+        <span style="background-color: green">i</span>f (! is_null($this-&gt;computedMiddleware)) {
+            return $this-&gt;computedMiddleware;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;computedMiddleware = [];
+
+        return $this-&gt;computedMiddleware = Router::uniqueMiddleware(array_merge(
+            $this-&gt;middleware(), $this-&gt;controllerMiddleware()
+        ));
+    }
+
+    /**
+     * Get or set the middlewares attached to the route.
+     *
+     * @param  array|string|null  $middleware
+     * @return $this|array
+     */
+    <span style="background-color: green">p</span>ublic function middleware($middleware = null)
+    {
+        <span style="background-color: green">i</span>f (is_null($middleware)) {
+            return (array) ($this-&gt;action[&#039;middleware&#039;] ?? <span style="background-color: green">[</span>]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! is_array($middleware)) {
+            $middleware = func_get_args();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($middleware as $index =&gt; $value) {
+            $middleware[$index] = (string) $value;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;action[&#039;middleware&#039;] = array_merge(
+            (array) ($this-&gt;action[&#039;middleware&#039;] ?? <span style="background-color: red">[</span>]), $middleware
+        );
+
+        return $this;
+    }
+
+    /**
+     * Specify that the &quot;Authorize&quot; / &quot;can&quot; middleware should be applied to the route with the given options.
+     *
+     * @param  \UnitEnum|string  $ability
+     * @param  array|string  $models
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function can($ability, $models = [])
+    {
+        $ability = enum_value($ability);
+
+        return empty($models)
+            ? $this-&gt;middleware([&#039;can:&#039;.$ability])
+            : <span style="background-color: red">$</span>this-&gt;middleware([&#039;can:&#039;.$ability.&#039;,&#039;.implode(&#039;,&#039;, Arr::wrap($models))]);
+    }
+
+    /**
+     * Get the middleware for the route&#039;s controller.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function controllerMiddleware()
+    {
+        <span style="background-color: green">i</span>f (! $this-&gt;isControllerAction()) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        [$controllerClass, $controllerMethod] = [
+            $this-&gt;getControllerClass(),
+            $this-&gt;getControllerMethod(),
+        ];
+
+        <span style="background-color: red">i</span>f (is_a($controllerClass, HasMiddleware::class, true)) {
+            return $this-&gt;staticallyProvidedControllerMiddleware(
+                $controllerClass, $controllerMethod
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (method_exists($controllerClass, &#039;getMiddleware&#039;)) {
+            return $this-&gt;controllerDispatcher()-&gt;getMiddleware(
+                $this-&gt;getController(), $controllerMethod
+            );
+        <span style="background-color: red">}</span>
+
+        return [];
+    }
+
+    /**
+     * Get the statically provided controller middleware for the given class and method.
+     *
+     * @param  string  $class
+     * @param  string  $method
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function staticallyProvidedControllerMiddleware(string $class, string $method)
+    {
+        return (new Collection($class::middleware()))
+            -&gt;map(<span style="background-color: red">f</span>unction ($middleware) {
+                return $middleware instanceof Middleware
+                    ? $middleware
+                    : <span style="background-color: red">n</span>ew Middleware($middleware);
+            })
+            -&gt;reject(<span style="background-color: red">f</span>unction ($middleware) use ($method) {
+                return static::methodExcludedByOptions(
+                    $method, [&#039;only&#039; =&gt; $middleware-&gt;only, &#039;except&#039; =&gt; $middleware-&gt;except],
+                );
+            })
+            -&gt;map
+            -&gt;middleware
+            -&gt;flatten()
+            -&gt;values()
+            -&gt;all();
+    }
+
+    /**
+     * Specify middleware that should be removed from the given route.
+     *
+     * @param  array|string  $middleware
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutMiddleware($middleware)
+    {
+        $this-&gt;action[&#039;excluded_middleware&#039;] = array_merge(
+            (array) ($this-&gt;action[&#039;excluded_middleware&#039;] ?? <span style="background-color: red">[</span>]), Arr::wrap($middleware)
+        );
+
+        return $this;
+    }
+
+    /**
+     * Get the middleware that should be removed from the route.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function excludedMiddleware()
+    {
+        return (array) ($this-&gt;action[&#039;excluded_middleware&#039;] ?? <span style="background-color: green">[</span>]);
+    }
+
+    /**
+     * Indicate that the route should enforce scoping of multiple implicit Eloquent bindings.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function scopeBindings()
+    {
+        $this-&gt;action[&#039;scope_bindings&#039;] = true;
+
+        return $this;
+    }
+
+    /**
+     * Indicate that the route should not enforce scoping of multiple implicit Eloquent bindings.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutScopedBindings()
+    {
+        $this-&gt;action[&#039;scope_bindings&#039;] = false;
+
+        return $this;
+    }
+
+    /**
+     * Determine if the route should enforce scoping of multiple implicit Eloquent bindings.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function enforcesScopedBindings()
+    {
+        return (bool) ($this-&gt;action[&#039;scope_bindings&#039;] ?? <span style="background-color: red">f</span>alse);
+    }
+
+    /**
+     * Determine if the route should prevent scoping of multiple implicit Eloquent bindings.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function preventsScopedBindings()
+    {
+        return isset($this-&gt;action[&#039;scope_bindings&#039;]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;action[&#039;scope_bindings&#039;] === false;
+    }
+
+    /**
+     * Specify that the route should not allow concurrent requests from the same session.
+     *
+     * @param  int|null  $lockSeconds
+     * @param  int|null  $waitSeconds
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function block($lockSeconds = 10, $waitSeconds = 10)
+    {
+        $this-&gt;lockSeconds = $lockSeconds;
+        $this-&gt;waitSeconds = $waitSeconds;
+
+        return $this;
+    }
+
+    /**
+     * Specify that the route should allow concurrent requests from the same session.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withoutBlocking()
+    {
+        return $this-&gt;block(null, null);
+    }
+
+    /**
+     * Get the maximum number of seconds the route&#039;s session lock should be held for.
+     *
+     * @return int|null
+     */
+    <span style="background-color: red">p</span>ublic function locksFor()
+    {
+        return $this-&gt;lockSeconds;
+    }
+
+    /**
+     * Get the maximum number of seconds to wait while attempting to acquire a session lock.
+     *
+     * @return int|null
+     */
+    <span style="background-color: red">p</span>ublic function waitsFor()
+    {
+        return $this-&gt;waitSeconds;
+    }
+
+    /**
+     * Get the dispatcher for the route&#039;s controller.
+     *
+     * @return \Illuminate\Routing\Contracts\ControllerDispatcher
+     */
+    <span style="background-color: red">p</span>ublic function controllerDispatcher()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;container-&gt;bound(ControllerDispatcherContract::class)) {
+            return $this-&gt;container-&gt;make(ControllerDispatcherContract::class);
+        <span style="background-color: red">}</span>
+
+        return new ControllerDispatcher($this-&gt;container);
+    }
+
+    /**
+     * Get the route validators for the instance.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic static function getValidators()
+    {
+        <span style="background-color: green">i</span>f (isset(static::$validators)) {
+            return static::$validators;
+        <span style="background-color: green">}</span>
+
+        // To match the route, we will use a chain of responsibility pattern with the
+        // validator implementations. We will spin through each one making sure it
+        // passes and then we will know if the route as a whole matches request.
+        return static::$validators = [
+            new UriValidator, new MethodValidator,
+            new SchemeValidator, new HostValidator,
+        ];
+    }
+
+    /**
+     * Convert the route to a Symfony route.
+     *
+     * @return \Symfony\Component\Routing\Route
+     */
+    <span style="background-color: green">p</span>ublic function toSymfonyRoute()
+    {
+        return new SymfonyRoute(
+            preg_replace(&#039;/\{(\w+?)\?\}/&#039;, &#039;{$1}&#039;, $this-&gt;uri()), $this-&gt;getOptionalParameterNames(),
+            $this-&gt;wheres, [&#039;utf8&#039; =&gt; true],
+            $this-&gt;getDomain() ?: <span style="background-color: green">'</span>&#039;, [], $this-&gt;methods
+        );
+    }
+
+    /**
+     * Get the optional parameter names for the route.
+     *
+     * @return array&lt;string, null&gt;
+     */
+    <span style="background-color: green">p</span>ublic function getOptionalParameterNames()
+    {
+        preg_match_all(&#039;/\{(\w+?)\?\}/&#039;, $this-&gt;uri(), $matches);
+
+        return isset($matches[1]) ? array_fill_keys($matches[1], null) : <span style="background-color: red">[</span>];
+    }
+
+    /**
+     * Get the compiled version of the route.
+     *
+     * @return \Symfony\Component\Routing\CompiledRoute
+     */
+    <span style="background-color: green">p</span>ublic function getCompiled()
+    {
+        return $this-&gt;compiled;
+    }
+
+    /**
+     * Set the router instance on the route.
+     *
+     * @param  \Illuminate\Routing\Router  $router
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setRouter(Router $router)
+    {
+        $this-&gt;router = $router;
+
+        return $this;
+    }
+
+    /**
+     * Set the container instance on the route.
+     *
+     * @param  \Illuminate\Container\Container  $container
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setContainer(Container $container)
+    {
+        $this-&gt;container = $container;
+
+        return $this;
+    }
+
+    /**
+     * Prepare the route instance for serialization.
+     *
+     * @return void
+     *
+     * @throws \LogicException
+     */
+    <span style="background-color: red">p</span>ublic function prepareForSerialization()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;action[&#039;uses&#039;] instanceof Closure) {
+            $this-&gt;action[&#039;uses&#039;] = serialize(
+                SerializableClosure::unsigned($this-&gt;action[&#039;uses&#039;])
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;action[&#039;missing&#039;]) &amp;&amp; <span style="background-color: red">$</span>this-&gt;action[&#039;missing&#039;] instanceof Closure) {
+            $this-&gt;action[&#039;missing&#039;] = serialize(
+                SerializableClosure::unsigned($this-&gt;action[&#039;missing&#039;])
+            );
+        <span style="background-color: red">}</span>
+
+        $this-&gt;compileRoute();
+
+        unset($this-&gt;router, $this-&gt;container);
+    }
+
+    /**
+     * Dynamically access route parameters.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __get($key)
+    {
+        return $this-&gt;parameter($key);
+    }
+}
+</pre>

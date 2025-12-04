@@ -1,0 +1,38 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\ErrorHandler\ErrorRenderer;
+
+use Symfony\Component\ErrorHandler\Exception\FlattenException;
+
+/**
+ * Formats an exception to be used as response content.
+ *
+ * @author Yonel Ceruto &lt;yonelceruto@gmail.com&gt;
+ */
+interface ErrorRendererInterface
+{
+    public const IDE_LINK_FORMATS = [
+        &#039;textmate&#039; =&gt; &#039;txmt://open?url=file://%f&amp;line=%l&#039;,
+        &#039;macvim&#039; =&gt; &#039;mvim://open?url=file://%f&amp;line=%l&#039;,
+        &#039;emacs&#039; =&gt; &#039;emacs://open?url=file://%f&amp;line=%l&#039;,
+        &#039;sublime&#039; =&gt; &#039;subl://open?url=file://%f&amp;line=%l&#039;,
+        &#039;phpstorm&#039; =&gt; &#039;phpstorm://open?file=%f&amp;line=%l&#039;,
+        &#039;atom&#039; =&gt; &#039;atom://core/open/file?filename=%f&amp;line=%l&#039;,
+        &#039;vscode&#039; =&gt; &#039;vscode://file/%f:%l&#039;,
+    ];
+
+    /**
+     * Renders a Throwable as a FlattenException.
+     */
+    public function render(\Throwable $exception): FlattenException;
+}
+</pre>

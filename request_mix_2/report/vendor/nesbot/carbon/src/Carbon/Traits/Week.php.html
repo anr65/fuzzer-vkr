@@ -1,0 +1,224 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonInterval;
+
+/**
+ * Trait Week.
+ *
+ * week and ISO week number, year and count in year.
+ *
+ * Depends on the following properties:
+ *
+ * @property int $daysInYear
+ * @property int $dayOfWeek
+ * @property int $dayOfYear
+ * @property int $year
+ *
+ * Depends on the following methods:
+ *
+ * @method static addWeeks(int $weeks = 1)
+ * @method static copy()
+ * @method static dayOfYear(int $dayOfYear)
+ * @method string getTranslationMessage(string $key, ?string $locale = null, ?string $default = null, $translator = null)
+ * @method static next(int|string $modifier = null)
+ * @method static startOfWeek(int $day = null)
+ * @method static subWeeks(int $weeks = 1)
+ * @method static year(int $year = null)
+ */
+trait Week
+{
+    /**
+     * Set/get the week number of year using given first day of week and first
+     * day of year included in the first week. Or use ISO format if no settings
+     * given.
+     *
+     * @param int|null $year      if null, act as a getter, if not null, set the year and return current instance.
+     * @param int|null $dayOfWeek first date of week from 0 (Sunday) to 6 (Saturday)
+     * @param int|null $dayOfYear first day of year included in the week #1
+     *
+     * @return int|static
+     */
+    <span style="background-color: red">p</span>ublic function isoWeekYear($year = null, $dayOfWeek = null, $dayOfYear = null)
+    {
+        return $this-&gt;weekYear(
+            $year,
+            $dayOfWeek ?? <span style="background-color: red">s</span>tatic::MONDAY,
+            $dayOfYear ?? <span style="background-color: red">s</span>tatic::THURSDAY,
+        );
+    }
+
+    /**
+     * Set/get the week number of year using given first day of week and first
+     * day of year included in the first week. Or use US format if no settings
+     * given (Sunday / Jan 6).
+     *
+     * @param int|null $year      if null, act as a getter, if not null, set the year and return current instance.
+     * @param int|null $dayOfWeek first date of week from 0 (Sunday) to 6 (Saturday)
+     * @param int|null $dayOfYear first day of year included in the week #1
+     *
+     * @return int|static
+     */
+    <span style="background-color: red">p</span>ublic function weekYear($year = null, $dayOfWeek = null, $dayOfYear = null)
+    {
+        $dayOfWeek = $dayOfWeek ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;first_day_of_week&#039;) ?? <span style="background-color: red">s</span>tatic::SUNDAY;
+        $dayOfYear = $dayOfYear ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;day_of_first_week_of_year&#039;) ?? <span style="background-color: red">1</span>;
+
+        <span style="background-color: red">i</span>f ($year !== null) {
+            $year = (int) round($year);
+
+            <span style="background-color: red">i</span>f ($this-&gt;weekYear(null, $dayOfWeek, $dayOfYear) === $year) {
+                return $this-&gt;avoidMutation();
+            <span style="background-color: red">}</span>
+
+            $week = $this-&gt;week(null, $dayOfWeek, $dayOfYear);
+            $day = $this-&gt;dayOfWeek;
+            $date = $this-&gt;year($year);
+
+            $date = match ($date-&gt;weekYear(null, $dayOfWeek, $dayOfYear) - $year) {
+                CarbonInterval::POSITIVE =&gt; <span style="background-color: red">$</span>date-&gt;subWeeks(static::WEEKS_PER_YEAR / 2),
+                CarbonInterval::NEGATIVE =&gt; <span style="background-color: red">$</span>date-&gt;addWeeks(static::WEEKS_PER_YEAR / 2),
+                default =&gt; <span style="background-color: red">$</span>date,
+            };
+
+            $date = $date
+                -&gt;addWeeks($week - $date-&gt;week(null, $dayOfWeek, $dayOfYear))
+                -&gt;startOfWeek($dayOfWeek);
+
+            <span style="background-color: red">i</span>f ($date-&gt;dayOfWeek === $day) {
+                return $date;
+            <span style="background-color: red">}</span>
+
+            return $date-&gt;next($day);
+        <span style="background-color: red">}</span>
+
+        $year = $this-&gt;year;
+        $day = $this-&gt;dayOfYear;
+        $date = $this-&gt;avoidMutation()-&gt;dayOfYear($dayOfYear)-&gt;startOfWeek($dayOfWeek);
+
+        <span style="background-color: red">i</span>f ($date-&gt;year === $year &amp;&amp; <span style="background-color: red">$</span>day &lt; $date-&gt;dayOfYear) {
+            return $year - 1;
+        <span style="background-color: red">}</span>
+
+        $date = $this-&gt;avoidMutation()-&gt;addYear()-&gt;dayOfYear($dayOfYear)-&gt;startOfWeek($dayOfWeek);
+
+        <span style="background-color: red">i</span>f ($date-&gt;year === $year &amp;&amp; <span style="background-color: red">$</span>day &gt;= $date-&gt;dayOfYear) {
+            return $year + 1;
+        <span style="background-color: red">}</span>
+
+        return $year;
+    }
+
+    /**
+     * Get the number of weeks of the current week-year using given first day of week and first
+     * day of year included in the first week. Or use ISO format if no settings
+     * given.
+     *
+     * @param int|null $dayOfWeek first date of week from 0 (Sunday) to 6 (Saturday)
+     * @param int|null $dayOfYear first day of year included in the week #1
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function isoWeeksInYear($dayOfWeek = null, $dayOfYear = null)
+    {
+        return $this-&gt;weeksInYear(
+            $dayOfWeek ?? <span style="background-color: red">s</span>tatic::MONDAY,
+            $dayOfYear ?? <span style="background-color: red">s</span>tatic::THURSDAY,
+        );
+    }
+
+    /**
+     * Get the number of weeks of the current week-year using given first day of week and first
+     * day of year included in the first week. Or use US format if no settings
+     * given (Sunday / Jan 6).
+     *
+     * @param int|null $dayOfWeek first date of week from 0 (Sunday) to 6 (Saturday)
+     * @param int|null $dayOfYear first day of year included in the week #1
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function weeksInYear($dayOfWeek = null, $dayOfYear = null)
+    {
+        $dayOfWeek = $dayOfWeek ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;first_day_of_week&#039;) ?? <span style="background-color: red">s</span>tatic::SUNDAY;
+        $dayOfYear = $dayOfYear ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;day_of_first_week_of_year&#039;) ?? <span style="background-color: red">1</span>;
+        $year = $this-&gt;year;
+        $start = $this-&gt;avoidMutation()-&gt;dayOfYear($dayOfYear)-&gt;startOfWeek($dayOfWeek);
+        $startDay = $start-&gt;dayOfYear;
+        <span style="background-color: red">i</span>f ($start-&gt;year !== $year) {
+            $startDay -= $start-&gt;daysInYear;
+        <span style="background-color: red">}</span>
+        $end = $this-&gt;avoidMutation()-&gt;addYear()-&gt;dayOfYear($dayOfYear)-&gt;startOfWeek($dayOfWeek);
+        $endDay = $end-&gt;dayOfYear;
+        <span style="background-color: red">i</span>f ($end-&gt;year !== $year) {
+            $endDay += $this-&gt;daysInYear;
+        <span style="background-color: red">}</span>
+
+        return (int) round(($endDay - $startDay) / static::DAYS_PER_WEEK);
+    }
+
+    /**
+     * Get/set the week number using given first day of week and first
+     * day of year included in the first week. Or use US format if no settings
+     * given (Sunday / Jan 6).
+     *
+     * @param int|null $week
+     * @param int|null $dayOfWeek
+     * @param int|null $dayOfYear
+     *
+     * @return int|static
+     */
+    <span style="background-color: red">p</span>ublic function week($week = null, $dayOfWeek = null, $dayOfYear = null)
+    {
+        $date = $this;
+        $dayOfWeek = $dayOfWeek ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;first_day_of_week&#039;) ?? <span style="background-color: red">0</span>;
+        $dayOfYear = $dayOfYear ?? <span style="background-color: red">$</span>this-&gt;getTranslationMessage(&#039;day_of_first_week_of_year&#039;) ?? <span style="background-color: red">1</span>;
+
+        <span style="background-color: red">i</span>f ($week !== null) {
+            return $date-&gt;addWeeks(round($week) - $this-&gt;week(null, $dayOfWeek, $dayOfYear));
+        <span style="background-color: red">}</span>
+
+        $start = $date-&gt;avoidMutation()-&gt;shiftTimezone(&#039;UTC&#039;)-&gt;dayOfYear($dayOfYear)-&gt;startOfWeek($dayOfWeek);
+        $end = $date-&gt;avoidMutation()-&gt;shiftTimezone(&#039;UTC&#039;)-&gt;startOfWeek($dayOfWeek);
+
+        <span style="background-color: red">i</span>f ($start &gt; $end) {
+            $start = $start-&gt;subWeeks(static::WEEKS_PER_YEAR / 2)-&gt;dayOfYear($dayOfYear)-&gt;startOfWeek($dayOfWeek);
+        <span style="background-color: red">}</span>
+
+        $week = (int) ($start-&gt;diffInDays($end) / static::DAYS_PER_WEEK + 1);
+
+        return $week &gt; $end-&gt;weeksInYear($dayOfWeek, $dayOfYear) ? 1 : <span style="background-color: red">$</span>week;
+    }
+
+    /**
+     * Get/set the week number using given first day of week and first
+     * day of year included in the first week. Or use ISO format if no settings
+     * given.
+     *
+     * @param int|null $week
+     * @param int|null $dayOfWeek
+     * @param int|null $dayOfYear
+     *
+     * @return int|static
+     */
+    <span style="background-color: red">p</span>ublic function isoWeek($week = null, $dayOfWeek = null, $dayOfYear = null)
+    {
+        return $this-&gt;week(
+            $week,
+            $dayOfWeek ?? <span style="background-color: red">s</span>tatic::MONDAY,
+            $dayOfYear ?? <span style="background-color: red">s</span>tatic::THURSDAY,
+        );
+    }
+}
+</pre>

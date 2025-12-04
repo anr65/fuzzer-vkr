@@ -1,0 +1,133 @@
+<pre>&lt;?php
+
+use Monolog\Handler\NullHandler;
+use Monolog\Handler\StreamHandler;
+use Monolog\Handler\SyslogUdpHandler;
+use Monolog\Processor\PsrLogMessageProcessor;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Log Channel
+    |--------------------------------------------------------------------------
+    |
+    | This option defines the default log channel that is utilized to write
+    | messages to your logs. The value provided here should match one of
+    | the channels present in the list of &quot;channels&quot; configured below.
+    |
+    */
+
+    &#039;default&#039; =&gt; env(&#039;LOG_CHANNEL&#039;, &#039;stack&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Deprecations Log Channel
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the log channel that should be used to log warnings
+    | regarding deprecated PHP and library features. This allows you to get
+    | your application ready for upcoming major versions of dependencies.
+    |
+    */
+
+    &#039;deprecations&#039; =&gt; [
+        &#039;channel&#039; =&gt; env(&#039;LOG_DEPRECATIONS_CHANNEL&#039;, &#039;null&#039;),
+        &#039;trace&#039; =&gt; env(&#039;LOG_DEPRECATIONS_TRACE&#039;, false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Log Channels
+    |--------------------------------------------------------------------------
+    |
+    | Here you may configure the log channels for your application. Laravel
+    | utilizes the Monolog PHP logging library, which includes a variety
+    | of powerful log handlers and formatters that you&#039;re free to use.
+    |
+    | Available drivers: &quot;single&quot;, &quot;daily&quot;, &quot;slack&quot;, &quot;syslog&quot;,
+    |                    &quot;errorlog&quot;, &quot;monolog&quot;, &quot;custom&quot;, &quot;stack&quot;
+    |
+    */
+
+    &#039;channels&#039; =&gt; [
+
+        &#039;stack&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;stack&#039;,
+            &#039;channels&#039; =&gt; explode(&#039;,&#039;, env(&#039;LOG_STACK&#039;, &#039;single&#039;)),
+            &#039;ignore_exceptions&#039; =&gt; false,
+        ],
+
+        &#039;single&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;single&#039;,
+            &#039;path&#039; =&gt; storage_path(&#039;logs/laravel.log&#039;),
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;debug&#039;),
+            &#039;replace_placeholders&#039; =&gt; true,
+        ],
+
+        &#039;daily&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;daily&#039;,
+            &#039;path&#039; =&gt; storage_path(&#039;logs/laravel.log&#039;),
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;debug&#039;),
+            &#039;days&#039; =&gt; env(&#039;LOG_DAILY_DAYS&#039;, 14),
+            &#039;replace_placeholders&#039; =&gt; true,
+        ],
+
+        &#039;slack&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;slack&#039;,
+            &#039;url&#039; =&gt; env(&#039;LOG_SLACK_WEBHOOK_URL&#039;),
+            &#039;username&#039; =&gt; env(&#039;LOG_SLACK_USERNAME&#039;, &#039;Laravel Log&#039;),
+            &#039;emoji&#039; =&gt; env(&#039;LOG_SLACK_EMOJI&#039;, &#039;:boom:&#039;),
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;critical&#039;),
+            &#039;replace_placeholders&#039; =&gt; true,
+        ],
+
+        &#039;papertrail&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;monolog&#039;,
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;debug&#039;),
+            &#039;handler&#039; =&gt; env(&#039;LOG_PAPERTRAIL_HANDLER&#039;, SyslogUdpHandler::class),
+            &#039;handler_with&#039; =&gt; [
+                &#039;host&#039; =&gt; env(&#039;PAPERTRAIL_URL&#039;),
+                &#039;port&#039; =&gt; env(&#039;PAPERTRAIL_PORT&#039;),
+                &#039;connectionString&#039; =&gt; &#039;tls://&#039;.env(&#039;PAPERTRAIL_URL&#039;).&#039;:&#039;.env(&#039;PAPERTRAIL_PORT&#039;),
+            ],
+            &#039;processors&#039; =&gt; [PsrLogMessageProcessor::class],
+        ],
+
+        &#039;stderr&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;monolog&#039;,
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;debug&#039;),
+            &#039;handler&#039; =&gt; StreamHandler::class,
+            &#039;handler_with&#039; =&gt; [
+                &#039;stream&#039; =&gt; &#039;php://stderr&#039;,
+            ],
+            &#039;formatter&#039; =&gt; env(&#039;LOG_STDERR_FORMATTER&#039;),
+            &#039;processors&#039; =&gt; [PsrLogMessageProcessor::class],
+        ],
+
+        &#039;syslog&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;syslog&#039;,
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;debug&#039;),
+            &#039;facility&#039; =&gt; env(&#039;LOG_SYSLOG_FACILITY&#039;, LOG_USER),
+            &#039;replace_placeholders&#039; =&gt; true,
+        ],
+
+        &#039;errorlog&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;errorlog&#039;,
+            &#039;level&#039; =&gt; env(&#039;LOG_LEVEL&#039;, &#039;debug&#039;),
+            &#039;replace_placeholders&#039; =&gt; true,
+        ],
+
+        &#039;null&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;monolog&#039;,
+            &#039;handler&#039; =&gt; NullHandler::class,
+        ],
+
+        &#039;emergency&#039; =&gt; [
+            &#039;path&#039; =&gt; storage_path(&#039;logs/laravel.log&#039;),
+        ],
+
+    ],
+
+];
+</pre>

@@ -1,0 +1,9 @@
+!z: s:@ bvh,ng :,,,!r!,ng :
+  !~ ngbvh,ng :
+  !r  !l z,,!bvh,n,,!zz,,t :
+bvh,g :
+  !r  !l z,,!zz,,t bvh,ng :
+  !r  !l z,,!zz,,t :
+bvh,t,~ ng bvh,
+  !r  ,,!zz,!,t :
+b:v sh

@@ -1,0 +1,939 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Carbon\Exceptions\InvalidDateException;
+use Carbon\Exceptions\InvalidFormatException;
+use Carbon\Exceptions\InvalidTimeZoneException;
+use Carbon\Exceptions\OutOfRangeException;
+use Carbon\Exceptions\UnitException;
+use Carbon\Month;
+use Carbon\Translator;
+use Carbon\WeekDay;
+use Closure;
+use DateMalformedStringException;
+use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
+use Exception;
+use ReturnTypeWillChange;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+/**
+ * Trait Creator.
+ *
+ * Static creators.
+ *
+ * Depends on the following methods:
+ *
+ * @method static Carbon|CarbonImmutable getTestNow()
+ */
+trait Creator
+{
+    use ObjectInitialisation;
+    use LocalFactory;
+
+    /**
+     * The errors that can occur.
+     */
+    protected static ?array $lastErrors = null;
+
+    /**
+     * Create a new Carbon instance.
+     *
+     * Please see the testing aids section (specifically static::setTestNow())
+     * for more on the possibility of this constructor returning a test instance.
+     *
+     * @throws InvalidFormatException
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        DateTimeInterface|WeekDay|Month|string|int|float|null $time = null,
+        DateTimeZone|string|int|null $timezone = null,
+    ) {
+        $this-&gt;initLocalFactory();
+
+        <span style="background-color: red">i</span>f ($time instanceof Month) {
+            $time = $time-&gt;name.&#039; 1&#039;;
+        } <span style="background-color: red">e</span>lseif ($time instanceof WeekDay) {
+            $time = $time-&gt;name;
+        } <span style="background-color: red">e</span>lseif ($time instanceof DateTimeInterface) {
+            $time = $this-&gt;constructTimezoneFromDateTime($time, $timezone)-&gt;format(&#039;Y-m-d H:i:s.u&#039;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($time) &amp;&amp; <span style="background-color: red">s</span>tr_starts_with($time, &#039;@&#039;)) {
+            $time = static::createFromTimestampUTC(substr($time, 1))-&gt;format(&#039;Y-m-d\TH:i:s.uP&#039;);
+        } <span style="background-color: red">e</span>lseif (is_numeric($time) &amp;&amp; (<span style="background-color: red">!</span>\is_string($time) || <span style="background-color: red">!</span>preg_match(&#039;/^\d{1,14}$/&#039;, $time))) {
+            $time = static::createFromTimestampUTC($time)-&gt;format(&#039;Y-m-d\TH:i:s.uP&#039;);
+        <span style="background-color: green">}</span>
+
+        // If the class has a test now set, and we are trying to create a now()
+        // instance then override as required
+        $isNow = \in_array($time, [null, &#039;&#039;, &#039;now&#039;], true);
+        $timezone = static::safeCreateDateTimeZone($timezone) ?? <span style="background-color: green">n</span>ull;
+
+        <span style="background-color: red">i</span>f (
+            ($this-&gt;clock || (
+                <span style="background-color: green">m</span>ethod_exists(static::class, &#039;hasTestNow&#039;) &amp;&amp;
+                <span style="background-color: green">m</span>ethod_exists(static::class, &#039;getTestNow&#039;) &amp;&amp;
+                <span style="background-color: green">s</span>tatic::hasTestNow()
+            )) &amp;&amp;
+            (<span style="background-color: red">$</span>isNow || <span style="background-color: red">s</span>tatic::hasRelativeKeywords($time))
+        ) {
+            $this-&gt;mockConstructorParameters($time, $timezone);
+        <span style="background-color: green">}</span>
+
+        try {
+            parent::__construct($time ?? <span style="background-color: green">'</span>now&#039;, $timezone);
+        } <span style="background-color: red">c</span>atch (Exception $exception) {
+            throw new InvalidFormatException($exception-&gt;getMessage(), 0, $exception);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;constructedObjectId = spl_object_hash($this);
+
+        self::setLastErrors(parent::getLastErrors());
+    }
+
+    /**
+     * Get timezone from a datetime instance.
+     */
+    <span style="background-color: red">p</span>rivate function constructTimezoneFromDateTime(
+        DateTimeInterface $date,
+        DateTimeZone|string|int|null &amp;$timezone,
+    ): DateTimeInterface {
+        <span style="background-color: red">i</span>f ($timezone !== null) {
+            $safeTz = static::safeCreateDateTimeZone($timezone);
+
+            <span style="background-color: red">i</span>f ($safeTz) {
+                $date = ($date instanceof DateTimeImmutable ? $date : <span style="background-color: red">c</span>lone $date)-&gt;setTimezone($safeTz);
+            <span style="background-color: red">}</span>
+
+            return $date;
+        <span style="background-color: red">}</span>
+
+        $timezone = $date-&gt;getTimezone();
+
+        return $date;
+    }
+
+    /**
+     * Update constructedObjectId on cloned.
+     */
+    <span style="background-color: red">p</span>ublic function __clone(): void
+    {
+        $this-&gt;constructedObjectId = spl_object_hash($this);
+    }
+
+    /**
+     * Create a Carbon instance from a DateTime one.
+     */
+    <span style="background-color: red">p</span>ublic static function instance(DateTimeInterface $date): static
+    {
+        <span style="background-color: red">i</span>f ($date instanceof static) {
+            return clone $date;
+        <span style="background-color: red">}</span>
+
+        $instance = parent::createFromFormat(&#039;U.u&#039;, $date-&gt;format(&#039;U.u&#039;))
+            -&gt;setTimezone($date-&gt;getTimezone());
+
+        <span style="background-color: red">i</span>f ($date instanceof CarbonInterface) {
+            $settings = $date-&gt;getSettings();
+
+            <span style="background-color: red">i</span>f (!$date-&gt;hasLocalTranslator()) {
+                unset($settings[&#039;locale&#039;]);
+            <span style="background-color: red">}</span>
+
+            $instance-&gt;settings($settings);
+        <span style="background-color: red">}</span>
+
+        return $instance;
+    }
+
+    /**
+     * Create a carbon instance from a string.
+     *
+     * This is an alias for the constructor that allows better fluent syntax
+     * as it allows you to do Carbon::parse(&#039;Monday next week&#039;)-&gt;fn() rather
+     * than (new Carbon(&#039;Monday next week&#039;))-&gt;fn().
+     *
+     * @throws InvalidFormatException
+     */
+    <span style="background-color: red">p</span>ublic static function rawParse(
+        DateTimeInterface|WeekDay|Month|string|int|float|null $time,
+        DateTimeZone|string|int|null $timezone = null,
+    ): static {
+        <span style="background-color: red">i</span>f ($time instanceof DateTimeInterface) {
+            return static::instance($time);
+        <span style="background-color: red">}</span>
+
+        try {
+            return new static($time, $timezone);
+        } <span style="background-color: red">c</span>atch (Exception $exception) {
+            // @codeCoverageIgnoreStart
+            try {
+                $date = @static::now($timezone)-&gt;change($time);
+            } <span style="background-color: red">c</span>atch (DateMalformedStringException|InvalidFormatException) {
+                $date = null;
+            <span style="background-color: red">}</span>
+            // @codeCoverageIgnoreEnd
+
+            return $date
+                ?? <span style="background-color: red">t</span>hrow new InvalidFormatException(&quot;Could not parse &#039;$time&#039;: &quot;.$exception-&gt;getMessage(), 0, $exception);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a carbon instance from a string.
+     *
+     * This is an alias for the constructor that allows better fluent syntax
+     * as it allows you to do Carbon::parse(&#039;Monday next week&#039;)-&gt;fn() rather
+     * than (new Carbon(&#039;Monday next week&#039;))-&gt;fn().
+     *
+     * @throws InvalidFormatException
+     */
+    <span style="background-color: red">p</span>ublic static function parse(
+        DateTimeInterface|WeekDay|Month|string|int|float|null $time,
+        DateTimeZone|string|int|null $timezone = null,
+    ): static {
+        $function = static::$parseFunction;
+
+        <span style="background-color: red">i</span>f (!$function) {
+            return static::rawParse($time, $timezone);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($function) &amp;&amp; <span style="background-color: red">m</span>ethod_exists(static::class, $function)) {
+            $function = [static::class, $function];
+        <span style="background-color: red">}</span>
+
+        return $function(...\func_get_args());
+    }
+
+    /**
+     * Create a carbon instance from a localized string (in French, Japanese, Arabic, etc.).
+     *
+     * @param string                       $time     date/time string in the given language (may also contain English).
+     * @param string|null                  $locale   if locale is null or not specified, current global locale will be
+     *                                               used instead.
+     * @param DateTimeZone|string|int|null $timezone optional timezone for the new instance.
+     *
+     * @throws InvalidFormatException
+     */
+    <span style="background-color: red">p</span>ublic static function parseFromLocale(
+        string $time,
+        ?string $locale = null,
+        DateTimeZone|string|int|null $timezone = null,
+    ): static {
+        return static::rawParse(static::translateTimeString($time, $locale, static::DEFAULT_LOCALE), $timezone);
+    }
+
+    /**
+     * Get a Carbon instance for the current date and time.
+     */
+    <span style="background-color: green">p</span>ublic static function now(DateTimeZone|string|int|null $timezone = null): static
+    {
+        return new static(null, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance for today.
+     */
+    <span style="background-color: red">p</span>ublic static function today(DateTimeZone|string|int|null $timezone = null): static
+    {
+        return static::rawParse(&#039;today&#039;, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance for tomorrow.
+     */
+    <span style="background-color: red">p</span>ublic static function tomorrow(DateTimeZone|string|int|null $timezone = null): static
+    {
+        return static::rawParse(&#039;tomorrow&#039;, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance for yesterday.
+     */
+    <span style="background-color: red">p</span>ublic static function yesterday(DateTimeZone|string|int|null $timezone = null): static
+    {
+        return static::rawParse(&#039;yesterday&#039;, $timezone);
+    }
+
+    <span style="background-color: red">p</span>rivate static function assertBetween($unit, $value, $min, $max): void
+    {
+        <span style="background-color: red">i</span>f (static::isStrictModeEnabled() &amp;&amp; (<span style="background-color: red">$</span>value &lt; $min || <span style="background-color: red">$</span>value &gt; $max)) {
+            throw new OutOfRangeException($unit, $min, $max, $value);
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>rivate static function createNowInstance($timezone)
+    {
+        <span style="background-color: red">i</span>f (!static::hasTestNow()) {
+            return static::now($timezone);
+        <span style="background-color: red">}</span>
+
+        $now = static::getTestNow();
+
+        <span style="background-color: red">i</span>f ($now instanceof Closure) {
+            return $now(static::now($timezone));
+        <span style="background-color: red">}</span>
+
+        $now = $now-&gt;avoidMutation();
+
+        return $timezone === null ? $now : <span style="background-color: red">$</span>now-&gt;setTimezone($timezone);
+    }
+
+    /**
+     * Create a new Carbon instance from a specific date and time.
+     *
+     * If any of $year, $month or $day are set to null their now() values will
+     * be used.
+     *
+     * If $hour is null it will be set to its now() value and the default
+     * values for $minute and $second will be their now() values.
+     *
+     * If $hour is not null then the default values for $minute and $second
+     * will be 0.
+     *
+     * @param DateTimeInterface|string|int|null $year
+     * @param int|null                          $month
+     * @param int|null                          $day
+     * @param int|null                          $hour
+     * @param int|null                          $minute
+     * @param int|null                          $second
+     * @param DateTimeZone|string|int|null      $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function create($year = 0, $month = 1, $day = 1, $hour = 0, $minute = 0, $second = 0, $timezone = null): ?self
+    {
+        $month = self::monthToInt($month);
+
+        <span style="background-color: red">i</span>f ((\is_string($year) &amp;&amp; <span style="background-color: red">!</span>is_numeric($year)) || <span style="background-color: red">$</span>year instanceof DateTimeInterface) {
+            return static::parse($year, $timezone ?? (<span style="background-color: red">\</span>is_string($month) || <span style="background-color: red">$</span>month instanceof DateTimeZone ? $month : <span style="background-color: red">n</span>ull));
+        <span style="background-color: red">}</span>
+
+        $defaults = null;
+        $getDefault = <span style="background-color: red">f</span>unction ($unit) use ($timezone, &amp;$defaults) {
+            <span style="background-color: red">i</span>f ($defaults === null) {
+                $now = self::createNowInstance($timezone);
+
+                $defaults = array_combine([
+                    &#039;year&#039;,
+                    &#039;month&#039;,
+                    &#039;day&#039;,
+                    &#039;hour&#039;,
+                    &#039;minute&#039;,
+                    &#039;second&#039;,
+                ], explode(&#039;-&#039;, $now-&gt;rawFormat(&#039;Y-n-j-G-i-s.u&#039;)));
+            <span style="background-color: red">}</span>
+
+            return $defaults[$unit];
+        };
+
+        $year = $year ?? <span style="background-color: red">$</span>getDefault(&#039;year&#039;);
+        $month = $month ?? <span style="background-color: red">$</span>getDefault(&#039;month&#039;);
+        $day = $day ?? <span style="background-color: red">$</span>getDefault(&#039;day&#039;);
+        $hour = $hour ?? <span style="background-color: red">$</span>getDefault(&#039;hour&#039;);
+        $minute = $minute ?? <span style="background-color: red">$</span>getDefault(&#039;minute&#039;);
+        $second = (float) ($second ?? <span style="background-color: red">$</span>getDefault(&#039;second&#039;));
+
+        self::assertBetween(&#039;month&#039;, $month, 0, 99);
+        self::assertBetween(&#039;day&#039;, $day, 0, 99);
+        self::assertBetween(&#039;hour&#039;, $hour, 0, 99);
+        self::assertBetween(&#039;minute&#039;, $minute, 0, 99);
+        self::assertBetween(&#039;second&#039;, $second, 0, 99);
+
+        $fixYear = null;
+
+        <span style="background-color: red">i</span>f ($year &lt; 0) {
+            $fixYear = $year;
+            $year = 0;
+        } <span style="background-color: red">e</span>lseif ($year &gt; 9999) {
+            $fixYear = $year - 9999;
+            $year = 9999;
+        <span style="background-color: red">}</span>
+
+        $second = ($second &lt; 10 ? &#039;0&#039; : <span style="background-color: red">'</span>&#039;).number_format($second, 6);
+        $instance = static::rawCreateFromFormat(&#039;!Y-n-j G:i:s.u&#039;, \sprintf(&#039;%s-%s-%s %s:%02s:%02s&#039;, $year, $month, $day, $hour, $minute, $second), $timezone);
+
+        <span style="background-color: red">i</span>f ($instance &amp;&amp; <span style="background-color: red">$</span>fixYear !== null) {
+            $instance = $instance-&gt;addYears($fixYear);
+        <span style="background-color: red">}</span>
+
+        return $instance ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Create a new safe Carbon instance from a specific date and time.
+     *
+     * If any of $year, $month or $day are set to null their now() values will
+     * be used.
+     *
+     * If $hour is null it will be set to its now() value and the default
+     * values for $minute and $second will be their now() values.
+     *
+     * If $hour is not null then the default values for $minute and $second
+     * will be 0.
+     *
+     * If one of the set values is not valid, an InvalidDateException
+     * will be thrown.
+     *
+     * @param int|null                     $year
+     * @param int|null                     $month
+     * @param int|null                     $day
+     * @param int|null                     $hour
+     * @param int|null                     $minute
+     * @param int|null                     $second
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidDateException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function createSafe($year = null, $month = null, $day = null, $hour = null, $minute = null, $second = null, $timezone = null): ?self
+    {
+        $month = self::monthToInt($month);
+        $fields = static::getRangesByUnit();
+
+        <span style="background-color: red">f</span>oreach ($fields as $field =&gt; $range) {
+            <span style="background-color: red">i</span>f ($$field !== null &amp;&amp; (<span style="background-color: red">!</span>\is_int($$field) || <span style="background-color: red">$</span>$field &lt; $range[0] || <span style="background-color: red">$</span>$field &gt; $range[1])) {
+                <span style="background-color: red">i</span>f (static::isStrictModeEnabled()) {
+                    throw new InvalidDateException($field, $$field);
+                <span style="background-color: red">}</span>
+
+                return null;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $instance = static::create($year, $month, $day, $hour, $minute, $second, $timezone);
+
+        <span style="background-color: red">f</span>oreach (array_reverse($fields) as $field =&gt; $range) {
+            <span style="background-color: red">i</span>f ($$field !== null &amp;&amp; (<span style="background-color: red">!</span>\is_int($$field) || <span style="background-color: red">$</span>$field !== $instance-&gt;$field)) {
+                <span style="background-color: red">i</span>f (static::isStrictModeEnabled()) {
+                    throw new InvalidDateException($field, $$field);
+                <span style="background-color: red">}</span>
+
+                return null;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $instance;
+    }
+
+    /**
+     * Create a new Carbon instance from a specific date and time using strict validation.
+     *
+     * @see create()
+     *
+     * @param int|null                     $year
+     * @param int|null                     $month
+     * @param int|null                     $day
+     * @param int|null                     $hour
+     * @param int|null                     $minute
+     * @param int|null                     $second
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function createStrict(?int $year = 0, ?int $month = 1, ?int $day = 1, ?int $hour = 0, ?int $minute = 0, ?int $second = 0, $timezone = null): static
+    {
+        $initialStrictMode = static::isStrictModeEnabled();
+        static::useStrictMode(true);
+
+        try {
+            $date = static::create($year, $month, $day, $hour, $minute, $second, $timezone);
+        } <span style="background-color: red">f</span>inally {
+            static::useStrictMode($initialStrictMode);
+        <span style="background-color: red">}</span>
+
+        return $date;
+    }
+
+    /**
+     * Create a Carbon instance from just a date. The time portion is set to now.
+     *
+     * @param int|null                     $year
+     * @param int|null                     $month
+     * @param int|null                     $day
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function createFromDate($year = null, $month = null, $day = null, $timezone = null)
+    {
+        return static::create($year, $month, $day, null, null, null, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance from just a date. The time portion is set to midnight.
+     *
+     * @param int|null                     $year
+     * @param int|null                     $month
+     * @param int|null                     $day
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function createMidnightDate($year = null, $month = null, $day = null, $timezone = null)
+    {
+        return static::create($year, $month, $day, 0, 0, 0, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance from just a time. The date portion is set to today.
+     *
+     * @param int|null                     $hour
+     * @param int|null                     $minute
+     * @param int|null                     $second
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function createFromTime($hour = 0, $minute = 0, $second = 0, $timezone = null): static
+    {
+        return static::create(null, null, null, $hour, $minute, $second, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance from a time string. The date portion is set to today.
+     *
+     * @throws InvalidFormatException
+     */
+    <span style="background-color: red">p</span>ublic static function createFromTimeString(string $time, DateTimeZone|string|int|null $timezone = null): static
+    {
+        return static::today($timezone)-&gt;setTimeFromTimeString($time);
+    }
+
+    <span style="background-color: red">p</span>rivate static function createFromFormatAndTimezone(
+        string $format,
+        string $time,
+        DateTimeZone|string|int|null $originalTimezone,
+    ): ?DateTimeInterface {
+        <span style="background-color: red">i</span>f ($originalTimezone === null) {
+            return parent::createFromFormat($format, $time) ?: <span style="background-color: red">n</span>ull;
+        <span style="background-color: red">}</span>
+
+        $timezone = \is_int($originalTimezone) ? self::getOffsetTimezone($originalTimezone) : <span style="background-color: red">$</span>originalTimezone;
+
+        $timezone = static::safeCreateDateTimeZone($timezone, $originalTimezone);
+
+        return parent::createFromFormat($format, $time, $timezone) ?: <span style="background-color: red">n</span>ull;
+    }
+
+    <span style="background-color: red">p</span>rivate static function getOffsetTimezone(int $offset): string
+    {
+        $minutes = (int) ($offset * static::MINUTES_PER_HOUR * static::SECONDS_PER_MINUTE);
+
+        return @timezone_name_from_abbr(&#039;&#039;, $minutes, 1) ?: <span style="background-color: red">t</span>hrow new InvalidTimeZoneException(
+            &quot;Invalid offset timezone $offset&quot;,
+        );
+    }
+
+    /**
+     * Create a Carbon instance from a specific format.
+     *
+     * @param string                       $format   Datetime format
+     * @param string                       $time
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function rawCreateFromFormat(string $format, string $time, $timezone = null): ?self
+    {
+        // Work-around for https://bugs.php.net/bug.php?id=80141
+        $format = preg_replace(&#039;/(?&lt;!\\\\)((?:\\\\{2})*)c/&#039;, &#039;$1Y-m-d\TH:i:sP&#039;, $format);
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/(?&lt;!\\\\)(?:\\\\{2})*(a|A)/&#039;, $format, $aMatches, PREG_OFFSET_CAPTURE) &amp;&amp;
+            <span style="background-color: red">p</span>reg_match(&#039;/(?&lt;!\\\\)(?:\\\\{2})*(h|g|H|G)/&#039;, $format, $hMatches, PREG_OFFSET_CAPTURE) &amp;&amp;
+            <span style="background-color: red">$</span>aMatches[1][1] &lt; $hMatches[1][1] &amp;&amp;
+            <span style="background-color: red">p</span>reg_match(&#039;/(am|pm|AM|PM)/&#039;, $time)
+        ) {
+            $format = preg_replace(&#039;/^(.*)(?&lt;!\\\\)((?:\\\\{2})*)(a|A)(.*)$/U&#039;, &#039;$1$2$4 $3&#039;, $format);
+            $time = preg_replace(&#039;/^(.*)(am|pm|AM|PM)(.*)$/U&#039;, &#039;$1$3 $2&#039;, $time);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($timezone === false) {
+            $timezone = null;
+        <span style="background-color: red">}</span>
+
+        // First attempt to create an instance, so that error messages are based on the unmodified format.
+        $date = self::createFromFormatAndTimezone($format, $time, $timezone);
+        $lastErrors = parent::getLastErrors();
+        /** @var \Carbon\CarbonImmutable|\Carbon\Carbon|null $mock */
+        $mock = static::getMockedTestNow($timezone);
+
+        <span style="background-color: red">i</span>f ($mock &amp;&amp; <span style="background-color: red">$</span>date instanceof DateTimeInterface) {
+            // Set timezone from mock if custom timezone was neither given directly nor as a part of format.
+            // First let&#039;s skip the part that will be ignored by the parser.
+            $nonEscaped = &#039;(?&lt;!\\\\)(\\\\{2})*&#039;;
+
+            $nonIgnored = preg_replace(&quot;/^.*{$nonEscaped}!/s&quot;, &#039;&#039;, $format);
+
+            <span style="background-color: red">i</span>f ($timezone === null &amp;&amp; <span style="background-color: red">!</span>preg_match(&quot;/{$nonEscaped}[eOPT]/&quot;, $nonIgnored)) {
+                $timezone = clone $mock-&gt;getTimezone();
+            <span style="background-color: red">}</span>
+
+            $mock = $mock-&gt;copy();
+
+            // Prepend mock datetime only if the format does not contain non escaped unix epoch reset flag.
+            <span style="background-color: red">i</span>f (!preg_match(&quot;/{$nonEscaped}[!|]/&quot;, $format)) {
+                <span style="background-color: red">i</span>f (preg_match(&#039;/[HhGgisvuB]/&#039;, $format)) {
+                    $mock = $mock-&gt;setTime(0, 0);
+                <span style="background-color: red">}</span>
+
+                $format = static::MOCK_DATETIME_FORMAT.&#039; &#039;.$format;
+                $time = ($mock instanceof self ? $mock-&gt;rawFormat(static::MOCK_DATETIME_FORMAT) : <span style="background-color: red">$</span>mock-&gt;format(static::MOCK_DATETIME_FORMAT)).&#039; &#039;.$time;
+            <span style="background-color: red">}</span>
+
+            // Regenerate date from the modified format to base result on the mocked instance instead of now.
+            $date = self::createFromFormatAndTimezone($format, $time, $timezone);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($date instanceof DateTimeInterface) {
+            $instance = static::instance($date);
+            $instance::setLastErrors($lastErrors);
+
+            return $instance;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (static::isStrictModeEnabled()) {
+            throw new InvalidFormatException(implode(PHP_EOL, (array) $lastErrors[&#039;errors&#039;]));
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Create a Carbon instance from a specific format.
+     *
+     * @param string                       $format   Datetime format
+     * @param string                       $time
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">#</span>[ReturnTypeWillChange]
+    public static function createFromFormat($format, $time, $timezone = null): ?self
+    {
+        $function = static::$createFromFormatFunction;
+
+        // format is a single numeric unit
+        <span style="background-color: red">i</span>f (\is_int($time) &amp;&amp; <span style="background-color: red">\</span>in_array(ltrim($format, &#039;!&#039;), [&#039;U&#039;, &#039;Y&#039;, &#039;y&#039;, &#039;X&#039;, &#039;x&#039;, &#039;m&#039;, &#039;n&#039;, &#039;d&#039;, &#039;j&#039;, &#039;w&#039;, &#039;W&#039;, &#039;H&#039;, &#039;h&#039;, &#039;G&#039;, &#039;g&#039;, &#039;i&#039;, &#039;s&#039;, &#039;u&#039;, &#039;z&#039;, &#039;v&#039;], true)) {
+            $time = (string) $time;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!\is_string($time)) {
+            @trigger_error(
+                &#039;createFromFormat() $time parameter will only accept string or integer for 1-letter format representing a numeric unit in the next version&#039;,
+                \E_USER_DEPRECATED,
+            );
+            $time = (string) $time;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$function) {
+            return static::rawCreateFromFormat($format, $time, $timezone);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($function) &amp;&amp; <span style="background-color: red">m</span>ethod_exists(static::class, $function)) {
+            $function = [static::class, $function];
+        <span style="background-color: red">}</span>
+
+        return $function(...\func_get_args());
+    }
+
+    /**
+     * Create a Carbon instance from a specific ISO format (same replacements as -&gt;isoFormat()).
+     *
+     * @param string                       $format     Datetime format
+     * @param string                       $time
+     * @param DateTimeZone|string|int|null $timezone   optional timezone
+     * @param string|null                  $locale     locale to be used for LTS, LT, LL, LLL, etc. macro-formats (en by fault, unneeded if no such macro-format in use)
+     * @param TranslatorInterface|null     $translator optional custom translator to use for macro-formats
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function createFromIsoFormat(
+        string $format,
+        string $time,
+        $timezone = null,
+        ?string $locale = self::DEFAULT_LOCALE,
+        ?TranslatorInterface $translator = null
+    ): ?self {
+        $format = preg_replace_callback(&#039;/(?&lt;!\\\\)(\\\\{2})*(LTS|LT|[Ll]{1,4})/&#039;, <span style="background-color: red">f</span>unction ($match) use ($locale, $translator) {
+            [$code] = $match;
+
+            static $formats = null;
+
+            <span style="background-color: red">i</span>f ($formats === null) {
+                $translator ??= <span style="background-color: red">T</span>ranslator::get($locale);
+
+                $formats = [
+                    &#039;LT&#039; =&gt; static::getTranslationMessageWith($translator, &#039;formats.LT&#039;, $locale),
+                    &#039;LTS&#039; =&gt; static::getTranslationMessageWith($translator, &#039;formats.LTS&#039;, $locale),
+                    &#039;L&#039; =&gt; static::getTranslationMessageWith($translator, &#039;formats.L&#039;, $locale),
+                    &#039;LL&#039; =&gt; static::getTranslationMessageWith($translator, &#039;formats.LL&#039;, $locale),
+                    &#039;LLL&#039; =&gt; static::getTranslationMessageWith($translator, &#039;formats.LLL&#039;, $locale),
+                    &#039;LLLL&#039; =&gt; static::getTranslationMessageWith($translator, &#039;formats.LLLL&#039;, $locale),
+                ];
+            <span style="background-color: red">}</span>
+
+            return $formats[$code] ?? <span style="background-color: red">p</span>reg_replace_callback(
+                &#039;/MMMM|MM|DD|dddd/&#039;,
+                static fn (array $code) =&gt; <span style="background-color: red">m</span>b_substr($code[0], 1),
+                $formats[strtoupper($code)] ?? <span style="background-color: red">'</span>&#039;,
+            );
+        }, $format);
+
+        $format = preg_replace_callback(&#039;/(?&lt;!\\\\)(\\\\{2})*(&#039;.CarbonInterface::ISO_FORMAT_REGEXP.&#039;|[A-Za-z])/&#039;, <span style="background-color: red">f</span>unction ($match) {
+            [$code] = $match;
+
+            static $replacements = null;
+
+            <span style="background-color: red">i</span>f ($replacements === null) {
+                $replacements = [
+                    &#039;OD&#039; =&gt; &#039;d&#039;,
+                    &#039;OM&#039; =&gt; &#039;M&#039;,
+                    &#039;OY&#039; =&gt; &#039;Y&#039;,
+                    &#039;OH&#039; =&gt; &#039;G&#039;,
+                    &#039;Oh&#039; =&gt; &#039;g&#039;,
+                    &#039;Om&#039; =&gt; &#039;i&#039;,
+                    &#039;Os&#039; =&gt; &#039;s&#039;,
+                    &#039;D&#039; =&gt; &#039;d&#039;,
+                    &#039;DD&#039; =&gt; &#039;d&#039;,
+                    &#039;Do&#039; =&gt; &#039;d&#039;,
+                    &#039;d&#039; =&gt; &#039;!&#039;,
+                    &#039;dd&#039; =&gt; &#039;!&#039;,
+                    &#039;ddd&#039; =&gt; &#039;D&#039;,
+                    &#039;dddd&#039; =&gt; &#039;D&#039;,
+                    &#039;DDD&#039; =&gt; &#039;z&#039;,
+                    &#039;DDDD&#039; =&gt; &#039;z&#039;,
+                    &#039;DDDo&#039; =&gt; &#039;z&#039;,
+                    &#039;e&#039; =&gt; &#039;!&#039;,
+                    &#039;E&#039; =&gt; &#039;!&#039;,
+                    &#039;H&#039; =&gt; &#039;G&#039;,
+                    &#039;HH&#039; =&gt; &#039;H&#039;,
+                    &#039;h&#039; =&gt; &#039;g&#039;,
+                    &#039;hh&#039; =&gt; &#039;h&#039;,
+                    &#039;k&#039; =&gt; &#039;G&#039;,
+                    &#039;kk&#039; =&gt; &#039;G&#039;,
+                    &#039;hmm&#039; =&gt; &#039;gi&#039;,
+                    &#039;hmmss&#039; =&gt; &#039;gis&#039;,
+                    &#039;Hmm&#039; =&gt; &#039;Gi&#039;,
+                    &#039;Hmmss&#039; =&gt; &#039;Gis&#039;,
+                    &#039;m&#039; =&gt; &#039;i&#039;,
+                    &#039;mm&#039; =&gt; &#039;i&#039;,
+                    &#039;a&#039; =&gt; &#039;a&#039;,
+                    &#039;A&#039; =&gt; &#039;a&#039;,
+                    &#039;s&#039; =&gt; &#039;s&#039;,
+                    &#039;ss&#039; =&gt; &#039;s&#039;,
+                    &#039;S&#039; =&gt; &#039;*&#039;,
+                    &#039;SS&#039; =&gt; &#039;*&#039;,
+                    &#039;SSS&#039; =&gt; &#039;*&#039;,
+                    &#039;SSSS&#039; =&gt; &#039;*&#039;,
+                    &#039;SSSSS&#039; =&gt; &#039;*&#039;,
+                    &#039;SSSSSS&#039; =&gt; &#039;u&#039;,
+                    &#039;SSSSSSS&#039; =&gt; &#039;u*&#039;,
+                    &#039;SSSSSSSS&#039; =&gt; &#039;u*&#039;,
+                    &#039;SSSSSSSSS&#039; =&gt; &#039;u*&#039;,
+                    &#039;M&#039; =&gt; &#039;m&#039;,
+                    &#039;MM&#039; =&gt; &#039;m&#039;,
+                    &#039;MMM&#039; =&gt; &#039;M&#039;,
+                    &#039;MMMM&#039; =&gt; &#039;M&#039;,
+                    &#039;Mo&#039; =&gt; &#039;m&#039;,
+                    &#039;Q&#039; =&gt; &#039;!&#039;,
+                    &#039;Qo&#039; =&gt; &#039;!&#039;,
+                    &#039;G&#039; =&gt; &#039;!&#039;,
+                    &#039;GG&#039; =&gt; &#039;!&#039;,
+                    &#039;GGG&#039; =&gt; &#039;!&#039;,
+                    &#039;GGGG&#039; =&gt; &#039;!&#039;,
+                    &#039;GGGGG&#039; =&gt; &#039;!&#039;,
+                    &#039;g&#039; =&gt; &#039;!&#039;,
+                    &#039;gg&#039; =&gt; &#039;!&#039;,
+                    &#039;ggg&#039; =&gt; &#039;!&#039;,
+                    &#039;gggg&#039; =&gt; &#039;!&#039;,
+                    &#039;ggggg&#039; =&gt; &#039;!&#039;,
+                    &#039;W&#039; =&gt; &#039;!&#039;,
+                    &#039;WW&#039; =&gt; &#039;!&#039;,
+                    &#039;Wo&#039; =&gt; &#039;!&#039;,
+                    &#039;w&#039; =&gt; &#039;!&#039;,
+                    &#039;ww&#039; =&gt; &#039;!&#039;,
+                    &#039;wo&#039; =&gt; &#039;!&#039;,
+                    &#039;x&#039; =&gt; &#039;U???&#039;,
+                    &#039;X&#039; =&gt; &#039;U&#039;,
+                    &#039;Y&#039; =&gt; &#039;Y&#039;,
+                    &#039;YY&#039; =&gt; &#039;y&#039;,
+                    &#039;YYYY&#039; =&gt; &#039;Y&#039;,
+                    &#039;YYYYY&#039; =&gt; &#039;Y&#039;,
+                    &#039;YYYYYY&#039; =&gt; &#039;Y&#039;,
+                    &#039;z&#039; =&gt; &#039;e&#039;,
+                    &#039;zz&#039; =&gt; &#039;e&#039;,
+                    &#039;Z&#039; =&gt; &#039;e&#039;,
+                    &#039;ZZ&#039; =&gt; &#039;e&#039;,
+                ];
+            <span style="background-color: red">}</span>
+
+            $format = $replacements[$code] ?? <span style="background-color: red">'</span>?&#039;;
+
+            <span style="background-color: red">i</span>f ($format === &#039;!&#039;) {
+                throw new InvalidFormatException(&quot;Format $code not supported for creation.&quot;);
+            <span style="background-color: red">}</span>
+
+            return $format;
+        }, $format);
+
+        return static::rawCreateFromFormat($format, $time, $timezone);
+    }
+
+    /**
+     * Create a Carbon instance from a specific format and a string in a given language.
+     *
+     * @param string                       $format   Datetime format
+     * @param string                       $locale
+     * @param string                       $time
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function createFromLocaleFormat(string $format, string $locale, string $time, $timezone = null): ?self
+    {
+        $format = preg_replace_callback(
+            &#039;/(?:\\\\[a-zA-Z]|[bfkqCEJKQRV]){2,}/&#039;,
+            <span style="background-color: red">s</span>tatic function (array $match) use ($locale): string {
+                $word = str_replace(&#039;\\&#039;, &#039;&#039;, $match[0]);
+                $translatedWord = static::translateTimeString($word, $locale, static::DEFAULT_LOCALE);
+
+                return $word === $translatedWord
+                    ? $match[0]
+                    : <span style="background-color: red">p</span>reg_replace(&#039;/[a-zA-Z]/&#039;, &#039;\\\\$0&#039;, $translatedWord);
+            },
+            $format
+        );
+
+        return static::rawCreateFromFormat($format, static::translateTimeString($time, $locale, static::DEFAULT_LOCALE), $timezone);
+    }
+
+    /**
+     * Create a Carbon instance from a specific ISO format and a string in a given language.
+     *
+     * @param string                       $format   Datetime ISO format
+     * @param string                       $locale
+     * @param string                       $time
+     * @param DateTimeZone|string|int|null $timezone
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function createFromLocaleIsoFormat(string $format, string $locale, string $time, $timezone = null): ?self
+    {
+        $time = static::translateTimeString($time, $locale, static::DEFAULT_LOCALE, CarbonInterface::TRANSLATE_MONTHS | CarbonInterface::TRANSLATE_DAYS | CarbonInterface::TRANSLATE_MERIDIEM);
+
+        return static::createFromIsoFormat($format, $time, $timezone, $locale);
+    }
+
+    /**
+     * Make a Carbon instance from given variable if possible.
+     *
+     * Always return a new instance. Parse only strings and only these likely to be dates (skip intervals
+     * and recurrences). Throw an exception for invalid format, but otherwise return null.
+     *
+     * @param mixed $var
+     *
+     * @throws InvalidFormatException
+     *
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic static function make($var, DateTimeZone|string|null $timezone = null): ?self
+    {
+        <span style="background-color: red">i</span>f ($var instanceof DateTimeInterface) {
+            return static::instance($var);
+        <span style="background-color: red">}</span>
+
+        $date = null;
+
+        <span style="background-color: red">i</span>f (\is_string($var)) {
+            $var = trim($var);
+
+            <span style="background-color: red">i</span>f (!preg_match(&#039;/^P[\dT]/&#039;, $var) &amp;&amp;
+                <span style="background-color: red">!</span>preg_match(&#039;/^R\d/&#039;, $var) &amp;&amp;
+                <span style="background-color: red">p</span>reg_match(&#039;/[a-z\d]/i&#039;, $var)
+            ) {
+                $date = static::parse($var, $timezone);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $date;
+    }
+
+    /**
+     * Set last errors.
+     *
+     * @param array|bool $lastErrors
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rivate static function setLastErrors($lastErrors): void
+    {
+        <span style="background-color: green">i</span>f (\is_array($lastErrors) || <span style="background-color: green">$</span>lastErrors === false) {
+            static::$lastErrors = \is_array($lastErrors) ? $lastErrors : <span style="background-color: green">[</span>
+                &#039;warning_count&#039; =&gt; 0,
+                &#039;warnings&#039; =&gt; [],
+                &#039;error_count&#039; =&gt; 0,
+                &#039;errors&#039; =&gt; [],
+            ];
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic static function getLastErrors(): array|false
+    {
+        return static::$lastErrors ?? <span style="background-color: red">f</span>alse;
+    }
+
+    <span style="background-color: red">p</span>rivate static function monthToInt(mixed $value, string $unit = &#039;month&#039;): mixed
+    {
+        <span style="background-color: red">i</span>f ($value instanceof Month) {
+            <span style="background-color: red">i</span>f ($unit !== &#039;month&#039;) {
+                throw new UnitException(&quot;Month enum cannot be used to set $unit&quot;);
+            <span style="background-color: red">}</span>
+
+            return Month::int($value);
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+}
+</pre>

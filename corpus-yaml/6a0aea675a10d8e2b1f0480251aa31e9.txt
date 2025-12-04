@@ -1,0 +1,6 @@
+: [fuzzi -variables:
+  #` COFUZZ_CDxDDIbles` 
+  v [esva:
+ria:
+  #` CO
+  FUZZ_CDxDDIbles` C

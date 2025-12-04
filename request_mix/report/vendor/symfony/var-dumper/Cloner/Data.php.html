@@ -1,0 +1,430 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Cloner;
+
+use Symfony\Component\VarDumper\Caster\Caster;
+use Symfony\Component\VarDumper\Dumper\ContextProvider\SourceContextProvider;
+
+/**
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class Data implements \ArrayAccess, \Countable, \IteratorAggregate, \Stringable
+{
+    private array $data;
+    private int $position = 0;
+    private int|string $key = 0;
+    private int $maxDepth = 20;
+    private int $maxItemsPerDepth = -1;
+    private int $useRefHandles = -1;
+    private array $context = [];
+
+    /**
+     * @param array $data An array as returned by ClonerInterface::cloneVar()
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $data)
+    {
+        $this-&gt;data = $data;
+    }
+
+    <span style="background-color: red">p</span>ublic function getType(): ?string
+    {
+        $item = $this-&gt;data[$this-&gt;position][$this-&gt;key];
+
+        <span style="background-color: red">i</span>f ($item instanceof Stub &amp;&amp; <span style="background-color: red">S</span>tub::TYPE_REF === $item-&gt;type &amp;&amp; <span style="background-color: red">!</span>$item-&gt;position) {
+            $item = $item-&gt;value;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (!$item instanceof Stub) {
+            return \gettype($item);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (Stub::TYPE_STRING === $item-&gt;type) {
+            return &#039;string&#039;;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (Stub::TYPE_ARRAY === $item-&gt;type) {
+            return &#039;array&#039;;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (Stub::TYPE_OBJECT === $item-&gt;type) {
+            return $item-&gt;class;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (Stub::TYPE_RESOURCE === $item-&gt;type) {
+            return $item-&gt;class.&#039; resource&#039;;
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Returns a native representation of the original value.
+     *
+     * @param array|bool $recursive Whether values should be resolved recursively or not
+     *
+     * @return string|int|float|bool|array|Data[]|null
+     */
+    <span style="background-color: red">p</span>ublic function getValue(array|bool $recursive = false): string|int|float|bool|array|null
+    {
+        $item = $this-&gt;data[$this-&gt;position][$this-&gt;key];
+
+        <span style="background-color: red">i</span>f ($item instanceof Stub &amp;&amp; <span style="background-color: red">S</span>tub::TYPE_REF === $item-&gt;type &amp;&amp; <span style="background-color: red">!</span>$item-&gt;position) {
+            $item = $item-&gt;value;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (!($item = $this-&gt;getStub($item)) instanceof Stub) {
+            return $item;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (Stub::TYPE_STRING === $item-&gt;type) {
+            return $item-&gt;value;
+        <span style="background-color: red">}</span>
+
+        $children = $item-&gt;position ? $this-&gt;data[$item-&gt;position] : <span style="background-color: red">[</span>];
+
+        <span style="background-color: red">f</span>oreach ($children as $k =&gt; $v) {
+            <span style="background-color: red">i</span>f ($recursive &amp;&amp; <span style="background-color: red">!</span>($v = $this-&gt;getStub($v)) instanceof Stub) {
+                continue;
+            <span style="background-color: red">}</span>
+            $children[$k] = clone $this;
+            $children[$k]-&gt;key = $k;
+            $children[$k]-&gt;position = $item-&gt;position;
+
+            <span style="background-color: red">i</span>f ($recursive) {
+                <span style="background-color: red">i</span>f (Stub::TYPE_REF === $v-&gt;type &amp;&amp; <span style="background-color: red">(</span>$v = $this-&gt;getStub($v-&gt;value)) instanceof Stub) {
+                    $recursive = (array) $recursive;
+                    <span style="background-color: red">i</span>f (isset($recursive[$v-&gt;position])) {
+                        continue;
+                    <span style="background-color: red">}</span>
+                    $recursive[$v-&gt;position] = true;
+                <span style="background-color: red">}</span>
+                $children[$k] = $children[$k]-&gt;getValue($recursive);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $children;
+    }
+
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return \count($this-&gt;getValue());
+    }
+
+    <span style="background-color: red">p</span>ublic function getIterator(): \Traversable
+    {
+        <span style="background-color: red">i</span>f (!\is_array($value = $this-&gt;getValue())) {
+            throw new \LogicException(\sprintf(&#039;&quot;%s&quot; object holds non-iterable type &quot;%s&quot;.&#039;, self::class, get_debug_type($value)));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">y</span>ield from $value;
+    }
+
+    <span style="background-color: red">p</span>ublic function __get(string $key): mixed
+    {
+        <span style="background-color: red">i</span>f (null !== $data = $this-&gt;seek($key)) {
+            $item = $this-&gt;getStub($data-&gt;data[$data-&gt;position][$data-&gt;key]);
+
+            return $item instanceof Stub || <span style="background-color: red">[</span>] === $item ? $data : <span style="background-color: red">$</span>item;
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    <span style="background-color: red">p</span>ublic function __isset(string $key): bool
+    {
+        return null !== $this-&gt;seek($key);
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetExists(mixed $key): bool
+    {
+        return $this-&gt;__isset($key);
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetGet(mixed $key): mixed
+    {
+        return $this-&gt;__get($key);
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetSet(mixed $key, mixed $value): void
+    {
+        throw new \BadMethodCallException(self::class.&#039; objects are immutable.&#039;);
+    }
+
+    <span style="background-color: red">p</span>ublic function offsetUnset(mixed $key): void
+    {
+        throw new \BadMethodCallException(self::class.&#039; objects are immutable.&#039;);
+    }
+
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        $value = $this-&gt;getValue();
+
+        <span style="background-color: red">i</span>f (!\is_array($value)) {
+            return (string) $value;
+        <span style="background-color: red">}</span>
+
+        return \sprintf(&#039;%s (count=%d)&#039;, $this-&gt;getType(), \count($value));
+    }
+
+    /**
+     * Returns a depth limited clone of $this.
+     */
+    <span style="background-color: red">p</span>ublic function withMaxDepth(int $maxDepth): static
+    {
+        $data = clone $this;
+        $data-&gt;maxDepth = $maxDepth;
+
+        return $data;
+    }
+
+    /**
+     * Limits the number of elements per depth level.
+     */
+    <span style="background-color: red">p</span>ublic function withMaxItemsPerDepth(int $maxItemsPerDepth): static
+    {
+        $data = clone $this;
+        $data-&gt;maxItemsPerDepth = $maxItemsPerDepth;
+
+        return $data;
+    }
+
+    /**
+     * Enables/disables objects&#039; identifiers tracking.
+     *
+     * @param bool $useRefHandles False to hide global ref. handles
+     */
+    <span style="background-color: red">p</span>ublic function withRefHandles(bool $useRefHandles): static
+    {
+        $data = clone $this;
+        $data-&gt;useRefHandles = $useRefHandles ? -1 : <span style="background-color: red">0</span>;
+
+        return $data;
+    }
+
+    <span style="background-color: red">p</span>ublic function withContext(array $context): static
+    {
+        $data = clone $this;
+        $data-&gt;context = $context;
+
+        return $data;
+    }
+
+    <span style="background-color: red">p</span>ublic function getContext(): array
+    {
+        return $this-&gt;context;
+    }
+
+    /**
+     * Seeks to a specific key in nested data structures.
+     */
+    <span style="background-color: red">p</span>ublic function seek(string|int $key): ?static
+    {
+        $item = $this-&gt;data[$this-&gt;position][$this-&gt;key];
+
+        <span style="background-color: red">i</span>f ($item instanceof Stub &amp;&amp; <span style="background-color: red">S</span>tub::TYPE_REF === $item-&gt;type &amp;&amp; <span style="background-color: red">!</span>$item-&gt;position) {
+            $item = $item-&gt;value;
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (!($item = $this-&gt;getStub($item)) instanceof Stub || <span style="background-color: red">!</span>$item-&gt;position) {
+            return null;
+        <span style="background-color: red">}</span>
+        $keys = [$key];
+
+        switch ($item-&gt;type) {
+            <span style="background-color: red">c</span>ase Stub::TYPE_OBJECT:
+                $keys[] = Caster::PREFIX_DYNAMIC.$key;
+                $keys[] = Caster::PREFIX_PROTECTED.$key;
+                $keys[] = Caster::PREFIX_VIRTUAL.$key;
+                $keys[] = &quot;\0$item-&gt;class\0$key&quot;;
+                // no break
+            <span style="background-color: red">c</span>ase Stub::TYPE_ARRAY:
+            <span style="background-color: red">c</span>ase Stub::TYPE_RESOURCE:
+                break;
+            <span style="background-color: red">d</span>efault:
+                return null;
+        <span style="background-color: red">}</span>
+
+        $data = null;
+        $children = $this-&gt;data[$item-&gt;position];
+
+        <span style="background-color: red">f</span>oreach ($keys as $key) {
+            <span style="background-color: red">i</span>f (isset($children[$key]) || <span style="background-color: red">\</span>array_key_exists($key, $children)) {
+                $data = clone $this;
+                $data-&gt;key = $key;
+                $data-&gt;position = $item-&gt;position;
+                break;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $data;
+    }
+
+    /**
+     * Dumps data with a DumperInterface dumper.
+     */
+    <span style="background-color: red">p</span>ublic function dump(DumperInterface $dumper): void
+    {
+        $refs = [0];
+        $cursor = new Cursor();
+        $cursor-&gt;hashType = -1;
+        $cursor-&gt;attr = $this-&gt;context[SourceContextProvider::class] ?? <span style="background-color: red">[</span>];
+        $label = $this-&gt;context[&#039;label&#039;] ?? <span style="background-color: red">'</span>&#039;;
+
+        <span style="background-color: red">i</span>f ($cursor-&gt;attr || <span style="background-color: red">'</span>&#039; !== $label) {
+            $dumper-&gt;dumpScalar($cursor, &#039;label&#039;, $label);
+        <span style="background-color: red">}</span>
+        $cursor-&gt;hashType = 0;
+        $this-&gt;dumpItem($dumper, $cursor, $refs, $this-&gt;data[$this-&gt;position][$this-&gt;key]);
+    }
+
+    /**
+     * Depth-first dumping of items.
+     *
+     * @param mixed $item A Stub object or the original value being dumped
+     */
+    <span style="background-color: red">p</span>rivate function dumpItem(DumperInterface $dumper, Cursor $cursor, array &amp;$refs, mixed $item): void
+    {
+        $cursor-&gt;refIndex = 0;
+        $cursor-&gt;softRefTo = $cursor-&gt;softRefHandle = $cursor-&gt;softRefCount = 0;
+        $cursor-&gt;hardRefTo = $cursor-&gt;hardRefHandle = $cursor-&gt;hardRefCount = 0;
+        $firstSeen = true;
+
+        <span style="background-color: red">i</span>f (!$item instanceof Stub) {
+            $cursor-&gt;attr = [];
+            $type = \gettype($item);
+            <span style="background-color: red">i</span>f ($item &amp;&amp; <span style="background-color: red">'</span>array&#039; === $type) {
+                $item = $this-&gt;getStub($item);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif (Stub::TYPE_REF === $item-&gt;type) {
+            <span style="background-color: red">i</span>f ($item-&gt;handle) {
+                <span style="background-color: red">i</span>f (!isset($refs[$r = $item-&gt;handle - (\PHP_INT_MAX &gt;&gt; 1)])) {
+                    $cursor-&gt;refIndex = $refs[$r] = $cursor-&gt;refIndex ?: <span style="background-color: red">+</span>+$refs[0];
+                } <span style="background-color: red">e</span>lse {
+                    $firstSeen = false;
+                <span style="background-color: red">}</span>
+                $cursor-&gt;hardRefTo = $refs[$r];
+                $cursor-&gt;hardRefHandle = $this-&gt;useRefHandles &amp; $item-&gt;handle;
+                $cursor-&gt;hardRefCount = 0 &lt; $item-&gt;handle ? $item-&gt;refCount : <span style="background-color: red">0</span>;
+            <span style="background-color: red">}</span>
+            $cursor-&gt;attr = $item-&gt;attr;
+            $type = $item-&gt;class ?: <span style="background-color: red">\</span>gettype($item-&gt;value);
+            $item = $this-&gt;getStub($item-&gt;value);
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f ($item instanceof Stub) {
+            <span style="background-color: red">i</span>f ($item-&gt;refCount) {
+                <span style="background-color: red">i</span>f (!isset($refs[$r = $item-&gt;handle])) {
+                    $cursor-&gt;refIndex = $refs[$r] = $cursor-&gt;refIndex ?: <span style="background-color: red">+</span>+$refs[0];
+                } <span style="background-color: red">e</span>lse {
+                    $firstSeen = false;
+                <span style="background-color: red">}</span>
+                $cursor-&gt;softRefTo = $refs[$r];
+            <span style="background-color: red">}</span>
+            $cursor-&gt;softRefHandle = $this-&gt;useRefHandles &amp; $item-&gt;handle;
+            $cursor-&gt;softRefCount = $item-&gt;refCount;
+            $cursor-&gt;attr = $item-&gt;attr;
+            $cut = $item-&gt;cut;
+
+            <span style="background-color: red">i</span>f ($item-&gt;position &amp;&amp; <span style="background-color: red">$</span>firstSeen) {
+                $children = $this-&gt;data[$item-&gt;position];
+
+                <span style="background-color: red">i</span>f ($cursor-&gt;stop) {
+                    <span style="background-color: red">i</span>f ($cut &gt;= 0) {
+                        $cut += \count($children);
+                    <span style="background-color: red">}</span>
+                    $children = [];
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                $children = [];
+            <span style="background-color: red">}</span>
+            switch ($item-&gt;type) {
+                <span style="background-color: red">c</span>ase Stub::TYPE_STRING:
+                    $dumper-&gt;dumpString($cursor, $item-&gt;value, Stub::STRING_BINARY === $item-&gt;class, $cut);
+                    break;
+
+                <span style="background-color: red">c</span>ase Stub::TYPE_ARRAY:
+                    $item = clone $item;
+                    $item-&gt;type = $item-&gt;class;
+                    $item-&gt;class = $item-&gt;value;
+                    // no break
+                <span style="background-color: red">c</span>ase Stub::TYPE_OBJECT:
+                <span style="background-color: red">c</span>ase Stub::TYPE_RESOURCE:
+                    $withChildren = $children &amp;&amp; <span style="background-color: red">$</span>cursor-&gt;depth !== $this-&gt;maxDepth &amp;&amp; <span style="background-color: red">$</span>this-&gt;maxItemsPerDepth;
+                    $dumper-&gt;enterHash($cursor, $item-&gt;type, $item-&gt;class, $withChildren);
+                    <span style="background-color: red">i</span>f ($withChildren) {
+                        <span style="background-color: red">i</span>f ($cursor-&gt;skipChildren) {
+                            $withChildren = false;
+                            $cut = -1;
+                        } <span style="background-color: red">e</span>lse {
+                            $cut = $this-&gt;dumpChildren($dumper, $cursor, $refs, $children, $cut, $item-&gt;type, null !== $item-&gt;class);
+                        <span style="background-color: red">}</span>
+                    } <span style="background-color: red">e</span>lseif ($children &amp;&amp; <span style="background-color: red">0</span> &lt;= $cut) {
+                        $cut += \count($children);
+                    <span style="background-color: red">}</span>
+                    $cursor-&gt;skipChildren = false;
+                    $dumper-&gt;leaveHash($cursor, $item-&gt;type, $item-&gt;class, $withChildren, $cut);
+                    break;
+
+                <span style="background-color: red">c</span>ase Stub::TYPE_SCALAR:
+                    $dumper-&gt;dumpScalar($cursor, &#039;default&#039;, $item-&gt;attr[&#039;value&#039;]);
+                    break;
+
+                <span style="background-color: red">d</span>efault:
+                    throw new \RuntimeException(\sprintf(&#039;Unexpected Stub type: &quot;%s&quot;.&#039;, $item-&gt;type));
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif (&#039;array&#039; === $type) {
+            $dumper-&gt;enterHash($cursor, Cursor::HASH_INDEXED, 0, false);
+            $dumper-&gt;leaveHash($cursor, Cursor::HASH_INDEXED, 0, false, 0);
+        } <span style="background-color: red">e</span>lseif (&#039;string&#039; === $type) {
+            $dumper-&gt;dumpString($cursor, $item, false, 0);
+        } <span style="background-color: red">e</span>lse {
+            $dumper-&gt;dumpScalar($cursor, $type, $item);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Dumps children of hash structures.
+     *
+     * @return int The final number of removed items
+     */
+    <span style="background-color: red">p</span>rivate function dumpChildren(DumperInterface $dumper, Cursor $parentCursor, array &amp;$refs, array $children, int $hashCut, int $hashType, bool $dumpKeys): int
+    {
+        $cursor = clone $parentCursor;
+        ++$cursor-&gt;depth;
+        $cursor-&gt;hashType = $hashType;
+        $cursor-&gt;hashIndex = 0;
+        $cursor-&gt;hashLength = \count($children);
+        $cursor-&gt;hashCut = $hashCut;
+        <span style="background-color: red">f</span>oreach ($children as $key =&gt; $child) {
+            $cursor-&gt;hashKeyIsBinary = isset($key[0]) &amp;&amp; <span style="background-color: red">!</span>preg_match(&#039;//u&#039;, $key);
+            $cursor-&gt;hashKey = $dumpKeys ? $key : <span style="background-color: red">n</span>ull;
+            $this-&gt;dumpItem($dumper, $cursor, $refs, $child);
+            <span style="background-color: red">i</span>f (++$cursor-&gt;hashIndex === $this-&gt;maxItemsPerDepth || <span style="background-color: red">$</span>cursor-&gt;stop) {
+                $parentCursor-&gt;stop = true;
+
+                return $hashCut &gt;= 0 ? $hashCut + $cursor-&gt;hashLength - $cursor-&gt;hashIndex : <span style="background-color: red">$</span>hashCut;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $hashCut;
+    }
+
+    <span style="background-color: red">p</span>rivate function getStub(mixed $item): mixed
+    {
+        <span style="background-color: red">i</span>f (!$item || <span style="background-color: red">!</span>\is_array($item)) {
+            return $item;
+        <span style="background-color: red">}</span>
+
+        $stub = new Stub();
+        $stub-&gt;type = Stub::TYPE_ARRAY;
+        <span style="background-color: red">f</span>oreach ($item as $stub-&gt;class =&gt; $stub-&gt;position) {
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($item[0])) {
+            $stub-&gt;cut = $item[0];
+        <span style="background-color: red">}</span>
+        $stub-&gt;value = $stub-&gt;cut + ($stub-&gt;position ? \count($this-&gt;data[$stub-&gt;position]) : <span style="background-color: red">0</span>);
+
+        return $stub;
+    }
+}
+</pre>

@@ -1,0 +1,7 @@
+sync_f:
+  var  _A_ARGS: '-max_total_time=300'
+  trigger:
+   !include: .
+  tr#sync  S: '-1'
+  trigger:
+   !inuzzc  varARGS-ax_

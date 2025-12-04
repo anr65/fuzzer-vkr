@@ -1,0 +1,186 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Support\Providers;
+
+use Closure;
+use Illuminate\Contracts\Routing\UrlGenerator;
+use Illuminate\Routing\Router;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Traits\ForwardsCalls;
+
+/**
+ * @mixin \Illuminate\Routing\Router
+ */
+class RouteServiceProvider extends ServiceProvider
+{
+    use ForwardsCalls;
+
+    /**
+     * The controller namespace for the application.
+     *
+     * @var string|null
+     */
+    protected $namespace;
+
+    /**
+     * The callback that should be used to load the application&#039;s routes.
+     *
+     * @var \Closure|null
+     */
+    protected $loadRoutesUsing;
+
+    /**
+     * The global callback that should be used to load the application&#039;s routes.
+     *
+     * @var \Closure|null
+     */
+    protected static $alwaysLoadRoutesUsing;
+
+    /**
+     * The callback that should be used to load the application&#039;s cached routes.
+     *
+     * @var \Closure|null
+     */
+    protected static $alwaysLoadCachedRoutesUsing;
+
+    /**
+     * Register any application services.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;booted(<span style="background-color: green">f</span>unction () {
+            $this-&gt;setRootControllerNamespace();
+
+            <span style="background-color: red">i</span>f ($this-&gt;routesAreCached()) {
+                $this-&gt;loadCachedRoutes();
+            } <span style="background-color: green">e</span>lse {
+                $this-&gt;loadRoutes();
+
+                $this-&gt;app-&gt;booted(<span style="background-color: green">f</span>unction () {
+                    $this-&gt;app[&#039;router&#039;]-&gt;getRoutes()-&gt;refreshNameLookups();
+                    $this-&gt;app[&#039;router&#039;]-&gt;getRoutes()-&gt;refreshActionLookups();
+                });
+            <span style="background-color: green">}</span>
+        });
+    }
+
+    /**
+     * Bootstrap any application services.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function boot()
+    {
+        //
+    }
+
+    /**
+     * Register the callback that will be used to load the application&#039;s routes.
+     *
+     * @param  \Closure  $routesCallback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function routes(Closure $routesCallback)
+    {
+        $this-&gt;loadRoutesUsing = $routesCallback;
+
+        return $this;
+    }
+
+    /**
+     * Register the callback that will be used to load the application&#039;s routes.
+     *
+     * @param  \Closure|null  $routesCallback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function loadRoutesUsing(?Closure $routesCallback)
+    {
+        self::$alwaysLoadRoutesUsing = $routesCallback;
+    }
+
+    /**
+     * Register the callback that will be used to load the application&#039;s cached routes.
+     *
+     * @param  \Closure|null  $routesCallback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function loadCachedRoutesUsing(?Closure $routesCallback)
+    {
+        self::$alwaysLoadCachedRoutesUsing = $routesCallback;
+    }
+
+    /**
+     * Set the root controller namespace for the application.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function setRootControllerNamespace()
+    {
+        <span style="background-color: red">i</span>f (! is_null($this-&gt;namespace)) {
+            $this-&gt;app[UrlGenerator::class]-&gt;setRootControllerNamespace($this-&gt;namespace);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Determine if the application routes are cached.
+     *
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function routesAreCached()
+    {
+        return $this-&gt;app-&gt;routesAreCached();
+    }
+
+    /**
+     * Load the cached routes for the application.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadCachedRoutes()
+    {
+        <span style="background-color: red">i</span>f (! is_null(self::$alwaysLoadCachedRoutesUsing)) {
+            $this-&gt;app-&gt;call(self::$alwaysLoadCachedRoutesUsing);
+
+            return;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;app-&gt;booted(<span style="background-color: red">f</span>unction () {
+            require $this-&gt;app-&gt;getCachedRoutesPath();
+        });
+    }
+
+    /**
+     * Load the application routes.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function loadRoutes()
+    {
+        <span style="background-color: green">i</span>f (! is_null(self::$alwaysLoadRoutesUsing)) {
+            $this-&gt;app-&gt;call(self::$alwaysLoadRoutesUsing);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! is_null($this-&gt;loadRoutesUsing)) {
+            $this-&gt;app-&gt;call($this-&gt;loadRoutesUsing);
+        } <span style="background-color: red">e</span>lseif (method_exists($this, &#039;map&#039;)) {
+            $this-&gt;app-&gt;call([$this, &#039;map&#039;]);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Pass dynamic methods onto the router instance.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;forwardCallTo(
+            $this-&gt;app-&gt;make(Router::class), $method, $parameters
+        );
+    }
+}
+</pre>

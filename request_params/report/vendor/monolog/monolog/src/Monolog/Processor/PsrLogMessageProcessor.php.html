@@ -1,0 +1,88 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog\Processor;
+
+use Monolog\Utils;
+use Monolog\LogRecord;
+
+/**
+ * Processes a record&#039;s message according to PSR-3 rules
+ *
+ * It replaces {foo} with the value from $context[&#039;foo&#039;]
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ */
+class PsrLogMessageProcessor implements ProcessorInterface
+{
+    public const SIMPLE_DATE = &quot;Y-m-d\TH:i:s.uP&quot;;
+
+    private ?string $dateFormat;
+
+    private bool $removeUsedContextFields;
+
+    /**
+     * @param string|null $dateFormat              The format of the timestamp: one supported by DateTime::format
+     * @param bool        $removeUsedContextFields If set to true the fields interpolated into message gets unset
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?string $dateFormat = null, bool $removeUsedContextFields = false)
+    {
+        $this-&gt;dateFormat = $dateFormat;
+        $this-&gt;removeUsedContextFields = $removeUsedContextFields;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: green">p</span>ublic function __invoke(LogRecord $record): LogRecord
+    {
+        <span style="background-color: green">i</span>f (false === strpos($record-&gt;message, &#039;{&#039;)) {
+            return $record;
+        <span style="background-color: red">}</span>
+
+        $replacements = [];
+        $context = $record-&gt;context;
+
+        <span style="background-color: red">f</span>oreach ($context as $key =&gt; $val) {
+            $placeholder = &#039;{&#039; . $key . &#039;}&#039;;
+            <span style="background-color: red">i</span>f (strpos($record-&gt;message, $placeholder) === false) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (null === $val || <span style="background-color: red">\</span>is_scalar($val) || (<span style="background-color: red">\</span>is_object($val) &amp;&amp; <span style="background-color: red">m</span>ethod_exists($val, &quot;__toString&quot;))) {
+                $replacements[$placeholder] = $val;
+            } <span style="background-color: red">e</span>lseif ($val instanceof \DateTimeInterface) {
+                <span style="background-color: red">i</span>f (null === $this-&gt;dateFormat &amp;&amp; <span style="background-color: red">$</span>val instanceof \Monolog\JsonSerializableDateTimeImmutable) {
+                    // handle monolog dates using __toString if no specific dateFormat was asked for
+                    // so that it follows the useMicroseconds flag
+                    $replacements[$placeholder] = (string) $val;
+                } <span style="background-color: red">e</span>lse {
+                    $replacements[$placeholder] = $val-&gt;format($this-&gt;dateFormat ?? <span style="background-color: red">s</span>tatic::SIMPLE_DATE);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lseif ($val instanceof \UnitEnum) {
+                $replacements[$placeholder] = $val instanceof \BackedEnum ? $val-&gt;value : <span style="background-color: red">$</span>val-&gt;name;
+            } <span style="background-color: red">e</span>lseif (\is_object($val)) {
+                $replacements[$placeholder] = &#039;[object &#039;.Utils::getClass($val).&#039;]&#039;;
+            } <span style="background-color: red">e</span>lseif (\is_array($val)) {
+                $replacements[$placeholder] = &#039;array&#039;.Utils::jsonEncode($val, null, true);
+            } <span style="background-color: red">e</span>lse {
+                $replacements[$placeholder] = &#039;[&#039;.\gettype($val).&#039;]&#039;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($this-&gt;removeUsedContextFields) {
+                unset($context[$key]);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $record-&gt;with(message: strtr($record-&gt;message, $replacements), context: $context);
+    }
+}
+</pre>

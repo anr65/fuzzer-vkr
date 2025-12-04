@@ -1,0 +1,149 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Routing;
+
+/**
+ * CompiledRoutes are returned by the RouteCompiler class.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class CompiledRoute implements \Serializable
+{
+    /**
+     * @param string      $staticPrefix  The static prefix of the compiled route
+     * @param string      $regex         The regular expression to use to match this route
+     * @param array       $tokens        An array of tokens to use to generate URL for this route
+     * @param array       $pathVariables An array of path variables
+     * @param string|null $hostRegex     Host regex
+     * @param array       $hostTokens    Host tokens
+     * @param array       $hostVariables An array of host variables
+     * @param array       $variables     An array of variables (variables defined in the path and in the host patterns)
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        private string $staticPrefix,
+        private string $regex,
+        private array $tokens,
+        private array $pathVariables,
+        private ?string $hostRegex = null,
+        private array $hostTokens = [],
+        private array $hostVariables = [],
+        private array $variables = [],
+    ) {
+    }
+
+    <span style="background-color: red">p</span>ublic function __serialize(): array
+    {
+        return [
+            &#039;vars&#039; =&gt; $this-&gt;variables,
+            &#039;path_prefix&#039; =&gt; $this-&gt;staticPrefix,
+            &#039;path_regex&#039; =&gt; $this-&gt;regex,
+            &#039;path_tokens&#039; =&gt; $this-&gt;tokens,
+            &#039;path_vars&#039; =&gt; $this-&gt;pathVariables,
+            &#039;host_regex&#039; =&gt; $this-&gt;hostRegex,
+            &#039;host_tokens&#039; =&gt; $this-&gt;hostTokens,
+            &#039;host_vars&#039; =&gt; $this-&gt;hostVariables,
+        ];
+    }
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">f</span>inal public function serialize(): string
+    {
+        throw new \BadMethodCallException(&#039;Cannot serialize &#039;.__CLASS__);
+    }
+
+    <span style="background-color: red">p</span>ublic function __unserialize(array $data): void
+    {
+        $this-&gt;variables = $data[&#039;vars&#039;];
+        $this-&gt;staticPrefix = $data[&#039;path_prefix&#039;];
+        $this-&gt;regex = $data[&#039;path_regex&#039;];
+        $this-&gt;tokens = $data[&#039;path_tokens&#039;];
+        $this-&gt;pathVariables = $data[&#039;path_vars&#039;];
+        $this-&gt;hostRegex = $data[&#039;host_regex&#039;];
+        $this-&gt;hostTokens = $data[&#039;host_tokens&#039;];
+        $this-&gt;hostVariables = $data[&#039;host_vars&#039;];
+    }
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">f</span>inal public function unserialize(string $serialized): void
+    {
+        $this-&gt;__unserialize(unserialize($serialized, [&#039;allowed_classes&#039; =&gt; false]));
+    }
+
+    /**
+     * Returns the static prefix.
+     */
+    <span style="background-color: red">p</span>ublic function getStaticPrefix(): string
+    {
+        return $this-&gt;staticPrefix;
+    }
+
+    /**
+     * Returns the regex.
+     */
+    <span style="background-color: green">p</span>ublic function getRegex(): string
+    {
+        return $this-&gt;regex;
+    }
+
+    /**
+     * Returns the host regex.
+     */
+    <span style="background-color: green">p</span>ublic function getHostRegex(): ?string
+    {
+        return $this-&gt;hostRegex;
+    }
+
+    /**
+     * Returns the tokens.
+     */
+    <span style="background-color: red">p</span>ublic function getTokens(): array
+    {
+        return $this-&gt;tokens;
+    }
+
+    /**
+     * Returns the host tokens.
+     */
+    <span style="background-color: red">p</span>ublic function getHostTokens(): array
+    {
+        return $this-&gt;hostTokens;
+    }
+
+    /**
+     * Returns the variables.
+     */
+    <span style="background-color: red">p</span>ublic function getVariables(): array
+    {
+        return $this-&gt;variables;
+    }
+
+    /**
+     * Returns the path variables.
+     */
+    <span style="background-color: red">p</span>ublic function getPathVariables(): array
+    {
+        return $this-&gt;pathVariables;
+    }
+
+    /**
+     * Returns the host variables.
+     */
+    <span style="background-color: red">p</span>ublic function getHostVariables(): array
+    {
+        return $this-&gt;hostVariables;
+    }
+}
+</pre>

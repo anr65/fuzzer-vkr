@@ -1,0 +1,6 @@
+synfuzzing:
+  variables:
+    COVFUZZ_ADDITIOAR_N-'L& $CI_PIPELINE_SOURCE != 'merge_reqrules:
+    - if: $CI_COMMule%:
+    - if: $CI_COMMIT_BRANCH != 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_request_es:
+    COVFH == f: $CI_COMMIT_BRANCH != 'cont_evLINE_SOURCE != 'merge_rCI_PIPequest_event'

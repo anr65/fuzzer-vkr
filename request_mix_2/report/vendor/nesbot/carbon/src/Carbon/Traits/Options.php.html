@@ -1,0 +1,214 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonInterface;
+use DateTimeInterface;
+use Throwable;
+
+/**
+ * Trait Options.
+ *
+ * Embed base methods to change settings of Carbon classes.
+ *
+ * Depends on the following methods:
+ *
+ * @method static shiftTimezone($timezone) Set the timezone
+ */
+trait Options
+{
+    use StaticOptions;
+    use Localization;
+
+    /**
+     * Indicates if months should be calculated with overflow.
+     * Specific setting.
+     */
+    protected ?bool $localMonthsOverflow = null;
+
+    /**
+     * Indicates if years should be calculated with overflow.
+     * Specific setting.
+     */
+    protected ?bool $localYearsOverflow = null;
+
+    /**
+     * Indicates if the strict mode is in use.
+     * Specific setting.
+     */
+    protected ?bool $localStrictModeEnabled = null;
+
+    /**
+     * Options for diffForHumans and forHumans methods.
+     */
+    protected ?int $localHumanDiffOptions = null;
+
+    /**
+     * Format to use on string cast.
+     *
+     * @var string|callable|null
+     */
+    protected $localToStringFormat = null;
+
+    /**
+     * Format to use on JSON serialization.
+     *
+     * @var string|callable|null
+     */
+    protected $localSerializer = null;
+
+    /**
+     * Instance-specific macros.
+     */
+    protected ?array $localMacros = null;
+
+    /**
+     * Instance-specific generic macros.
+     */
+    protected ?array $localGenericMacros = null;
+
+    /**
+     * Function to call instead of format.
+     *
+     * @var string|callable|null
+     */
+    protected $localFormatFunction = null;
+
+    /**
+     * Set specific options.
+     *  - strictMode: true|false|null
+     *  - monthOverflow: true|false|null
+     *  - yearOverflow: true|false|null
+     *  - humanDiffOptions: int|null
+     *  - toStringFormat: string|Closure|null
+     *  - toJsonFormat: string|Closure|null
+     *  - locale: string|null
+     *  - timezone: \DateTimeZone|string|int|null
+     *  - macros: array|null
+     *  - genericMacros: array|null
+     *
+     * @param array $settings
+     *
+     * @return $this|static
+     */
+    <span style="background-color: red">p</span>ublic function settings(array $settings): static
+    {
+        $this-&gt;localStrictModeEnabled = $settings[&#039;strictMode&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localMonthsOverflow = $settings[&#039;monthOverflow&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localYearsOverflow = $settings[&#039;yearOverflow&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localHumanDiffOptions = $settings[&#039;humanDiffOptions&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localToStringFormat = $settings[&#039;toStringFormat&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localSerializer = $settings[&#039;toJsonFormat&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localMacros = $settings[&#039;macros&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localGenericMacros = $settings[&#039;genericMacros&#039;] ?? <span style="background-color: red">n</span>ull;
+        $this-&gt;localFormatFunction = $settings[&#039;formatFunction&#039;] ?? <span style="background-color: red">n</span>ull;
+
+        <span style="background-color: red">i</span>f (isset($settings[&#039;locale&#039;])) {
+            $locales = $settings[&#039;locale&#039;];
+
+            <span style="background-color: red">i</span>f (!\is_array($locales)) {
+                $locales = [$locales];
+            <span style="background-color: red">}</span>
+
+            $this-&gt;locale(...$locales);
+        } <span style="background-color: red">e</span>lseif (isset($settings[&#039;translator&#039;]) &amp;&amp; <span style="background-color: red">p</span>roperty_exists($this, &#039;localTranslator&#039;)) {
+            $this-&gt;localTranslator = $settings[&#039;translator&#039;];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($settings[&#039;innerTimezone&#039;])) {
+            return $this-&gt;setTimezone($settings[&#039;innerTimezone&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($settings[&#039;timezone&#039;])) {
+            return $this-&gt;shiftTimezone($settings[&#039;timezone&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Returns current local settings.
+     */
+    <span style="background-color: red">p</span>ublic function getSettings(): array
+    {
+        $settings = [];
+        $map = [
+            &#039;localStrictModeEnabled&#039; =&gt; &#039;strictMode&#039;,
+            &#039;localMonthsOverflow&#039; =&gt; &#039;monthOverflow&#039;,
+            &#039;localYearsOverflow&#039; =&gt; &#039;yearOverflow&#039;,
+            &#039;localHumanDiffOptions&#039; =&gt; &#039;humanDiffOptions&#039;,
+            &#039;localToStringFormat&#039; =&gt; &#039;toStringFormat&#039;,
+            &#039;localSerializer&#039; =&gt; &#039;toJsonFormat&#039;,
+            &#039;localMacros&#039; =&gt; &#039;macros&#039;,
+            &#039;localGenericMacros&#039; =&gt; &#039;genericMacros&#039;,
+            &#039;locale&#039; =&gt; &#039;locale&#039;,
+            &#039;tzName&#039; =&gt; &#039;timezone&#039;,
+            &#039;localFormatFunction&#039; =&gt; &#039;formatFunction&#039;,
+        ];
+
+        <span style="background-color: red">f</span>oreach ($map as $property =&gt; $key) {
+            $value = $this-&gt;$property ?? <span style="background-color: red">n</span>ull;
+
+            <span style="background-color: red">i</span>f ($value !== null &amp;&amp; (<span style="background-color: red">$</span>key !== &#039;locale&#039; || <span style="background-color: red">$</span>value !== &#039;en&#039; || <span style="background-color: red">$</span>this-&gt;localTranslator)) {
+                $settings[$key] = $value;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $settings;
+    }
+
+    /**
+     * Show truthy properties on var_dump().
+     */
+    <span style="background-color: red">p</span>ublic function __debugInfo(): array
+    {
+        $infos = array_filter(get_object_vars($this), <span style="background-color: red">s</span>tatic function ($var) {
+            return $var;
+        });
+
+        <span style="background-color: red">f</span>oreach ([&#039;dumpProperties&#039;, &#039;constructedObjectId&#039;, &#039;constructed&#039;, &#039;originalInput&#039;] as $property) {
+            <span style="background-color: red">i</span>f (isset($infos[$property])) {
+                unset($infos[$property]);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;addExtraDebugInfos($infos);
+
+        <span style="background-color: red">i</span>f (\array_key_exists(&#039;carbonRecurrences&#039;, $infos)) {
+            $infos[&#039;recurrences&#039;] = $infos[&#039;carbonRecurrences&#039;];
+            unset($infos[&#039;carbonRecurrences&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $infos;
+    }
+
+    <span style="background-color: red">p</span>rotected function isLocalStrictModeEnabled(): bool
+    {
+        return $this-&gt;localStrictModeEnabled
+            ?? <span style="background-color: red">$</span>this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::isStrictModeEnabled());
+    }
+
+    <span style="background-color: red">p</span>rotected function addExtraDebugInfos(array &amp;$infos): void
+    {
+        <span style="background-color: red">i</span>f ($this instanceof DateTimeInterface) {
+            try {
+                $infos[&#039;date&#039;] ??= <span style="background-color: red">$</span>this-&gt;format(CarbonInterface::MOCK_DATETIME_FORMAT);
+                $infos[&#039;timezone&#039;] ??= <span style="background-color: red">$</span>this-&gt;tzName ?? <span style="background-color: red">$</span>this-&gt;timezoneSetting ?? <span style="background-color: red">$</span>this-&gt;timezone ?? <span style="background-color: red">n</span>ull;
+            } <span style="background-color: red">c</span>atch (Throwable) {
+                // noop
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

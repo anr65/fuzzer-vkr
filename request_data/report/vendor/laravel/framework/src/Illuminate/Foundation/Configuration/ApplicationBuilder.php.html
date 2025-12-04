@@ -1,0 +1,469 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation\Configuration;
+
+use Closure;
+use Illuminate\Console\Application as Artisan;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Bootstrap\RegisterProviders;
+use Illuminate\Foundation\Events\DiagnosingHealth;
+use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
+use Illuminate\Foundation\Support\Providers\EventServiceProvider as AppEventServiceProvider;
+use Illuminate\Foundation\Support\Providers\RouteServiceProvider as AppRouteServiceProvider;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
+use Laravel\Folio\Folio;
+
+class ApplicationBuilder
+{
+    /**
+     * The service provider that are marked for registration.
+     *
+     * @var array
+     */
+    protected array $pendingProviders = [];
+
+    /**
+     * Any additional routing callbacks that should be invoked while registering routes.
+     *
+     * @var array
+     */
+    protected array $additionalRoutingCallbacks = [];
+
+    /**
+     * The Folio / page middleware that have been defined by the user.
+     *
+     * @var array
+     */
+    protected array $pageMiddleware = [];
+
+    /**
+     * Create a new application builder instance.
+     */
+    <span style="background-color: red">p</span>ublic function __construct(protected Application $app)
+    {
+    }
+
+    /**
+     * Register the standard kernel classes for the application.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withKernels()
+    {
+        $this-&gt;app-&gt;singleton(
+            \Illuminate\Contracts\Http\Kernel::class,
+            \Illuminate\Foundation\Http\Kernel::class,
+        );
+
+        $this-&gt;app-&gt;singleton(
+            \Illuminate\Contracts\Console\Kernel::class,
+            \Illuminate\Foundation\Console\Kernel::class,
+        );
+
+        return $this;
+    }
+
+    /**
+     * Register additional service providers.
+     *
+     * @param  array  $providers
+     * @param  bool  $withBootstrapProviders
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withProviders(array $providers = [], bool $withBootstrapProviders = true)
+    {
+        RegisterProviders::merge(
+            $providers,
+            $withBootstrapProviders
+                ? $this-&gt;app-&gt;getBootstrapProvidersPath()
+                : <span style="background-color: red">n</span>ull
+        );
+
+        return $this;
+    }
+
+    /**
+     * Register the core event service provider for the application.
+     *
+     * @param  array|bool  $discover
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withEvents(array|bool $discover = [])
+    {
+        <span style="background-color: red">i</span>f (is_array($discover) &amp;&amp; <span style="background-color: red">c</span>ount($discover) &gt; 0) {
+            AppEventServiceProvider::setEventDiscoveryPaths($discover);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($discover === false) {
+            AppEventServiceProvider::disableEventDiscovery();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($this-&gt;pendingProviders[AppEventServiceProvider::class])) {
+            $this-&gt;app-&gt;booting(<span style="background-color: green">f</span>unction () {
+                $this-&gt;app-&gt;register(AppEventServiceProvider::class);
+            });
+        <span style="background-color: red">}</span>
+
+        $this-&gt;pendingProviders[AppEventServiceProvider::class] = true;
+
+        return $this;
+    }
+
+    /**
+     * Register the broadcasting services for the application.
+     *
+     * @param  string  $channels
+     * @param  array  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withBroadcasting(string $channels, array $attributes = [])
+    {
+        $this-&gt;app-&gt;booted(<span style="background-color: red">f</span>unction () use ($channels, $attributes) {
+            Broadcast::routes(! empty($attributes) ? $attributes : <span style="background-color: red">n</span>ull);
+
+            <span style="background-color: red">i</span>f (file_exists($channels)) {
+                require $channels;
+            <span style="background-color: red">}</span>
+        });
+
+        return $this;
+    }
+
+    /**
+     * Register the routing services for the application.
+     *
+     * @param  \Closure|null  $using
+     * @param  array|string|null  $web
+     * @param  array|string|null  $api
+     * @param  string|null  $commands
+     * @param  string|null  $channels
+     * @param  string|null  $pages
+     * @param  string  $apiPrefix
+     * @param  callable|null  $then
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withRouting(?Closure $using = null,
+        array|string|null $web = null,
+        array|string|null $api = null,
+        ?string $commands = null,
+        ?string $channels = null,
+        ?string $pages = null,
+        ?string $health = null,
+        string $apiPrefix = &#039;api&#039;,
+        ?callable $then = null)
+    {
+        <span style="background-color: red">i</span>f (is_null($using) &amp;&amp; (<span style="background-color: red">i</span>s_string($web) || <span style="background-color: red">i</span>s_array($web) || <span style="background-color: red">i</span>s_string($api) || <span style="background-color: red">i</span>s_array($api) || <span style="background-color: red">i</span>s_string($pages) || <span style="background-color: red">i</span>s_string($health)) || <span style="background-color: red">i</span>s_callable($then)) {
+            $using = $this-&gt;buildRoutingCallback($web, $api, $pages, $health, $apiPrefix, $then);
+
+            <span style="background-color: red">i</span>f (is_string($health)) {
+                PreventRequestsDuringMaintenance::except($health);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        AppRouteServiceProvider::loadRoutesUsing($using);
+
+        $this-&gt;app-&gt;booting(<span style="background-color: green">f</span>unction () {
+            $this-&gt;app-&gt;register(AppRouteServiceProvider::class, force: true);
+        });
+
+        <span style="background-color: red">i</span>f (is_string($commands) &amp;&amp; <span style="background-color: red">r</span>ealpath($commands) !== false) {
+            $this-&gt;withCommands([$commands]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_string($channels) &amp;&amp; <span style="background-color: red">r</span>ealpath($channels) !== false) {
+            $this-&gt;withBroadcasting($channels);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Create the routing callback for the application.
+     *
+     * @param  array|string|null  $web
+     * @param  array|string|null  $api
+     * @param  string|null  $pages
+     * @param  string|null  $health
+     * @param  string  $apiPrefix
+     * @param  callable|null  $then
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function buildRoutingCallback(array|string|null $web,
+        array|string|null $api,
+        ?string $pages,
+        ?string $health,
+        string $apiPrefix,
+        ?callable $then)
+    {
+        return <span style="background-color: green">f</span>unction () use ($web, $api, $pages, $health, $apiPrefix, $then) {
+            <span style="background-color: red">i</span>f (is_string($api) || <span style="background-color: green">i</span>s_array($api)) {
+                <span style="background-color: red">i</span>f (is_array($api)) {
+                    <span style="background-color: red">f</span>oreach ($api as $apiRoute) {
+                        <span style="background-color: red">i</span>f (realpath($apiRoute) !== false) {
+                            Route::middleware(&#039;api&#039;)-&gt;prefix($apiPrefix)-&gt;group($apiRoute);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: red">e</span>lse {
+                    Route::middleware(&#039;api&#039;)-&gt;prefix($apiPrefix)-&gt;group($api);
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f (is_string($health)) {
+                Route::get($health, <span style="background-color: red">f</span>unction () {
+                    $exception = null;
+
+                    try {
+                        Event::dispatch(new DiagnosingHealth);
+                    } <span style="background-color: red">c</span>atch (\Throwable $e) {
+                        <span style="background-color: red">i</span>f (app()-&gt;hasDebugModeEnabled()) {
+                            throw $e;
+                        <span style="background-color: red">}</span>
+
+                        report($e);
+
+                        $exception = $e-&gt;getMessage();
+                    <span style="background-color: red">}</span>
+
+                    return response(View::file(__DIR__.&#039;/../resources/health-up.blade.php&#039;, [
+                        &#039;exception&#039; =&gt; $exception,
+                    ]), status: $exception ? 500 : <span style="background-color: red">2</span>00);
+                });
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: green">i</span>f (is_string($web) || <span style="background-color: red">i</span>s_array($web)) {
+                <span style="background-color: red">i</span>f (is_array($web)) {
+                    <span style="background-color: red">f</span>oreach ($web as $webRoute) {
+                        <span style="background-color: red">i</span>f (realpath($webRoute) !== false) {
+                            Route::middleware(&#039;web&#039;)-&gt;group($webRoute);
+                        <span style="background-color: red">}</span>
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: green">e</span>lse {
+                    Route::middleware(&#039;web&#039;)-&gt;group($web);
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">f</span>oreach ($this-&gt;additionalRoutingCallbacks as $callback) {
+                $callback();
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (is_string($pages) &amp;&amp;
+                <span style="background-color: red">r</span>ealpath($pages) !== false &amp;&amp;
+                <span style="background-color: red">c</span>lass_exists(Folio::class)) {
+                Folio::route($pages, middleware: $this-&gt;pageMiddleware);
+            <span style="background-color: green">}</span>
+
+            <span style="background-color: red">i</span>f (is_callable($then)) {
+                $then($this-&gt;app);
+            <span style="background-color: green">}</span>
+        };
+    }
+
+    /**
+     * Register the global middleware, middleware groups, and middleware aliases for the application.
+     *
+     * @param  callable|null  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withMiddleware(?callable $callback = null)
+    {
+        $this-&gt;app-&gt;afterResolving(HttpKernel::class, <span style="background-color: red">f</span>unction ($kernel) use ($callback) {
+            $middleware = (new Middleware)
+                -&gt;redirectGuestsTo(fn () =&gt; <span style="background-color: red">r</span>oute(&#039;login&#039;));
+
+            <span style="background-color: red">i</span>f (! is_null($callback)) {
+                $callback($middleware);
+            <span style="background-color: red">}</span>
+
+            $this-&gt;pageMiddleware = $middleware-&gt;getPageMiddleware();
+            $kernel-&gt;setGlobalMiddleware($middleware-&gt;getGlobalMiddleware());
+            $kernel-&gt;setMiddlewareGroups($middleware-&gt;getMiddlewareGroups());
+            $kernel-&gt;setMiddlewareAliases($middleware-&gt;getMiddlewareAliases());
+
+            <span style="background-color: red">i</span>f ($priorities = $middleware-&gt;getMiddlewarePriority()) {
+                $kernel-&gt;setMiddlewarePriority($priorities);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($priorityAppends = $middleware-&gt;getMiddlewarePriorityAppends()) {
+                <span style="background-color: red">f</span>oreach ($priorityAppends as $newMiddleware =&gt; $after) {
+                    $kernel-&gt;addToMiddlewarePriorityAfter($after, $newMiddleware);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($priorityPrepends = $middleware-&gt;getMiddlewarePriorityPrepends()) {
+                <span style="background-color: red">f</span>oreach ($priorityPrepends as $newMiddleware =&gt; $before) {
+                    $kernel-&gt;addToMiddlewarePriorityBefore($before, $newMiddleware);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        });
+
+        return $this;
+    }
+
+    /**
+     * Register additional Artisan commands with the application.
+     *
+     * @param  array  $commands
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withCommands(array $commands = [])
+    {
+        <span style="background-color: red">i</span>f (empty($commands)) {
+            $commands = [$this-&gt;app-&gt;path(&#039;Console/Commands&#039;)];
+        <span style="background-color: red">}</span>
+
+        $this-&gt;app-&gt;afterResolving(ConsoleKernel::class, <span style="background-color: red">f</span>unction ($kernel) use ($commands) {
+            [$commands, $paths] = (new Collection($commands))-&gt;partition(fn ($command) =&gt; <span style="background-color: red">c</span>lass_exists($command));
+            [$routes, $paths] = $paths-&gt;partition(fn ($path) =&gt; <span style="background-color: red">i</span>s_file($path));
+
+            $this-&gt;app-&gt;booted(<span style="background-color: red">s</span>tatic function () use ($kernel, $commands, $paths, $routes) {
+                $kernel-&gt;addCommands($commands-&gt;all());
+                $kernel-&gt;addCommandPaths($paths-&gt;all());
+                $kernel-&gt;addCommandRoutePaths($routes-&gt;all());
+            });
+        });
+
+        return $this;
+    }
+
+    /**
+     * Register additional Artisan route paths.
+     *
+     * @param  array  $paths
+     * @return $this
+     */
+    <span style="background-color: red">p</span>rotected function withCommandRouting(array $paths)
+    {
+        $this-&gt;app-&gt;afterResolving(ConsoleKernel::class, <span style="background-color: red">f</span>unction ($kernel) use ($paths) {
+            $this-&gt;app-&gt;booted(fn () =&gt; <span style="background-color: red">$</span>kernel-&gt;addCommandRoutePaths($paths));
+        });
+
+        return $this;
+    }
+
+    /**
+     * Register the scheduled tasks for the application.
+     *
+     * @param  callable(\Illuminate\Console\Scheduling\Schedule $schedule): void  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withSchedule(callable $callback)
+    {
+        Artisan::starting(fn () =&gt; <span style="background-color: red">$</span>callback($this-&gt;app-&gt;make(Schedule::class)));
+
+        return $this;
+    }
+
+    /**
+     * Register and configure the application&#039;s exception handler.
+     *
+     * @param  callable|null  $using
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withExceptions(?callable $using = null)
+    {
+        $this-&gt;app-&gt;singleton(
+            \Illuminate\Contracts\Debug\ExceptionHandler::class,
+            \Illuminate\Foundation\Exceptions\Handler::class
+        );
+
+        $using ??= <span style="background-color: red">f</span>n () =&gt; <span style="background-color: red">t</span>rue;
+
+        $this-&gt;app-&gt;afterResolving(
+            \Illuminate\Foundation\Exceptions\Handler::class,
+            fn ($handler) =&gt; <span style="background-color: green">$</span>using(new Exceptions($handler)),
+        );
+
+        return $this;
+    }
+
+    /**
+     * Register an array of container bindings to be bound when the application is booting.
+     *
+     * @param  array  $bindings
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withBindings(array $bindings)
+    {
+        return $this-&gt;registered(<span style="background-color: red">f</span>unction ($app) use ($bindings) {
+            <span style="background-color: red">f</span>oreach ($bindings as $abstract =&gt; $concrete) {
+                $app-&gt;bind($abstract, $concrete);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Register an array of singleton container bindings to be bound when the application is booting.
+     *
+     * @param  array  $singletons
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function withSingletons(array $singletons)
+    {
+        return $this-&gt;registered(<span style="background-color: red">f</span>unction ($app) use ($singletons) {
+            <span style="background-color: red">f</span>oreach ($singletons as $abstract =&gt; $concrete) {
+                <span style="background-color: red">i</span>f (is_string($abstract)) {
+                    $app-&gt;singleton($abstract, $concrete);
+                } <span style="background-color: red">e</span>lse {
+                    $app-&gt;singleton($concrete);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Register a callback to be invoked when the application&#039;s service providers are registered.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function registered(callable $callback)
+    {
+        $this-&gt;app-&gt;registered($callback);
+
+        return $this;
+    }
+
+    /**
+     * Register a callback to be invoked when the application is &quot;booting&quot;.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function booting(callable $callback)
+    {
+        $this-&gt;app-&gt;booting($callback);
+
+        return $this;
+    }
+
+    /**
+     * Register a callback to be invoked when the application is &quot;booted&quot;.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function booted(callable $callback)
+    {
+        $this-&gt;app-&gt;booted($callback);
+
+        return $this;
+    }
+
+    /**
+     * Get the application instance.
+     *
+     * @return \Illuminate\Foundation\Application
+     */
+    <span style="background-color: red">p</span>ublic function create()
+    {
+        return $this-&gt;app;
+    }
+}
+</pre>

@@ -1,0 +1,341 @@
+<pre>&lt;?php
+
+namespace Illuminate\Auth;
+
+use Closure;
+use Illuminate\Contracts\Auth\Factory as FactoryContract;
+use InvalidArgumentException;
+
+/**
+ * @mixin \Illuminate\Contracts\Auth\Guard
+ * @mixin \Illuminate\Contracts\Auth\StatefulGuard
+ */
+class AuthManager implements FactoryContract
+{
+    use CreatesUserProviders;
+
+    /**
+     * The application instance.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected $app;
+
+    /**
+     * The registered custom driver creators.
+     *
+     * @var array
+     */
+    protected $customCreators = [];
+
+    /**
+     * The array of created &quot;drivers&quot;.
+     *
+     * @var array
+     */
+    protected $guards = [];
+
+    /**
+     * The user resolver shared by various services.
+     *
+     * Determines the default user for Gate, Request, and the Authenticatable contract.
+     *
+     * @var \Closure
+     */
+    protected $userResolver;
+
+    /**
+     * Create a new Auth manager instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     */
+    <span style="background-color: green">p</span>ublic function __construct($app)
+    {
+        $this-&gt;app = $app;
+
+        $this-&gt;userResolver = fn ($guard = null) =&gt; <span style="background-color: red">$</span>this-&gt;guard($guard)-&gt;user();
+    }
+
+    /**
+     * Attempt to get the guard from the local cache.
+     *
+     * @param  string|null  $name
+     * @return \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard
+     */
+    <span style="background-color: green">p</span>ublic function guard($name = null)
+    {
+        $name = $name ?: <span style="background-color: green">$</span>this-&gt;getDefaultDriver();
+
+        return $this-&gt;guards[$name] ?? <span style="background-color: green">$</span>this-&gt;guards[$name] = $this-&gt;resolve($name);
+    }
+
+    /**
+     * Resolve the given guard.
+     *
+     * @param  string  $name
+     * @return \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function resolve($name)
+    {
+        $config = $this-&gt;getConfig($name);
+
+        <span style="background-color: red">i</span>f (is_null($config)) {
+            throw new InvalidArgumentException(&quot;Auth guard [{$name}] is not defined.&quot;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;customCreators[$config[&#039;driver&#039;]])) {
+            return $this-&gt;callCustomCreator($name, $config);
+        <span style="background-color: green">}</span>
+
+        $driverMethod = &#039;create&#039;.ucfirst($config[&#039;driver&#039;]).&#039;Driver&#039;;
+
+        <span style="background-color: green">i</span>f (method_exists($this, $driverMethod)) {
+            return $this-&gt;{$driverMethod}($name, $config);
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(
+            &quot;Auth driver [{$config[&#039;driver&#039;]}] for guard [{$name}] is not defined.&quot;
+        );
+    }
+
+    /**
+     * Call a custom driver creator.
+     *
+     * @param  string  $name
+     * @param  array  $config
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function callCustomCreator($name, array $config)
+    {
+        return $this-&gt;customCreators[$config[&#039;driver&#039;]]($this-&gt;app, $name, $config);
+    }
+
+    /**
+     * Create a session based authentication guard.
+     *
+     * @param  string  $name
+     * @param  array  $config
+     * @return \Illuminate\Auth\SessionGuard
+     */
+    <span style="background-color: green">p</span>ublic function createSessionDriver($name, $config)
+    {
+        $guard = new SessionGuard(
+            $name,
+            $this-&gt;createUserProvider($config[&#039;provider&#039;] ?? <span style="background-color: red">n</span>ull),
+            $this-&gt;app[&#039;session.store&#039;],
+            rehashOnLogin: $this-&gt;app[&#039;config&#039;]-&gt;get(&#039;hashing.rehash_on_login&#039;, true),
+        );
+
+        // When using the remember me functionality of the authentication services we
+        // will need to be set the encryption instance of the guard, which allows
+        // secure, encrypted cookie values to get generated for those cookies.
+        <span style="background-color: green">i</span>f (method_exists($guard, &#039;setCookieJar&#039;)) {
+            $guard-&gt;setCookieJar($this-&gt;app[&#039;cookie&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (method_exists($guard, &#039;setDispatcher&#039;)) {
+            $guard-&gt;setDispatcher($this-&gt;app[&#039;events&#039;]);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (method_exists($guard, &#039;setRequest&#039;)) {
+            $guard-&gt;setRequest($this-&gt;app-&gt;refresh(&#039;request&#039;, $guard, &#039;setRequest&#039;));
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (isset($config[&#039;remember&#039;])) {
+            $guard-&gt;setRememberDuration($config[&#039;remember&#039;]);
+        <span style="background-color: green">}</span>
+
+        return $guard;
+    }
+
+    /**
+     * Create a token based authentication guard.
+     *
+     * @param  string  $name
+     * @param  array  $config
+     * @return \Illuminate\Auth\TokenGuard
+     */
+    <span style="background-color: red">p</span>ublic function createTokenDriver($name, $config)
+    {
+        // The token guard implements a basic API token based guard implementation
+        // that takes an API token field from the request and matches it to the
+        // user in the database or another persistence layer where users are.
+        $guard = new TokenGuard(
+            $this-&gt;createUserProvider($config[&#039;provider&#039;] ?? <span style="background-color: red">n</span>ull),
+            $this-&gt;app[&#039;request&#039;],
+            $config[&#039;input_key&#039;] ?? <span style="background-color: red">'</span>api_token&#039;,
+            $config[&#039;storage_key&#039;] ?? <span style="background-color: red">'</span>api_token&#039;,
+            $config[&#039;hash&#039;] ?? <span style="background-color: red">f</span>alse
+        );
+
+        $this-&gt;app-&gt;refresh(&#039;request&#039;, $guard, &#039;setRequest&#039;);
+
+        return $guard;
+    }
+
+    /**
+     * Get the guard configuration.
+     *
+     * @param  string  $name
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function getConfig($name)
+    {
+        return $this-&gt;app[&#039;config&#039;][&quot;auth.guards.{$name}&quot;];
+    }
+
+    /**
+     * Get the default authentication driver name.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getDefaultDriver()
+    {
+        return $this-&gt;app[&#039;config&#039;][&#039;auth.defaults.guard&#039;];
+    }
+
+    /**
+     * Set the default guard driver the factory should serve.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function shouldUse($name)
+    {
+        $name = $name ?: <span style="background-color: red">$</span>this-&gt;getDefaultDriver();
+
+        $this-&gt;setDefaultDriver($name);
+
+        $this-&gt;userResolver = fn ($name = null) =&gt; <span style="background-color: red">$</span>this-&gt;guard($name)-&gt;user();
+    }
+
+    /**
+     * Set the default authentication driver name.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setDefaultDriver($name)
+    {
+        $this-&gt;app[&#039;config&#039;][&#039;auth.defaults.guard&#039;] = $name;
+    }
+
+    /**
+     * Register a new callback based request guard.
+     *
+     * @param  string  $driver
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function viaRequest($driver, callable $callback)
+    {
+        return $this-&gt;extend($driver, <span style="background-color: red">f</span>unction () use ($callback) {
+            $guard = new RequestGuard($callback, $this-&gt;app[&#039;request&#039;], $this-&gt;createUserProvider());
+
+            $this-&gt;app-&gt;refresh(&#039;request&#039;, $guard, &#039;setRequest&#039;);
+
+            return $guard;
+        });
+    }
+
+    /**
+     * Get the user resolver callback.
+     *
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>ublic function userResolver()
+    {
+        return $this-&gt;userResolver;
+    }
+
+    /**
+     * Set the callback to be used to resolve users.
+     *
+     * @param  \Closure  $userResolver
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function resolveUsersUsing(Closure $userResolver)
+    {
+        $this-&gt;userResolver = $userResolver;
+
+        return $this;
+    }
+
+    /**
+     * Register a custom driver creator Closure.
+     *
+     * @param  string  $driver
+     * @param  \Closure  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function extend($driver, Closure $callback)
+    {
+        $this-&gt;customCreators[$driver] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Register a custom provider creator Closure.
+     *
+     * @param  string  $name
+     * @param  \Closure  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function provider($name, Closure $callback)
+    {
+        $this-&gt;customProviderCreators[$name] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Determines if any guards have already been resolved.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasResolvedGuards()
+    {
+        return count($this-&gt;guards) &gt; 0;
+    }
+
+    /**
+     * Forget all of the resolved guard instances.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function forgetGuards()
+    {
+        $this-&gt;guards = [];
+
+        return $this;
+    }
+
+    /**
+     * Set the application instance used by the manager.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setApplication($app)
+    {
+        $this-&gt;app = $app;
+
+        return $this;
+    }
+
+    /**
+     * Dynamically call the default driver instance.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;guard()-&gt;{$method}(...$parameters);
+    }
+}
+</pre>

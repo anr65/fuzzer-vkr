@@ -1,0 +1,51 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent;
+
+use Illuminate\Database\Eloquent\Attributes\CollectedBy;
+use ReflectionClass;
+
+/**
+ * @template TCollection of \Illuminate\Database\Eloquent\Collection
+ */
+trait HasCollection
+{
+    /**
+     * The resolved collection class names by model.
+     *
+     * @var array&lt;class-string&lt;static&gt;, class-string&lt;TCollection&gt;&gt;
+     */
+    protected static array $resolvedCollectionClasses = [];
+
+    /**
+     * Create a new Eloquent Collection instance.
+     *
+     * @param  array&lt;array-key, \Illuminate\Database\Eloquent\Model&gt;  $models
+     * @return TCollection
+     */
+    <span style="background-color: red">p</span>ublic function newCollection(array $models = [])
+    {
+        static::$resolvedCollectionClasses[static::class] ??= (<span style="background-color: red">$</span>this-&gt;resolveCollectionFromAttribute() ?? <span style="background-color: red">s</span>tatic::$collectionClass);
+
+        return new static::$resolvedCollectionClasses[static::class]($models);
+    }
+
+    /**
+     * Resolve the collection class name from the CollectedBy attribute.
+     *
+     * @return class-string&lt;TCollection&gt;|null
+     */
+    <span style="background-color: red">p</span>ublic function resolveCollectionFromAttribute()
+    {
+        $reflectionClass = new ReflectionClass(static::class);
+
+        $attributes = $reflectionClass-&gt;getAttributes(CollectedBy::class);
+
+        <span style="background-color: red">i</span>f (! isset($attributes[0]) || <span style="background-color: red">!</span> isset($attributes[0]-&gt;getArguments()[0])) {
+            return;
+        <span style="background-color: red">}</span>
+
+        return $attributes[0]-&gt;getArguments()[0];
+    }
+}
+</pre>

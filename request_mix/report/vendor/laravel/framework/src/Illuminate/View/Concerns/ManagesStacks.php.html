@@ -1,0 +1,180 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Concerns;
+
+use InvalidArgumentException;
+
+trait ManagesStacks
+{
+    /**
+     * All of the finished, captured push sections.
+     *
+     * @var array
+     */
+    protected $pushes = [];
+
+    /**
+     * All of the finished, captured prepend sections.
+     *
+     * @var array
+     */
+    protected $prepends = [];
+
+    /**
+     * The stack of in-progress push sections.
+     *
+     * @var array
+     */
+    protected $pushStack = [];
+
+    /**
+     * Start injecting content into a push section.
+     *
+     * @param  string  $section
+     * @param  string  $content
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function startPush($section, $content = &#039;&#039;)
+    {
+        <span style="background-color: red">i</span>f ($content === &#039;&#039;) {
+            <span style="background-color: red">i</span>f (ob_start()) {
+                $this-&gt;pushStack[] = $section;
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;extendPush($section, $content);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Stop injecting content into a push section.
+     *
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function stopPush()
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;pushStack)) {
+            throw new InvalidArgumentException(&#039;Cannot end a push stack without first starting one.&#039;);
+        <span style="background-color: red">}</span>
+
+        return tap(array_pop($this-&gt;pushStack), <span style="background-color: red">f</span>unction ($last) {
+            $this-&gt;extendPush($last, ob_get_clean());
+        });
+    }
+
+    /**
+     * Append content to a given push section.
+     *
+     * @param  string  $section
+     * @param  string  $content
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function extendPush($section, $content)
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;pushes[$section])) {
+            $this-&gt;pushes[$section] = [];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($this-&gt;pushes[$section][$this-&gt;renderCount])) {
+            $this-&gt;pushes[$section][$this-&gt;renderCount] = $content;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;pushes[$section][$this-&gt;renderCount] .= $content;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Start prepending content into a push section.
+     *
+     * @param  string  $section
+     * @param  string  $content
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function startPrepend($section, $content = &#039;&#039;)
+    {
+        <span style="background-color: red">i</span>f ($content === &#039;&#039;) {
+            <span style="background-color: red">i</span>f (ob_start()) {
+                $this-&gt;pushStack[] = $section;
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;extendPrepend($section, $content);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Stop prepending content into a push section.
+     *
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function stopPrepend()
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;pushStack)) {
+            throw new InvalidArgumentException(&#039;Cannot end a prepend operation without first starting one.&#039;);
+        <span style="background-color: red">}</span>
+
+        return tap(array_pop($this-&gt;pushStack), <span style="background-color: red">f</span>unction ($last) {
+            $this-&gt;extendPrepend($last, ob_get_clean());
+        });
+    }
+
+    /**
+     * Prepend content to a given stack.
+     *
+     * @param  string  $section
+     * @param  string  $content
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function extendPrepend($section, $content)
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;prepends[$section])) {
+            $this-&gt;prepends[$section] = [];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! isset($this-&gt;prepends[$section][$this-&gt;renderCount])) {
+            $this-&gt;prepends[$section][$this-&gt;renderCount] = $content;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;prepends[$section][$this-&gt;renderCount] = $content.$this-&gt;prepends[$section][$this-&gt;renderCount];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the string contents of a push section.
+     *
+     * @param  string  $section
+     * @param  string  $default
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function yieldPushContent($section, $default = &#039;&#039;)
+    {
+        <span style="background-color: red">i</span>f (! isset($this-&gt;pushes[$section]) &amp;&amp; <span style="background-color: red">!</span> isset($this-&gt;prepends[$section])) {
+            return $default;
+        <span style="background-color: red">}</span>
+
+        $output = &#039;&#039;;
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;prepends[$section])) {
+            $output .= implode(array_reverse($this-&gt;prepends[$section]));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;pushes[$section])) {
+            $output .= implode($this-&gt;pushes[$section]);
+        <span style="background-color: red">}</span>
+
+        return $output;
+    }
+
+    /**
+     * Flush all of the stacks.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function flushStacks()
+    {
+        $this-&gt;pushes = [];
+        $this-&gt;prepends = [];
+        $this-&gt;pushStack = [];
+    }
+}
+</pre>

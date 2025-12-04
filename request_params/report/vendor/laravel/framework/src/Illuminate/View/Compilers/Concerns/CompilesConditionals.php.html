@@ -1,0 +1,421 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Illuminate\Support\Str;
+
+trait CompilesConditionals
+{
+    /**
+     * Identifier for the first case in the switch statement.
+     *
+     * @var bool
+     */
+    protected $firstCaseInSwitch = true;
+
+    /**
+     * Compile the if-auth statements into valid PHP.
+     *
+     * @param  string|null  $guard
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileAuth($guard = null)
+    {
+        $guard = is_null($guard) ? &#039;()&#039; : <span style="background-color: red">$</span>guard;
+
+        return &quot;&lt;?php if(auth()-&gt;guard{$guard}-&gt;check()): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-auth statements into valid PHP.
+     *
+     * @param  string|null  $guard
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElseAuth($guard = null)
+    {
+        $guard = is_null($guard) ? &#039;()&#039; : <span style="background-color: red">$</span>guard;
+
+        return &quot;&lt;?php elseif(auth()-&gt;guard{$guard}-&gt;check()): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-auth statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndAuth()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the env statements into valid PHP.
+     *
+     * @param  string  $environments
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEnv($environments)
+    {
+        return &quot;&lt;?php if(app()-&gt;environment{$environments}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-env statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndEnv()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the production statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileProduction()
+    {
+        return &quot;&lt;?php if(app()-&gt;environment(&#039;production&#039;)): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-production statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndProduction()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the if-guest statements into valid PHP.
+     *
+     * @param  string|null  $guard
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileGuest($guard = null)
+    {
+        $guard = is_null($guard) ? &#039;()&#039; : <span style="background-color: red">$</span>guard;
+
+        return &quot;&lt;?php if(auth()-&gt;guard{$guard}-&gt;guest()): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-guest statements into valid PHP.
+     *
+     * @param  string|null  $guard
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElseGuest($guard = null)
+    {
+        $guard = is_null($guard) ? &#039;()&#039; : <span style="background-color: red">$</span>guard;
+
+        return &quot;&lt;?php elseif(auth()-&gt;guard{$guard}-&gt;guest()): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-guest statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndGuest()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the has-section statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileHasSection($expression)
+    {
+        return &quot;&lt;?php if (! empty(trim(\$__env-&gt;yieldContent{$expression}))): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the section-missing statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileSectionMissing($expression)
+    {
+        return &quot;&lt;?php if (empty(trim(\$__env-&gt;yieldContent{$expression}))): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the if statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIf($expression)
+    {
+        return &quot;&lt;?php if{$expression}: ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the unless statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUnless($expression)
+    {
+        return &quot;&lt;?php if (! {$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-if statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElseif($expression)
+    {
+        return &quot;&lt;?php elseif{$expression}: ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElse()
+    {
+        return &#039;&lt;?php else: ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-if statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndif()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-unless statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndunless()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the if-isset statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileIsset($expression)
+    {
+        return &quot;&lt;?php if(isset{$expression}): ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-isset statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndIsset()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the switch statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileSwitch($expression)
+    {
+        $this-&gt;firstCaseInSwitch = true;
+
+        return &quot;&lt;?php switch{$expression}:&quot;;
+    }
+
+    /**
+     * Compile the case statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileCase($expression)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;firstCaseInSwitch) {
+            $this-&gt;firstCaseInSwitch = false;
+
+            return &quot;case {$expression}: ?&gt;&quot;;
+        <span style="background-color: red">}</span>
+
+        return &quot;&lt;?php case {$expression}: ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the default statements in switch case into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDefault()
+    {
+        return &#039;&lt;?php default: ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end switch statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndSwitch()
+    {
+        return &#039;&lt;?php endswitch; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile a once block into valid PHP.
+     *
+     * @param  string|null  $id
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileOnce($id = null)
+    {
+        $id = $id ? $this-&gt;stripParentheses($id) : <span style="background-color: red">"</span>&#039;&quot;.(string) Str::uuid().&quot;&#039;&quot;;
+
+        return &#039;&lt;?php if (! $__env-&gt;hasRenderedOnce(&#039;.$id.&#039;)): $__env-&gt;markAsRenderedOnce(&#039;.$id.&#039;); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile an end-once block into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileEndOnce()
+    {
+        return &#039;&lt;?php endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile a boolean value into a raw true / false value for embedding into HTML attributes or JavaScript.
+     *
+     * @param  bool  $condition
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileBool($condition)
+    {
+        return &quot;&lt;?php echo ($condition ? &#039;true&#039; : &#039;false&#039;); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile a checked block into valid PHP.
+     *
+     * @param  string  $condition
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileChecked($condition)
+    {
+        return &quot;&lt;?php if{$condition}: echo &#039;checked&#039;; endif; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile a disabled block into valid PHP.
+     *
+     * @param  string  $condition
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileDisabled($condition)
+    {
+        return &quot;&lt;?php if{$condition}: echo &#039;disabled&#039;; endif; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile a required block into valid PHP.
+     *
+     * @param  string  $condition
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileRequired($condition)
+    {
+        return &quot;&lt;?php if{$condition}: echo &#039;required&#039;; endif; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile a readonly block into valid PHP.
+     *
+     * @param  string  $condition
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileReadonly($condition)
+    {
+        return &quot;&lt;?php if{$condition}: echo &#039;readonly&#039;; endif; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile a selected block into valid PHP.
+     *
+     * @param  string  $condition
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileSelected($condition)
+    {
+        return &quot;&lt;?php if{$condition}: echo &#039;selected&#039;; endif; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the push statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compilePushIf($expression)
+    {
+        $parts = explode(&#039;,&#039;, $this-&gt;stripParentheses($expression), 2);
+
+        return &quot;&lt;?php if({$parts[0]}): \$__env-&gt;startPush({$parts[1]}); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else-if push statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElsePushIf($expression)
+    {
+        $parts = explode(&#039;,&#039;, $this-&gt;stripParentheses($expression), 2);
+
+        return &quot;&lt;?php \$__env-&gt;stopPush(); elseif({$parts[0]}): \$__env-&gt;startPush({$parts[1]}); ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the else push statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileElsePush($expression)
+    {
+        return &quot;&lt;?php \$__env-&gt;stopPush(); else: \$__env-&gt;startPush{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the end-push statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndPushIf()
+    {
+        return &#039;&lt;?php $__env-&gt;stopPush(); endif; ?&gt;&#039;;
+    }
+}
+</pre>

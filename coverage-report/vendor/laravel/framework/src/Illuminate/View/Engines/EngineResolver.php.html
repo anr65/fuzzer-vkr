@@ -1,0 +1,72 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Engines;
+
+use Closure;
+use InvalidArgumentException;
+
+class EngineResolver
+{
+    /**
+     * The array of engine resolvers.
+     *
+     * @var array
+     */
+    protected $resolvers = [];
+
+    /**
+     * The resolved engine instances.
+     *
+     * @var array
+     */
+    protected $resolved = [];
+
+    /**
+     * Register a new engine resolver.
+     *
+     * The engine string typically corresponds to a file extension.
+     *
+     * @param  string  $engine
+     * @param  \Closure  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register($engine, Closure $resolver)
+    {
+        $this-&gt;forget($engine);
+
+        $this-&gt;resolvers[$engine] = $resolver;
+    }
+
+    /**
+     * Resolve an engine instance by name.
+     *
+     * @param  string  $engine
+     * @return \Illuminate\Contracts\View\Engine
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function resolve($engine)
+    {
+        <span style="background-color: green">i</span>f (isset($this-&gt;resolved[$engine])) {
+            return $this-&gt;resolved[$engine];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (isset($this-&gt;resolvers[$engine])) {
+            return $this-&gt;resolved[$engine] = call_user_func($this-&gt;resolvers[$engine]);
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&quot;Engine [{$engine}] not found.&quot;);
+    }
+
+    /**
+     * Remove a resolved engine.
+     *
+     * @param  string  $engine
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function forget($engine)
+    {
+        unset($this-&gt;resolved[$engine]);
+    }
+}
+</pre>

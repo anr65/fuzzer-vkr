@@ -1,0 +1,145 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Query\Processors;
+
+use Illuminate\Database\Query\Builder;
+
+class Processor
+{
+    /**
+     * Process the results of a &quot;select&quot; query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processSelect(Builder $query, $results)
+    {
+        return $results;
+    }
+
+    /**
+     * Process an  &quot;insert get ID&quot; query.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $sql
+     * @param  array  $values
+     * @param  string|null  $sequence
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function processInsertGetId(Builder $query, $sql, $values, $sequence = null)
+    {
+        $query-&gt;getConnection()-&gt;insert($sql, $values);
+
+        $id = $query-&gt;getConnection()-&gt;getPdo()-&gt;lastInsertId($sequence);
+
+        return is_numeric($id) ? (int) $id : <span style="background-color: red">$</span>id;
+    }
+
+    /**
+     * Process the results of a schemas query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processSchemas($results)
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($result) {
+            $result = (object) $result;
+
+            return [
+                &#039;name&#039; =&gt; $result-&gt;name,
+                &#039;path&#039; =&gt; $result-&gt;path ?? <span style="background-color: red">n</span>ull, // SQLite Only...
+                &#039;default&#039; =&gt; (bool) $result-&gt;default,
+            ];
+        }, $results);
+    }
+
+    /**
+     * Process the results of a tables query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processTables($results)
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($result) {
+            $result = (object) $result;
+
+            return [
+                &#039;name&#039; =&gt; $result-&gt;name,
+                &#039;schema&#039; =&gt; $result-&gt;schema ?? <span style="background-color: red">n</span>ull,
+                &#039;schema_qualified_name&#039; =&gt; isset($result-&gt;schema) ? $result-&gt;schema.&#039;.&#039;.$result-&gt;name : <span style="background-color: red">$</span>result-&gt;name,
+                &#039;size&#039; =&gt; isset($result-&gt;size) ? (int) $result-&gt;size : <span style="background-color: red">n</span>ull,
+                &#039;comment&#039; =&gt; $result-&gt;comment ?? <span style="background-color: red">n</span>ull, // MySQL and PostgreSQL
+                &#039;collation&#039; =&gt; $result-&gt;collation ?? <span style="background-color: red">n</span>ull, // MySQL only
+                &#039;engine&#039; =&gt; $result-&gt;engine ?? <span style="background-color: red">n</span>ull, // MySQL only
+            ];
+        }, $results);
+    }
+
+    /**
+     * Process the results of a views query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processViews($results)
+    {
+        return array_map(<span style="background-color: red">f</span>unction ($result) {
+            $result = (object) $result;
+
+            return [
+                &#039;name&#039; =&gt; $result-&gt;name,
+                &#039;schema&#039; =&gt; $result-&gt;schema ?? <span style="background-color: red">n</span>ull,
+                &#039;schema_qualified_name&#039; =&gt; isset($result-&gt;schema) ? $result-&gt;schema.&#039;.&#039;.$result-&gt;name : <span style="background-color: red">$</span>result-&gt;name,
+                &#039;definition&#039; =&gt; $result-&gt;definition,
+            ];
+        }, $results);
+    }
+
+    /**
+     * Process the results of a types query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processTypes($results)
+    {
+        return $results;
+    }
+
+    /**
+     * Process the results of a columns query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processColumns($results)
+    {
+        return $results;
+    }
+
+    /**
+     * Process the results of an indexes query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processIndexes($results)
+    {
+        return $results;
+    }
+
+    /**
+     * Process the results of a foreign keys query.
+     *
+     * @param  array  $results
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function processForeignKeys($results)
+    {
+        return $results;
+    }
+}
+</pre>

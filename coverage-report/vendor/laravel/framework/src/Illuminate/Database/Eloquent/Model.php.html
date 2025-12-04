@@ -1,0 +1,2520 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent;
+
+use ArrayAccess;
+use Closure;
+use Illuminate\Contracts\Broadcasting\HasBroadcastChannel;
+use Illuminate\Contracts\Queue\QueueableCollection;
+use Illuminate\Contracts\Queue\QueueableEntity;
+use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Database\ConnectionResolverInterface as Resolver;
+use Illuminate\Database\Eloquent\Attributes\Scope as LocalScope;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Stringable as SupportStringable;
+use Illuminate\Support\Traits\ForwardsCalls;
+use JsonException;
+use JsonSerializable;
+use LogicException;
+use ReflectionMethod;
+use Stringable;
+
+abstract class Model implements Arrayable, ArrayAccess, CanBeEscapedWhenCastToString, HasBroadcastChannel, Jsonable, JsonSerializable, QueueableEntity, Stringable, UrlRoutable
+{
+    use Concerns\HasAttributes,
+        Concerns\HasEvents,
+        Concerns\HasGlobalScopes,
+        Concerns\HasRelationships,
+        Concerns\HasTimestamps,
+        Concerns\HasUniqueIds,
+        Concerns\HidesAttributes,
+        Concerns\GuardsAttributes,
+        Concerns\PreventsCircularRecursion,
+        Concerns\TransformsToResource,
+        ForwardsCalls;
+    /** @use HasCollection&lt;\Illuminate\Database\Eloquent\Collection&lt;array-key, static &amp; self&gt;&gt; */
+    use HasCollection;
+
+    /**
+     * The connection name for the model.
+     *
+     * @var string|null
+     */
+    protected $connection;
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string|null
+     */
+    protected $table;
+
+    /**
+     * The primary key for the model.
+     *
+     * @var string
+     */
+    protected $primaryKey = &#039;id&#039;;
+
+    /**
+     * The &quot;type&quot; of the primary key ID.
+     *
+     * @var string
+     */
+    protected $keyType = &#039;int&#039;;
+
+    /**
+     * Indicates if the IDs are auto-incrementing.
+     *
+     * @var bool
+     */
+    public $incrementing = true;
+
+    /**
+     * The relations to eager load on every query.
+     *
+     * @var array
+     */
+    protected $with = [];
+
+    /**
+     * The relationship counts that should be eager loaded on every query.
+     *
+     * @var array
+     */
+    protected $withCount = [];
+
+    /**
+     * Indicates whether lazy loading will be prevented on this model.
+     *
+     * @var bool
+     */
+    public $preventsLazyLoading = false;
+
+    /**
+     * The number of models to return for pagination.
+     *
+     * @var int
+     */
+    protected $perPage = 15;
+
+    /**
+     * Indicates if the model exists.
+     *
+     * @var bool
+     */
+    public $exists = false;
+
+    /**
+     * Indicates if the model was inserted during the object&#039;s lifecycle.
+     *
+     * @var bool
+     */
+    public $wasRecentlyCreated = false;
+
+    /**
+     * Indicates that the object&#039;s string representation should be escaped when __toString is invoked.
+     *
+     * @var bool
+     */
+    protected $escapeWhenCastingToString = false;
+
+    /**
+     * The connection resolver instance.
+     *
+     * @var \Illuminate\Database\ConnectionResolverInterface
+     */
+    protected static $resolver;
+
+    /**
+     * The event dispatcher instance.
+     *
+     * @var \Illuminate\Contracts\Events\Dispatcher|null
+     */
+    protected static $dispatcher;
+
+    /**
+     * The array of booted models.
+     *
+     * @var array
+     */
+    protected static $booted = [];
+
+    /**
+     * The callbacks that should be executed after the model has booted.
+     *
+     * @var array
+     */
+    protected static $bootedCallbacks = [];
+
+    /**
+     * The array of trait initializers that will be called on each new instance.
+     *
+     * @var array
+     */
+    protected static $traitInitializers = [];
+
+    /**
+     * The array of global scopes on the model.
+     *
+     * @var array
+     */
+    protected static $globalScopes = [];
+
+    /**
+     * The list of models classes that should not be affected with touch.
+     *
+     * @var array
+     */
+    protected static $ignoreOnTouch = [];
+
+    /**
+     * Indicates whether lazy loading should be restricted on all models.
+     *
+     * @var bool
+     */
+    protected static $modelsShouldPreventLazyLoading = false;
+
+    /**
+     * Indicates whether relations should be automatically loaded on all models when they are accessed.
+     *
+     * @var bool
+     */
+    protected static $modelsShouldAutomaticallyEagerLoadRelationships = false;
+
+    /**
+     * The callback that is responsible for handling lazy loading violations.
+     *
+     * @var callable|null
+     */
+    protected static $lazyLoadingViolationCallback;
+
+    /**
+     * Indicates if an exception should be thrown instead of silently discarding non-fillable attributes.
+     *
+     * @var bool
+     */
+    protected static $modelsShouldPreventSilentlyDiscardingAttributes = false;
+
+    /**
+     * The callback that is responsible for handling discarded attribute violations.
+     *
+     * @var callable|null
+     */
+    protected static $discardedAttributeViolationCallback;
+
+    /**
+     * Indicates if an exception should be thrown when trying to access a missing attribute on a retrieved model.
+     *
+     * @var bool
+     */
+    protected static $modelsShouldPreventAccessingMissingAttributes = false;
+
+    /**
+     * The callback that is responsible for handling missing attribute violations.
+     *
+     * @var callable|null
+     */
+    protected static $missingAttributeViolationCallback;
+
+    /**
+     * Indicates if broadcasting is currently enabled.
+     *
+     * @var bool
+     */
+    protected static $isBroadcasting = true;
+
+    /**
+     * The Eloquent query builder class to use for the model.
+     *
+     * @var class-string&lt;\Illuminate\Database\Eloquent\Builder&lt;*&gt;&gt;
+     */
+    protected static string $builder = Builder::class;
+
+    /**
+     * The Eloquent collection class to use for the model.
+     *
+     * @var class-string&lt;\Illuminate\Database\Eloquent\Collection&lt;*, *&gt;&gt;
+     */
+    protected static string $collectionClass = Collection::class;
+
+    /**
+     * The name of the &quot;created at&quot; column.
+     *
+     * @var string|null
+     */
+    const CREATED_AT = &#039;created_at&#039;;
+
+    /**
+     * The name of the &quot;updated at&quot; column.
+     *
+     * @var string|null
+     */
+    const UPDATED_AT = &#039;updated_at&#039;;
+
+    /**
+     * Create a new Eloquent model instance.
+     *
+     * @param  array  $attributes
+     */
+    <span style="background-color: red">p</span>ublic function __construct(array $attributes = [])
+    {
+        $this-&gt;bootIfNotBooted();
+
+        $this-&gt;initializeTraits();
+
+        $this-&gt;syncOriginal();
+
+        $this-&gt;fill($attributes);
+    }
+
+    /**
+     * Check if the model needs to be booted and if so, do it.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function bootIfNotBooted()
+    {
+        <span style="background-color: red">i</span>f (! isset(static::$booted[static::class])) {
+            static::$booted[static::class] = true;
+
+            $this-&gt;fireModelEvent(&#039;booting&#039;, false);
+
+            static::booting();
+            static::boot();
+            static::booted();
+
+            static::$bootedCallbacks[static::class] ??= <span style="background-color: red">[</span>];
+
+            <span style="background-color: red">f</span>oreach (static::$bootedCallbacks[static::class] as $callback) {
+                $callback();
+            <span style="background-color: red">}</span>
+
+            $this-&gt;fireModelEvent(&#039;booted&#039;, false);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Perform any actions required before the model boots.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected static function booting()
+    {
+        //
+    }
+
+    /**
+     * Bootstrap the model and its traits.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected static function boot()
+    {
+        static::bootTraits();
+    }
+
+    /**
+     * Boot all of the bootable traits on the model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected static function bootTraits()
+    {
+        $class = static::class;
+
+        $booted = [];
+
+        static::$traitInitializers[$class] = [];
+
+        <span style="background-color: red">f</span>oreach (class_uses_recursive($class) as $trait) {
+            $method = &#039;boot&#039;.class_basename($trait);
+
+            <span style="background-color: red">i</span>f (method_exists($class, $method) &amp;&amp; <span style="background-color: red">!</span> in_array($method, $booted)) {
+                forward_static_call([$class, $method]);
+
+                $booted[] = $method;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (method_exists($class, $method = &#039;initialize&#039;.class_basename($trait))) {
+                static::$traitInitializers[$class][] = $method;
+
+                static::$traitInitializers[$class] = array_unique(
+                    static::$traitInitializers[$class]
+                );
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Initialize any initializable traits on the model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function initializeTraits()
+    {
+        <span style="background-color: red">f</span>oreach (static::$traitInitializers[static::class] as $method) {
+            $this-&gt;{$method}();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Perform any actions required after the model boots.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected static function booted()
+    {
+        //
+    }
+
+    /**
+     * Register a closure to be executed after the model has booted.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected static function whenBooted(Closure $callback)
+    {
+        static::$bootedCallbacks[static::class] ??= <span style="background-color: red">[</span>];
+
+        static::$bootedCallbacks[static::class][] = $callback;
+    }
+
+    /**
+     * Clear the list of booted models so they will be re-booted.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function clearBootedModels()
+    {
+        static::$booted = [];
+        static::$bootedCallbacks = [];
+
+        static::$globalScopes = [];
+    }
+
+    /**
+     * Disables relationship model touching for the current class during given callback scope.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function withoutTouching(callable $callback)
+    {
+        static::withoutTouchingOn([static::class], $callback);
+    }
+
+    /**
+     * Disables relationship model touching for the given model classes during given callback scope.
+     *
+     * @param  array  $models
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function withoutTouchingOn(array $models, callable $callback)
+    {
+        static::$ignoreOnTouch = array_values(array_merge(static::$ignoreOnTouch, $models));
+
+        try {
+            $callback();
+        } <span style="background-color: red">f</span>inally {
+            static::$ignoreOnTouch = array_values(array_diff(static::$ignoreOnTouch, $models));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the given model is ignoring touches.
+     *
+     * @param  string|null  $class
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isIgnoringTouch($class = null)
+    {
+        $class = $class ?: <span style="background-color: red">s</span>tatic::class;
+
+        <span style="background-color: red">i</span>f (! get_class_vars($class)[&#039;timestamps&#039;] || <span style="background-color: red">!</span> $class::UPDATED_AT) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach (static::$ignoreOnTouch as $ignoredClass) {
+            <span style="background-color: red">i</span>f ($class === $ignoredClass || <span style="background-color: red">i</span>s_subclass_of($class, $ignoredClass)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Indicate that models should prevent lazy loading, silently discarding attributes, and accessing missing attributes.
+     *
+     * @param  bool  $shouldBeStrict
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function shouldBeStrict(bool $shouldBeStrict = true)
+    {
+        static::preventLazyLoading($shouldBeStrict);
+        static::preventSilentlyDiscardingAttributes($shouldBeStrict);
+        static::preventAccessingMissingAttributes($shouldBeStrict);
+    }
+
+    /**
+     * Prevent model relationships from being lazy loaded.
+     *
+     * @param  bool  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function preventLazyLoading($value = true)
+    {
+        static::$modelsShouldPreventLazyLoading = $value;
+    }
+
+    /**
+     * Determine if model relationships should be automatically eager loaded when accessed.
+     *
+     * @param  bool  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function automaticallyEagerLoadRelationships($value = true)
+    {
+        static::$modelsShouldAutomaticallyEagerLoadRelationships = $value;
+    }
+
+    /**
+     * Register a callback that is responsible for handling lazy loading violations.
+     *
+     * @param  callable|null  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function handleLazyLoadingViolationUsing(?callable $callback)
+    {
+        static::$lazyLoadingViolationCallback = $callback;
+    }
+
+    /**
+     * Prevent non-fillable attributes from being silently discarded.
+     *
+     * @param  bool  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function preventSilentlyDiscardingAttributes($value = true)
+    {
+        static::$modelsShouldPreventSilentlyDiscardingAttributes = $value;
+    }
+
+    /**
+     * Register a callback that is responsible for handling discarded attribute violations.
+     *
+     * @param  callable|null  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function handleDiscardedAttributeViolationUsing(?callable $callback)
+    {
+        static::$discardedAttributeViolationCallback = $callback;
+    }
+
+    /**
+     * Prevent accessing missing attributes on retrieved models.
+     *
+     * @param  bool  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function preventAccessingMissingAttributes($value = true)
+    {
+        static::$modelsShouldPreventAccessingMissingAttributes = $value;
+    }
+
+    /**
+     * Register a callback that is responsible for handling missing attribute violations.
+     *
+     * @param  callable|null  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function handleMissingAttributeViolationUsing(?callable $callback)
+    {
+        static::$missingAttributeViolationCallback = $callback;
+    }
+
+    /**
+     * Execute a callback without broadcasting any model events for all model types.
+     *
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function withoutBroadcasting(callable $callback)
+    {
+        $isBroadcasting = static::$isBroadcasting;
+
+        static::$isBroadcasting = false;
+
+        try {
+            return $callback();
+        } <span style="background-color: red">f</span>inally {
+            static::$isBroadcasting = $isBroadcasting;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Fill the model with an array of attributes.
+     *
+     * @param  array  $attributes
+     * @return $this
+     *
+     * @throws \Illuminate\Database\Eloquent\MassAssignmentException
+     */
+    <span style="background-color: red">p</span>ublic function fill(array $attributes)
+    {
+        $totallyGuarded = $this-&gt;totallyGuarded();
+
+        $fillable = $this-&gt;fillableFromArray($attributes);
+
+        <span style="background-color: red">f</span>oreach ($fillable as $key =&gt; $value) {
+            // The developers may choose to place some attributes in the &quot;fillable&quot; array
+            // which means only those attributes may be set through mass assignment to
+            // the model, and all others will just get ignored for security reasons.
+            <span style="background-color: red">i</span>f ($this-&gt;isFillable($key)) {
+                $this-&gt;setAttribute($key, $value);
+            } <span style="background-color: red">e</span>lseif ($totallyGuarded || <span style="background-color: red">s</span>tatic::preventsSilentlyDiscardingAttributes()) {
+                <span style="background-color: red">i</span>f (isset(static::$discardedAttributeViolationCallback)) {
+                    call_user_func(static::$discardedAttributeViolationCallback, $this, [$key]);
+                } <span style="background-color: red">e</span>lse {
+                    throw new MassAssignmentException(sprintf(
+                        &#039;Add [%s] to fillable property to allow mass assignment on [%s].&#039;,
+                        $key, get_class($this)
+                    ));
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (count($attributes) !== count($fillable) &amp;&amp;
+            <span style="background-color: red">s</span>tatic::preventsSilentlyDiscardingAttributes()) {
+            $keys = array_diff(array_keys($attributes), array_keys($fillable));
+
+            <span style="background-color: red">i</span>f (isset(static::$discardedAttributeViolationCallback)) {
+                call_user_func(static::$discardedAttributeViolationCallback, $this, $keys);
+            } <span style="background-color: red">e</span>lse {
+                throw new MassAssignmentException(sprintf(
+                    &#039;Add fillable property [%s] to allow mass assignment on [%s].&#039;,
+                    implode(&#039;, &#039;, $keys),
+                    get_class($this)
+                ));
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Fill the model with an array of attributes. Force mass assignment.
+     *
+     * @param  array  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function forceFill(array $attributes)
+    {
+        return static::unguarded(fn () =&gt; <span style="background-color: red">$</span>this-&gt;fill($attributes));
+    }
+
+    /**
+     * Qualify the given column name by the model&#039;s table.
+     *
+     * @param  string  $column
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function qualifyColumn($column)
+    {
+        <span style="background-color: red">i</span>f (str_contains($column, &#039;.&#039;)) {
+            return $column;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;getTable().&#039;.&#039;.$column;
+    }
+
+    /**
+     * Qualify the given columns with the model&#039;s table.
+     *
+     * @param  array  $columns
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function qualifyColumns($columns)
+    {
+        return (new BaseCollection($columns))
+            -&gt;map(fn ($column) =&gt; <span style="background-color: red">$</span>this-&gt;qualifyColumn($column))
+            -&gt;all();
+    }
+
+    /**
+     * Create a new instance of the given model.
+     *
+     * @param  array  $attributes
+     * @param  bool  $exists
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function newInstance($attributes = [], $exists = false)
+    {
+        // This method just provides a convenient way for us to generate fresh model
+        // instances of this current model. It is particularly useful during the
+        // hydration of new objects via the Eloquent query builder instances.
+        $model = new static;
+
+        $model-&gt;exists = $exists;
+
+        $model-&gt;setConnection(
+            $this-&gt;getConnectionName()
+        );
+
+        $model-&gt;setTable($this-&gt;getTable());
+
+        $model-&gt;mergeCasts($this-&gt;casts);
+
+        $model-&gt;fill((array) $attributes);
+
+        return $model;
+    }
+
+    /**
+     * Create a new model instance that is existing.
+     *
+     * @param  array  $attributes
+     * @param  string|null  $connection
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function newFromBuilder($attributes = [], $connection = null)
+    {
+        $model = $this-&gt;newInstance([], true);
+
+        $model-&gt;setRawAttributes((array) $attributes, true);
+
+        $model-&gt;setConnection($connection ?: <span style="background-color: red">$</span>this-&gt;getConnectionName());
+
+        $model-&gt;fireModelEvent(&#039;retrieved&#039;, false);
+
+        return $model;
+    }
+
+    /**
+     * Begin querying the model on a given connection.
+     *
+     * @param  string|null  $connection
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function on($connection = null)
+    {
+        // First we will just create a fresh instance of this model, and then we can set the
+        // connection on the model so that it is used for the queries we execute, as well
+        // as being set on every relation we retrieve without a custom connection name.
+        $instance = new static;
+
+        $instance-&gt;setConnection($connection);
+
+        return $instance-&gt;newQuery();
+    }
+
+    /**
+     * Begin querying the model on the write connection.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function onWriteConnection()
+    {
+        return static::query()-&gt;useWritePdo();
+    }
+
+    /**
+     * Get all of the models from the database.
+     *
+     * @param  array|string  $columns
+     * @return \Illuminate\Database\Eloquent\Collection&lt;int, static&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function all($columns = [&#039;*&#039;])
+    {
+        return static::query()-&gt;get(
+            is_array($columns) ? $columns : <span style="background-color: red">f</span>unc_get_args()
+        );
+    }
+
+    /**
+     * Begin querying a model with eager loading.
+     *
+     * @param  array|string  $relations
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function with($relations)
+    {
+        return static::query()-&gt;with(
+            is_string($relations) ? func_get_args() : <span style="background-color: red">$</span>relations
+        );
+    }
+
+    /**
+     * Eager load relations on the model.
+     *
+     * @param  array|string  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function load($relations)
+    {
+        $query = $this-&gt;newQueryWithoutRelationships()-&gt;with(
+            is_string($relations) ? func_get_args() : <span style="background-color: red">$</span>relations
+        );
+
+        $query-&gt;eagerLoadRelations([$this]);
+
+        return $this;
+    }
+
+    /**
+     * Eager load relationships on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorph($relation, $relations)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;{$relation}) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $className = get_class($this-&gt;{$relation});
+
+        $this-&gt;{$relation}-&gt;load($relations[$className] ?? <span style="background-color: red">[</span>]);
+
+        return $this;
+    }
+
+    /**
+     * Eager load relations on the model if they are not already eager loaded.
+     *
+     * @param  array|string  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMissing($relations)
+    {
+        $relations = is_string($relations) ? func_get_args() : <span style="background-color: red">$</span>relations;
+
+        $this-&gt;newCollection([$this])-&gt;loadMissing($relations);
+
+        return $this;
+    }
+
+    /**
+     * Eager load relation&#039;s column aggregations on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @param  string|null  $function
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadAggregate($relations, $column, $function = null)
+    {
+        $this-&gt;newCollection([$this])-&gt;loadAggregate($relations, $column, $function);
+
+        return $this;
+    }
+
+    /**
+     * Eager load relation counts on the model.
+     *
+     * @param  array|string  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadCount($relations)
+    {
+        $relations = is_string($relations) ? func_get_args() : <span style="background-color: red">$</span>relations;
+
+        return $this-&gt;loadAggregate($relations, &#039;*&#039;, &#039;count&#039;);
+    }
+
+    /**
+     * Eager load relation max column values on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMax($relations, $column)
+    {
+        return $this-&gt;loadAggregate($relations, $column, &#039;max&#039;);
+    }
+
+    /**
+     * Eager load relation min column values on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMin($relations, $column)
+    {
+        return $this-&gt;loadAggregate($relations, $column, &#039;min&#039;);
+    }
+
+    /**
+     * Eager load relation&#039;s column summations on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadSum($relations, $column)
+    {
+        return $this-&gt;loadAggregate($relations, $column, &#039;sum&#039;);
+    }
+
+    /**
+     * Eager load relation average column values on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadAvg($relations, $column)
+    {
+        return $this-&gt;loadAggregate($relations, $column, &#039;avg&#039;);
+    }
+
+    /**
+     * Eager load related model existence values on the model.
+     *
+     * @param  array|string  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadExists($relations)
+    {
+        return $this-&gt;loadAggregate($relations, &#039;*&#039;, &#039;exists&#039;);
+    }
+
+    /**
+     * Eager load relationship column aggregation on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @param  string|null  $function
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphAggregate($relation, $relations, $column, $function = null)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;{$relation}) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $className = get_class($this-&gt;{$relation});
+
+        $this-&gt;{$relation}-&gt;loadAggregate($relations[$className] ?? <span style="background-color: red">[</span>], $column, $function);
+
+        return $this;
+    }
+
+    /**
+     * Eager load relationship counts on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphCount($relation, $relations)
+    {
+        return $this-&gt;loadMorphAggregate($relation, $relations, &#039;*&#039;, &#039;count&#039;);
+    }
+
+    /**
+     * Eager load relationship max column values on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphMax($relation, $relations, $column)
+    {
+        return $this-&gt;loadMorphAggregate($relation, $relations, $column, &#039;max&#039;);
+    }
+
+    /**
+     * Eager load relationship min column values on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphMin($relation, $relations, $column)
+    {
+        return $this-&gt;loadMorphAggregate($relation, $relations, $column, &#039;min&#039;);
+    }
+
+    /**
+     * Eager load relationship column summations on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphSum($relation, $relations, $column)
+    {
+        return $this-&gt;loadMorphAggregate($relation, $relations, $column, &#039;sum&#039;);
+    }
+
+    /**
+     * Eager load relationship average column values on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function loadMorphAvg($relation, $relations, $column)
+    {
+        return $this-&gt;loadMorphAggregate($relation, $relations, $column, &#039;avg&#039;);
+    }
+
+    /**
+     * Increment a column&#039;s value by a given amount.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function increment($column, $amount = 1, array $extra = [])
+    {
+        return $this-&gt;incrementOrDecrement($column, $amount, $extra, &#039;increment&#039;);
+    }
+
+    /**
+     * Decrement a column&#039;s value by a given amount.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function decrement($column, $amount = 1, array $extra = [])
+    {
+        return $this-&gt;incrementOrDecrement($column, $amount, $extra, &#039;decrement&#039;);
+    }
+
+    /**
+     * Run the increment or decrement method on the model.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @param  string  $method
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function incrementOrDecrement($column, $amount, $extra, $method)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return $this-&gt;newQueryWithoutRelationships()-&gt;{$method}($column, $amount, $extra);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;{$column} = $this-&gt;isClassDeviable($column)
+            ? $this-&gt;deviateClassCastableAttribute($method, $column, $amount)
+            : <span style="background-color: red">$</span>this-&gt;{$column} + ($method === &#039;increment&#039; ? $amount : <span style="background-color: red">$</span>amount * -1);
+
+        $this-&gt;forceFill($extra);
+
+        <span style="background-color: red">i</span>f ($this-&gt;fireModelEvent(&#039;updating&#039;) === false) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;isClassDeviable($column)) {
+            $amount = (clone $this)-&gt;setAttribute($column, $amount)-&gt;getAttributeFromArray($column);
+        <span style="background-color: red">}</span>
+
+        return tap($this-&gt;setKeysForSaveQuery($this-&gt;newQueryWithoutScopes())-&gt;{$method}($column, $amount, $extra), <span style="background-color: red">f</span>unction () use ($column) {
+            $this-&gt;syncChanges();
+
+            $this-&gt;fireModelEvent(&#039;updated&#039;, false);
+
+            $this-&gt;syncOriginalAttribute($column);
+        });
+    }
+
+    /**
+     * Update the model in the database.
+     *
+     * @param  array  $attributes
+     * @param  array  $options
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function update(array $attributes = [], array $options = [])
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;fill($attributes)-&gt;save($options);
+    }
+
+    /**
+     * Update the model in the database within a transaction.
+     *
+     * @param  array  $attributes
+     * @param  array  $options
+     * @return bool
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function updateOrFail(array $attributes = [], array $options = [])
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;fill($attributes)-&gt;saveOrFail($options);
+    }
+
+    /**
+     * Update the model in the database without raising any events.
+     *
+     * @param  array  $attributes
+     * @param  array  $options
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function updateQuietly(array $attributes = [], array $options = [])
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;fill($attributes)-&gt;saveQuietly($options);
+    }
+
+    /**
+     * Increment a column&#039;s value by a given amount without raising any events.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function incrementQuietly($column, $amount = 1, array $extra = [])
+    {
+        return static::withoutEvents(
+            fn () =&gt; <span style="background-color: red">$</span>this-&gt;incrementOrDecrement($column, $amount, $extra, &#039;increment&#039;)
+        );
+    }
+
+    /**
+     * Decrement a column&#039;s value by a given amount without raising any events.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @return int
+     */
+    <span style="background-color: red">p</span>rotected function decrementQuietly($column, $amount = 1, array $extra = [])
+    {
+        return static::withoutEvents(
+            fn () =&gt; <span style="background-color: red">$</span>this-&gt;incrementOrDecrement($column, $amount, $extra, &#039;decrement&#039;)
+        );
+    }
+
+    /**
+     * Save the model and all of its relationships.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function push()
+    {
+        return $this-&gt;withoutRecursion(<span style="background-color: red">f</span>unction () {
+            <span style="background-color: red">i</span>f (! $this-&gt;save()) {
+                return false;
+            <span style="background-color: red">}</span>
+
+            // To sync all of the relationships to the database, we will simply spin through
+            // the relationships and save each model via this &quot;push&quot; method, which allows
+            // us to recurse into all of these nested relations for the model instance.
+            <span style="background-color: red">f</span>oreach ($this-&gt;relations as $models) {
+                $models = $models instanceof Collection
+                    ? $models-&gt;all()
+                    : <span style="background-color: red">[</span>$models];
+
+                <span style="background-color: red">f</span>oreach (array_filter($models) as $model) {
+                    <span style="background-color: red">i</span>f (! $model-&gt;push()) {
+                        return false;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return true;
+        }, true);
+    }
+
+    /**
+     * Save the model and all of its relationships without raising any events to the parent model.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function pushQuietly()
+    {
+        return static::withoutEvents(fn () =&gt; <span style="background-color: red">$</span>this-&gt;push());
+    }
+
+    /**
+     * Save the model to the database without raising any events.
+     *
+     * @param  array  $options
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function saveQuietly(array $options = [])
+    {
+        return static::withoutEvents(fn () =&gt; <span style="background-color: red">$</span>this-&gt;save($options));
+    }
+
+    /**
+     * Save the model to the database.
+     *
+     * @param  array  $options
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function save(array $options = [])
+    {
+        $this-&gt;mergeAttributesFromCachedCasts();
+
+        $query = $this-&gt;newModelQuery();
+
+        // If the &quot;saving&quot; event returns false we&#039;ll bail out of the save and return
+        // false, indicating that the save failed. This provides a chance for any
+        // listeners to cancel save operations if validations fail or whatever.
+        <span style="background-color: red">i</span>f ($this-&gt;fireModelEvent(&#039;saving&#039;) === false) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // If the model already exists in the database we can just update our record
+        // that is already in this database using the current IDs in this &quot;where&quot;
+        // clause to only update this model. Otherwise, we&#039;ll just insert them.
+        <span style="background-color: red">i</span>f ($this-&gt;exists) {
+            $saved = $this-&gt;isDirty() ?
+                $this-&gt;performUpdate($query) : <span style="background-color: red">t</span>rue;
+        }
+
+        // If the model is brand new, we&#039;ll insert it into our database and set the
+        // ID attribute on the model to the value of the newly inserted row&#039;s ID
+        // which is typically an auto-increment value managed by the database.
+        <span style="background-color: red">e</span>lse {
+            $saved = $this-&gt;performInsert($query);
+
+            <span style="background-color: red">i</span>f (! $this-&gt;getConnectionName() &amp;&amp;
+                <span style="background-color: red">$</span>connection = $query-&gt;getConnection()) {
+                $this-&gt;setConnection($connection-&gt;getName());
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        // If the model is successfully saved, we need to do a few more things once
+        // that is done. We will call the &quot;saved&quot; method here to run any actions
+        // we need to happen after a model gets successfully saved right here.
+        <span style="background-color: red">i</span>f ($saved) {
+            $this-&gt;finishSave($options);
+        <span style="background-color: red">}</span>
+
+        return $saved;
+    }
+
+    /**
+     * Save the model to the database within a transaction.
+     *
+     * @param  array  $options
+     * @return bool
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function saveOrFail(array $options = [])
+    {
+        return $this-&gt;getConnection()-&gt;transaction(fn () =&gt; <span style="background-color: red">$</span>this-&gt;save($options));
+    }
+
+    /**
+     * Perform any actions that are necessary after the model is saved.
+     *
+     * @param  array  $options
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function finishSave(array $options)
+    {
+        $this-&gt;fireModelEvent(&#039;saved&#039;, false);
+
+        <span style="background-color: red">i</span>f ($this-&gt;isDirty() &amp;&amp; (<span style="background-color: red">$</span>options[&#039;touch&#039;] ?? <span style="background-color: red">t</span>rue)) {
+            $this-&gt;touchOwners();
+        <span style="background-color: red">}</span>
+
+        $this-&gt;syncOriginal();
+    }
+
+    /**
+     * Perform a model update operation.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;static&gt;  $query
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function performUpdate(Builder $query)
+    {
+        // If the updating event returns false, we will cancel the update operation so
+        // developers can hook Validation systems into their models and cancel this
+        // operation if the model does not pass validation. Otherwise, we update.
+        <span style="background-color: red">i</span>f ($this-&gt;fireModelEvent(&#039;updating&#039;) === false) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // First we need to create a fresh query instance and touch the creation and
+        // update timestamp on the model which are maintained by us for developer
+        // convenience. Then we will just continue saving the model instances.
+        <span style="background-color: red">i</span>f ($this-&gt;usesTimestamps()) {
+            $this-&gt;updateTimestamps();
+        <span style="background-color: red">}</span>
+
+        // Once we have run the update operation, we will fire the &quot;updated&quot; event for
+        // this model instance. This will allow developers to hook into these after
+        // models are updated, giving them a chance to do any special processing.
+        $dirty = $this-&gt;getDirtyForUpdate();
+
+        <span style="background-color: red">i</span>f (count($dirty) &gt; 0) {
+            $this-&gt;setKeysForSaveQuery($query)-&gt;update($dirty);
+
+            $this-&gt;syncChanges();
+
+            $this-&gt;fireModelEvent(&#039;updated&#039;, false);
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Set the keys for a select query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;static&gt;  $query
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>rotected function setKeysForSelectQuery($query)
+    {
+        $query-&gt;where($this-&gt;getKeyName(), &#039;=&#039;, $this-&gt;getKeyForSelectQuery());
+
+        return $query;
+    }
+
+    /**
+     * Get the primary key value for a select query.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function getKeyForSelectQuery()
+    {
+        return $this-&gt;original[$this-&gt;getKeyName()] ?? <span style="background-color: red">$</span>this-&gt;getKey();
+    }
+
+    /**
+     * Set the keys for a save update query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;static&gt;  $query
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>rotected function setKeysForSaveQuery($query)
+    {
+        $query-&gt;where($this-&gt;getKeyName(), &#039;=&#039;, $this-&gt;getKeyForSaveQuery());
+
+        return $query;
+    }
+
+    /**
+     * Get the primary key value for a save query.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>rotected function getKeyForSaveQuery()
+    {
+        return $this-&gt;original[$this-&gt;getKeyName()] ?? <span style="background-color: red">$</span>this-&gt;getKey();
+    }
+
+    /**
+     * Perform a model insert operation.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;static&gt;  $query
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function performInsert(Builder $query)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;usesUniqueIds()) {
+            $this-&gt;setUniqueIds();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;fireModelEvent(&#039;creating&#039;) === false) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // First we&#039;ll need to create a fresh query instance and touch the creation and
+        // update timestamps on this model, which are maintained by us for developer
+        // convenience. After, we will just continue saving these model instances.
+        <span style="background-color: red">i</span>f ($this-&gt;usesTimestamps()) {
+            $this-&gt;updateTimestamps();
+        <span style="background-color: red">}</span>
+
+        // If the model has an incrementing key, we can use the &quot;insertGetId&quot; method on
+        // the query builder, which will give us back the final inserted ID for this
+        // table from the database. Not all tables have to be incrementing though.
+        $attributes = $this-&gt;getAttributesForInsert();
+
+        <span style="background-color: red">i</span>f ($this-&gt;getIncrementing()) {
+            $this-&gt;insertAndSetId($query, $attributes);
+        }
+
+        // If the table isn&#039;t incrementing we&#039;ll simply insert these attributes as they
+        // are. These attribute arrays must contain an &quot;id&quot; column previously placed
+        // there by the developer as the manually determined key for these models.
+        <span style="background-color: red">e</span>lse {
+            <span style="background-color: red">i</span>f (empty($attributes)) {
+                return true;
+            <span style="background-color: red">}</span>
+
+            $query-&gt;insert($attributes);
+        <span style="background-color: red">}</span>
+
+        // We will go ahead and set the exists property to true, so that it is set when
+        // the created event is fired, just in case the developer tries to update it
+        // during the event. This will allow them to do so and run an update here.
+        $this-&gt;exists = true;
+
+        $this-&gt;wasRecentlyCreated = true;
+
+        $this-&gt;fireModelEvent(&#039;created&#039;, false);
+
+        return true;
+    }
+
+    /**
+     * Insert the given attributes and set the ID on the model.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;static&gt;  $query
+     * @param  array  $attributes
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function insertAndSetId(Builder $query, $attributes)
+    {
+        $id = $query-&gt;insertGetId($attributes, $keyName = $this-&gt;getKeyName());
+
+        $this-&gt;setAttribute($keyName, $id);
+    }
+
+    /**
+     * Destroy the models for the given IDs.
+     *
+     * @param  \Illuminate\Support\Collection|array|int|string  $ids
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic static function destroy($ids)
+    {
+        <span style="background-color: red">i</span>f ($ids instanceof EloquentCollection) {
+            $ids = $ids-&gt;modelKeys();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($ids instanceof BaseCollection) {
+            $ids = $ids-&gt;all();
+        <span style="background-color: red">}</span>
+
+        $ids = is_array($ids) ? $ids : <span style="background-color: red">f</span>unc_get_args();
+
+        <span style="background-color: red">i</span>f (count($ids) === 0) {
+            return 0;
+        <span style="background-color: red">}</span>
+
+        // We will actually pull the models from the database table and call delete on
+        // each of them individually so that their events get fired properly with a
+        // correct set of attributes in case the developers wants to check these.
+        $key = ($instance = new static)-&gt;getKeyName();
+
+        $count = 0;
+
+        <span style="background-color: red">f</span>oreach ($instance-&gt;whereIn($key, $ids)-&gt;get() as $model) {
+            <span style="background-color: red">i</span>f ($model-&gt;delete()) {
+                $count++;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $count;
+    }
+
+    /**
+     * Delete the model from the database.
+     *
+     * @return bool|null
+     *
+     * @throws \LogicException
+     */
+    <span style="background-color: red">p</span>ublic function delete()
+    {
+        $this-&gt;mergeAttributesFromCachedCasts();
+
+        <span style="background-color: red">i</span>f (is_null($this-&gt;getKeyName())) {
+            throw new LogicException(&#039;No primary key defined on model.&#039;);
+        <span style="background-color: red">}</span>
+
+        // If the model doesn&#039;t exist, there is nothing to delete so we&#039;ll just return
+        // immediately and not do anything else. Otherwise, we will continue with a
+        // deletion process on the model, firing the proper events, and so forth.
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;fireModelEvent(&#039;deleting&#039;) === false) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        // Here, we&#039;ll touch the owning models, verifying these timestamps get updated
+        // for the models. This will allow any caching to get broken on the parents
+        // by the timestamp. Then we will go ahead and delete the model instance.
+        $this-&gt;touchOwners();
+
+        $this-&gt;performDeleteOnModel();
+
+        // Once the model has been deleted, we will fire off the deleted event so that
+        // the developers may hook into post-delete operations. We will then return
+        // a boolean true as the delete is presumably successful on the database.
+        $this-&gt;fireModelEvent(&#039;deleted&#039;, false);
+
+        return true;
+    }
+
+    /**
+     * Delete the model from the database without raising any events.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function deleteQuietly()
+    {
+        return static::withoutEvents(fn () =&gt; <span style="background-color: red">$</span>this-&gt;delete());
+    }
+
+    /**
+     * Delete the model from the database within a transaction.
+     *
+     * @return bool|null
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function deleteOrFail()
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;getConnection()-&gt;transaction(fn () =&gt; <span style="background-color: red">$</span>this-&gt;delete());
+    }
+
+    /**
+     * Force a hard delete on a soft deleted model.
+     *
+     * This method protects developers from running forceDelete when the trait is missing.
+     *
+     * @return bool|null
+     */
+    <span style="background-color: red">p</span>ublic function forceDelete()
+    {
+        return $this-&gt;delete();
+    }
+
+    /**
+     * Force a hard destroy on a soft deleted model.
+     *
+     * This method protects developers from running forceDestroy when the trait is missing.
+     *
+     * @param  \Illuminate\Support\Collection|array|int|string  $ids
+     * @return bool|null
+     */
+    <span style="background-color: red">p</span>ublic static function forceDestroy($ids)
+    {
+        return static::destroy($ids);
+    }
+
+    /**
+     * Perform the actual delete query on this model instance.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function performDeleteOnModel()
+    {
+        $this-&gt;setKeysForSaveQuery($this-&gt;newModelQuery())-&gt;delete();
+
+        $this-&gt;exists = false;
+    }
+
+    /**
+     * Begin querying the model.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic static function query()
+    {
+        return (new static)-&gt;newQuery();
+    }
+
+    /**
+     * Get a new query builder for the model&#039;s table.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newQuery()
+    {
+        return $this-&gt;registerGlobalScopes($this-&gt;newQueryWithoutScopes());
+    }
+
+    /**
+     * Get a new query builder that doesn&#039;t have any global scopes or eager loading.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newModelQuery()
+    {
+        return $this-&gt;newEloquentBuilder(
+            $this-&gt;newBaseQueryBuilder()
+        )-&gt;setModel($this);
+    }
+
+    /**
+     * Get a new query builder with no relationships loaded.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newQueryWithoutRelationships()
+    {
+        return $this-&gt;registerGlobalScopes($this-&gt;newModelQuery());
+    }
+
+    /**
+     * Register the global scopes for this builder instance.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder&lt;static&gt;  $builder
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function registerGlobalScopes($builder)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;getGlobalScopes() as $identifier =&gt; $scope) {
+            $builder-&gt;withGlobalScope($identifier, $scope);
+        <span style="background-color: red">}</span>
+
+        return $builder;
+    }
+
+    /**
+     * Get a new query builder that doesn&#039;t have any global scopes.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newQueryWithoutScopes()
+    {
+        return $this-&gt;newModelQuery()
+            -&gt;with($this-&gt;with)
+            -&gt;withCount($this-&gt;withCount);
+    }
+
+    /**
+     * Get a new query instance without a given scope.
+     *
+     * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newQueryWithoutScope($scope)
+    {
+        return $this-&gt;newQuery()-&gt;withoutGlobalScope($scope);
+    }
+
+    /**
+     * Get a new query to restore one or more models by their queueable IDs.
+     *
+     * @param  array|int  $ids
+     * @return \Illuminate\Database\Eloquent\Builder&lt;static&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newQueryForRestoration($ids)
+    {
+        return $this-&gt;newQueryWithoutScopes()-&gt;whereKey($ids);
+    }
+
+    /**
+     * Create a new Eloquent query builder for the model.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder&lt;*&gt;
+     */
+    <span style="background-color: red">p</span>ublic function newEloquentBuilder($query)
+    {
+        return new static::$builder($query);
+    }
+
+    /**
+     * Get a new query builder instance for the connection.
+     *
+     * @return \Illuminate\Database\Query\Builder
+     */
+    <span style="background-color: red">p</span>rotected function newBaseQueryBuilder()
+    {
+        return $this-&gt;getConnection()-&gt;query();
+    }
+
+    /**
+     * Create a new pivot model instance.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $parent
+     * @param  array  $attributes
+     * @param  string  $table
+     * @param  bool  $exists
+     * @param  string|null  $using
+     * @return \Illuminate\Database\Eloquent\Relations\Pivot
+     */
+    <span style="background-color: red">p</span>ublic function newPivot(self $parent, array $attributes, $table, $exists, $using = null)
+    {
+        return $using ? $using::fromRawAttributes($parent, $attributes, $table, $exists)
+            : <span style="background-color: red">P</span>ivot::fromAttributes($parent, $attributes, $table, $exists);
+    }
+
+    /**
+     * Determine if the model has a given scope.
+     *
+     * @param  string  $scope
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasNamedScope($scope)
+    {
+        return method_exists($this, &#039;scope&#039;.ucfirst($scope)) ||
+            <span style="background-color: red">s</span>tatic::isScopeMethodWithAttribute($scope);
+    }
+
+    /**
+     * Apply the given named scope if possible.
+     *
+     * @param  string  $scope
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function callNamedScope($scope, array $parameters = [])
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isScopeMethodWithAttribute($scope)) {
+            return $this-&gt;{$scope}(...$parameters);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;{&#039;scope&#039;.ucfirst($scope)}(...$parameters);
+    }
+
+    /**
+     * Determine if the given method has a scope attribute.
+     *
+     * @param  string  $method
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected static function isScopeMethodWithAttribute(string $method)
+    {
+        return method_exists(static::class, $method) &amp;&amp;
+            <span style="background-color: red">(</span>new ReflectionMethod(static::class, $method))
+                -&gt;getAttributes(LocalScope::class) !== [];
+    }
+
+    /**
+     * Convert the model instance to an array.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function toArray()
+    {
+        return $this-&gt;withoutRecursion(
+            fn () =&gt; <span style="background-color: red">a</span>rray_merge($this-&gt;attributesToArray(), $this-&gt;relationsToArray()),
+            fn () =&gt; <span style="background-color: red">$</span>this-&gt;attributesToArray(),
+        );
+    }
+
+    /**
+     * Convert the model instance to JSON.
+     *
+     * @param  int  $options
+     * @return string
+     *
+     * @throws \Illuminate\Database\Eloquent\JsonEncodingException
+     */
+    <span style="background-color: red">p</span>ublic function toJson($options = 0)
+    {
+        try {
+            $json = json_encode($this-&gt;jsonSerialize(), $options | JSON_THROW_ON_ERROR);
+        } <span style="background-color: red">c</span>atch (JsonException $e) {
+            throw JsonEncodingException::forModel($this, $e-&gt;getMessage());
+        <span style="background-color: red">}</span>
+
+        return $json;
+    }
+
+    /**
+     * Convert the object into something JSON serializable.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function jsonSerialize(): mixed
+    {
+        return $this-&gt;toArray();
+    }
+
+    /**
+     * Reload a fresh model instance from the database.
+     *
+     * @param  array|string  $with
+     * @return static|null
+     */
+    <span style="background-color: red">p</span>ublic function fresh($with = [])
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;setKeysForSelectQuery($this-&gt;newQueryWithoutScopes())
+            -&gt;useWritePdo()
+            -&gt;with(is_string($with) ? func_get_args() : <span style="background-color: red">$</span>with)
+            -&gt;first();
+    }
+
+    /**
+     * Reload the current model instance with fresh attributes from the database.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function refresh()
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;exists) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;setRawAttributes(
+            $this-&gt;setKeysForSelectQuery($this-&gt;newQueryWithoutScopes())
+                -&gt;useWritePdo()
+                -&gt;firstOrFail()
+                -&gt;attributes
+        );
+
+        $this-&gt;load((new BaseCollection($this-&gt;relations))-&gt;reject(
+            fn ($relation) =&gt; <span style="background-color: red">$</span>relation instanceof Pivot
+                || (<span style="background-color: red">i</span>s_object($relation) &amp;&amp; <span style="background-color: red">i</span>n_array(AsPivot::class, class_uses_recursive($relation), true))
+        )-&gt;keys()-&gt;all());
+
+        $this-&gt;syncOriginal();
+
+        return $this;
+    }
+
+    /**
+     * Clone the model into a new, non-existing instance.
+     *
+     * @param  array|null  $except
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function replicate(?array $except = null)
+    {
+        $defaults = array_values(array_filter([
+            $this-&gt;getKeyName(),
+            $this-&gt;getCreatedAtColumn(),
+            $this-&gt;getUpdatedAtColumn(),
+            ...$this-&gt;uniqueIds(),
+            &#039;laravel_through_key&#039;,
+        ]));
+
+        $attributes = Arr::except(
+            $this-&gt;getAttributes(), $except ? array_unique(array_merge($except, $defaults)) : <span style="background-color: red">$</span>defaults
+        );
+
+        return tap(new static, <span style="background-color: red">f</span>unction ($instance) use ($attributes) {
+            $instance-&gt;setRawAttributes($attributes);
+
+            $instance-&gt;setRelations($this-&gt;relations);
+
+            $instance-&gt;fireModelEvent(&#039;replicating&#039;, false);
+        });
+    }
+
+    /**
+     * Clone the model into a new, non-existing instance without raising any events.
+     *
+     * @param  array|null  $except
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function replicateQuietly(?array $except = null)
+    {
+        return static::withoutEvents(fn () =&gt; <span style="background-color: red">$</span>this-&gt;replicate($except));
+    }
+
+    /**
+     * Determine if two models have the same ID and belong to the same table.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model|null  $model
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function is($model)
+    {
+        return ! is_null($model) &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;getKey() === $model-&gt;getKey() &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;getTable() === $model-&gt;getTable() &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;getConnectionName() === $model-&gt;getConnectionName();
+    }
+
+    /**
+     * Determine if two models are not the same.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model|null  $model
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isNot($model)
+    {
+        return ! $this-&gt;is($model);
+    }
+
+    /**
+     * Get the database connection for the model.
+     *
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: red">p</span>ublic function getConnection()
+    {
+        return static::resolveConnection($this-&gt;getConnectionName());
+    }
+
+    /**
+     * Get the current connection name for the model.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getConnectionName()
+    {
+        return $this-&gt;connection;
+    }
+
+    /**
+     * Set the connection associated with the model.
+     *
+     * @param  string|null  $name
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setConnection($name)
+    {
+        $this-&gt;connection = $name;
+
+        return $this;
+    }
+
+    /**
+     * Resolve a connection instance.
+     *
+     * @param  string|null  $connection
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: red">p</span>ublic static function resolveConnection($connection = null)
+    {
+        return static::$resolver-&gt;connection($connection);
+    }
+
+    /**
+     * Get the connection resolver instance.
+     *
+     * @return \Illuminate\Database\ConnectionResolverInterface|null
+     */
+    <span style="background-color: red">p</span>ublic static function getConnectionResolver()
+    {
+        return static::$resolver;
+    }
+
+    /**
+     * Set the connection resolver instance.
+     *
+     * @param  \Illuminate\Database\ConnectionResolverInterface  $resolver
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function setConnectionResolver(Resolver $resolver)
+    {
+        static::$resolver = $resolver;
+    }
+
+    /**
+     * Unset the connection resolver for models.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function unsetConnectionResolver()
+    {
+        static::$resolver = null;
+    }
+
+    /**
+     * Get the table associated with the model.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getTable()
+    {
+        return $this-&gt;table ?? <span style="background-color: red">S</span>tr::snake(Str::pluralStudly(class_basename($this)));
+    }
+
+    /**
+     * Set the table associated with the model.
+     *
+     * @param  string  $table
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setTable($table)
+    {
+        $this-&gt;table = $table;
+
+        return $this;
+    }
+
+    /**
+     * Get the primary key for the model.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getKeyName()
+    {
+        return $this-&gt;primaryKey;
+    }
+
+    /**
+     * Set the primary key for the model.
+     *
+     * @param  string  $key
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setKeyName($key)
+    {
+        $this-&gt;primaryKey = $key;
+
+        return $this;
+    }
+
+    /**
+     * Get the table qualified key name.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getQualifiedKeyName()
+    {
+        return $this-&gt;qualifyColumn($this-&gt;getKeyName());
+    }
+
+    /**
+     * Get the auto-incrementing key type.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getKeyType()
+    {
+        return $this-&gt;keyType;
+    }
+
+    /**
+     * Set the data type for the primary key.
+     *
+     * @param  string  $type
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setKeyType($type)
+    {
+        $this-&gt;keyType = $type;
+
+        return $this;
+    }
+
+    /**
+     * Get the value indicating whether the IDs are incrementing.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function getIncrementing()
+    {
+        return $this-&gt;incrementing;
+    }
+
+    /**
+     * Set whether IDs are incrementing.
+     *
+     * @param  bool  $value
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setIncrementing($value)
+    {
+        $this-&gt;incrementing = $value;
+
+        return $this;
+    }
+
+    /**
+     * Get the value of the model&#039;s primary key.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getKey()
+    {
+        return $this-&gt;getAttribute($this-&gt;getKeyName());
+    }
+
+    /**
+     * Get the queueable identity for the entity.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getQueueableId()
+    {
+        return $this-&gt;getKey();
+    }
+
+    /**
+     * Get the queueable relationships for the entity.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getQueueableRelations()
+    {
+        return $this-&gt;withoutRecursion(<span style="background-color: red">f</span>unction () {
+            $relations = [];
+
+            <span style="background-color: red">f</span>oreach ($this-&gt;getRelations() as $key =&gt; $relation) {
+                <span style="background-color: red">i</span>f (! method_exists($this, $key)) {
+                    continue;
+                <span style="background-color: red">}</span>
+
+                $relations[] = $key;
+
+                <span style="background-color: red">i</span>f ($relation instanceof QueueableCollection) {
+                    <span style="background-color: red">f</span>oreach ($relation-&gt;getQueueableRelations() as $collectionValue) {
+                        $relations[] = $key.&#039;.&#039;.$collectionValue;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($relation instanceof QueueableEntity) {
+                    <span style="background-color: red">f</span>oreach ($relation-&gt;getQueueableRelations() as $entityValue) {
+                        $relations[] = $key.&#039;.&#039;.$entityValue;
+                    <span style="background-color: red">}</span>
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            return array_unique($relations);
+        }, []);
+    }
+
+    /**
+     * Get the queueable connection for the entity.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function getQueueableConnection()
+    {
+        return $this-&gt;getConnectionName();
+    }
+
+    /**
+     * Get the value of the model&#039;s route key.
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getRouteKey()
+    {
+        return $this-&gt;getAttribute($this-&gt;getRouteKeyName());
+    }
+
+    /**
+     * Get the route key for the model.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getRouteKeyName()
+    {
+        return $this-&gt;getKeyName();
+    }
+
+    /**
+     * Retrieve the model for a bound value.
+     *
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
+    <span style="background-color: red">p</span>ublic function resolveRouteBinding($value, $field = null)
+    {
+        return $this-&gt;resolveRouteBindingQuery($this, $value, $field)-&gt;first();
+    }
+
+    /**
+     * Retrieve the model for a bound value.
+     *
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
+    <span style="background-color: red">p</span>ublic function resolveSoftDeletableRouteBinding($value, $field = null)
+    {
+        return $this-&gt;resolveRouteBindingQuery($this, $value, $field)-&gt;withTrashed()-&gt;first();
+    }
+
+    /**
+     * Retrieve the child model for a bound value.
+     *
+     * @param  string  $childType
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
+    <span style="background-color: red">p</span>ublic function resolveChildRouteBinding($childType, $value, $field)
+    {
+        return $this-&gt;resolveChildRouteBindingQuery($childType, $value, $field)-&gt;first();
+    }
+
+    /**
+     * Retrieve the child model for a bound value.
+     *
+     * @param  string  $childType
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
+    <span style="background-color: red">p</span>ublic function resolveSoftDeletableChildRouteBinding($childType, $value, $field)
+    {
+        return $this-&gt;resolveChildRouteBindingQuery($childType, $value, $field)-&gt;withTrashed()-&gt;first();
+    }
+
+    /**
+     * Retrieve the child model query for a bound value.
+     *
+     * @param  string  $childType
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Relations\Relation&lt;\Illuminate\Database\Eloquent\Model, $this, *&gt;
+     */
+    <span style="background-color: red">p</span>rotected function resolveChildRouteBindingQuery($childType, $value, $field)
+    {
+        $relationship = $this-&gt;{$this-&gt;childRouteBindingRelationshipName($childType)}();
+
+        $field = $field ?: <span style="background-color: red">$</span>relationship-&gt;getRelated()-&gt;getRouteKeyName();
+
+        <span style="background-color: red">i</span>f ($relationship instanceof HasManyThrough ||
+            <span style="background-color: red">$</span>relationship instanceof BelongsToMany) {
+            $field = $relationship-&gt;getRelated()-&gt;qualifyColumn($field);
+        <span style="background-color: red">}</span>
+
+        return $relationship instanceof Model
+            ? $relationship-&gt;resolveRouteBindingQuery($relationship, $value, $field)
+            : <span style="background-color: red">$</span>relationship-&gt;getRelated()-&gt;resolveRouteBindingQuery($relationship, $value, $field);
+    }
+
+    /**
+     * Retrieve the child route model binding relationship name for the given child type.
+     *
+     * @param  string  $childType
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function childRouteBindingRelationshipName($childType)
+    {
+        return Str::plural(Str::camel($childType));
+    }
+
+    /**
+     * Retrieve the model for a bound value.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model|\Illuminate\Contracts\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation  $query
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Contracts\Database\Eloquent\Builder
+     */
+    <span style="background-color: red">p</span>ublic function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        return $query-&gt;where($field ?? <span style="background-color: red">$</span>this-&gt;getRouteKeyName(), $value);
+    }
+
+    /**
+     * Get the default foreign key name for the model.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getForeignKey()
+    {
+        return Str::snake(class_basename($this)).&#039;_&#039;.$this-&gt;getKeyName();
+    }
+
+    /**
+     * Get the number of models to return per page.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function getPerPage()
+    {
+        return $this-&gt;perPage;
+    }
+
+    /**
+     * Set the number of models to return per page.
+     *
+     * @param  int  $perPage
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setPerPage($perPage)
+    {
+        $this-&gt;perPage = $perPage;
+
+        return $this;
+    }
+
+    /**
+     * Determine if lazy loading is disabled.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function preventsLazyLoading()
+    {
+        return static::$modelsShouldPreventLazyLoading;
+    }
+
+    /**
+     * Determine if relationships are being automatically eager loaded when accessed.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isAutomaticallyEagerLoadingRelationships()
+    {
+        return static::$modelsShouldAutomaticallyEagerLoadRelationships;
+    }
+
+    /**
+     * Determine if discarding guarded attribute fills is disabled.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function preventsSilentlyDiscardingAttributes()
+    {
+        return static::$modelsShouldPreventSilentlyDiscardingAttributes;
+    }
+
+    /**
+     * Determine if accessing missing attributes is disabled.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function preventsAccessingMissingAttributes()
+    {
+        return static::$modelsShouldPreventAccessingMissingAttributes;
+    }
+
+    /**
+     * Get the broadcast channel route definition that is associated with the given entity.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function broadcastChannelRoute()
+    {
+        return str_replace(&#039;\\&#039;, &#039;.&#039;, get_class($this)).&#039;.{&#039;.Str::camel(class_basename($this)).&#039;}&#039;;
+    }
+
+    /**
+     * Get the broadcast channel name that is associated with the given entity.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function broadcastChannel()
+    {
+        return str_replace(&#039;\\&#039;, &#039;.&#039;, get_class($this)).&#039;.&#039;.$this-&gt;getKey();
+    }
+
+    /**
+     * Dynamically retrieve attributes on the model.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __get($key)
+    {
+        return $this-&gt;getAttribute($key);
+    }
+
+    /**
+     * Dynamically set attributes on the model.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __set($key, $value)
+    {
+        $this-&gt;setAttribute($key, $value);
+    }
+
+    /**
+     * Determine if the given attribute exists.
+     *
+     * @param  mixed  $offset
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function offsetExists($offset): bool
+    {
+        $shouldPrevent = static::$modelsShouldPreventAccessingMissingAttributes;
+
+        static::$modelsShouldPreventAccessingMissingAttributes = false;
+
+        $result = ! is_null($this-&gt;getAttribute($offset));
+
+        static::$modelsShouldPreventAccessingMissingAttributes = $shouldPrevent;
+
+        return $result;
+    }
+
+    /**
+     * Get the value for a given offset.
+     *
+     * @param  mixed  $offset
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function offsetGet($offset): mixed
+    {
+        return $this-&gt;getAttribute($offset);
+    }
+
+    /**
+     * Set the value for a given offset.
+     *
+     * @param  mixed  $offset
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet($offset, $value): void
+    {
+        $this-&gt;setAttribute($offset, $value);
+    }
+
+    /**
+     * Unset the value for a given offset.
+     *
+     * @param  mixed  $offset
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset($offset): void
+    {
+        unset($this-&gt;attributes[$offset], $this-&gt;relations[$offset], $this-&gt;attributeCastCache[$offset]);
+    }
+
+    /**
+     * Determine if an attribute or relation exists on the model.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function __isset($key)
+    {
+        return $this-&gt;offsetExists($key);
+    }
+
+    /**
+     * Unset an attribute on the model.
+     *
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __unset($key)
+    {
+        $this-&gt;offsetUnset($key);
+    }
+
+    /**
+     * Handle dynamic method calls into the model.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (in_array($method, [&#039;increment&#039;, &#039;decrement&#039;, &#039;incrementQuietly&#039;, &#039;decrementQuietly&#039;])) {
+            return $this-&gt;$method(...$parameters);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($resolver = $this-&gt;relationResolver(static::class, $method)) {
+            return $resolver($this);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (Str::startsWith($method, &#039;through&#039;) &amp;&amp;
+            <span style="background-color: red">m</span>ethod_exists($this, $relationMethod = (new SupportStringable($method))-&gt;after(&#039;through&#039;)-&gt;lcfirst()-&gt;toString())) {
+            return $this-&gt;through($relationMethod);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;forwardCallTo($this-&gt;newQuery(), $method, $parameters);
+    }
+
+    /**
+     * Handle dynamic static method calls into the model.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function __callStatic($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (static::isScopeMethodWithAttribute($method)) {
+            return static::query()-&gt;$method(...$parameters);
+        <span style="background-color: red">}</span>
+
+        return (new static)-&gt;$method(...$parameters);
+    }
+
+    /**
+     * Convert the model to its string representation.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function __toString()
+    {
+        return $this-&gt;escapeWhenCastingToString
+            ? e($this-&gt;toJson())
+            : <span style="background-color: red">$</span>this-&gt;toJson();
+    }
+
+    /**
+     * Indicate that the object&#039;s string representation should be escaped when __toString is invoked.
+     *
+     * @param  bool  $escape
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function escapeWhenCastingToString($escape = true)
+    {
+        $this-&gt;escapeWhenCastingToString = $escape;
+
+        return $this;
+    }
+
+    /**
+     * Prepare the object for serialization.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function __sleep()
+    {
+        $this-&gt;mergeAttributesFromCachedCasts();
+
+        $this-&gt;classCastCache = [];
+        $this-&gt;attributeCastCache = [];
+
+        return array_keys(get_object_vars($this));
+    }
+
+    /**
+     * When a model is being unserialized, check if it needs to be booted.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __wakeup()
+    {
+        $this-&gt;bootIfNotBooted();
+
+        $this-&gt;initializeTraits();
+    }
+}
+</pre>

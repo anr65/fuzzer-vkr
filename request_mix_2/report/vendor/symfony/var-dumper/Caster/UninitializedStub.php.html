@@ -1,0 +1,26 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Caster;
+
+/**
+ * Represents an uninitialized property.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class UninitializedStub extends ConstStub
+{
+    <span style="background-color: green">p</span>ublic function __construct(\ReflectionProperty $property)
+    {
+        parent::__construct(&#039;?&#039;.($property-&gt;hasType() ? &#039; &#039;.$property-&gt;getType() : <span style="background-color: green">'</span>&#039;), &#039;Uninitialized property&#039;);
+    }
+}
+</pre>

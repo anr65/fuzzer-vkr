@@ -1,0 +1,114 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database;
+
+use Faker\Factory as FakerFactory;
+use Faker\Generator as FakerGenerator;
+use Illuminate\Contracts\Queue\EntityResolver;
+use Illuminate\Database\Connectors\ConnectionFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\QueueEntityResolver;
+use Illuminate\Support\ServiceProvider;
+
+class DatabaseServiceProvider extends ServiceProvider
+{
+    /**
+     * The array of resolved Faker instances.
+     *
+     * @var array
+     */
+    protected static $fakers = [];
+
+    /**
+     * Bootstrap the application events.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        Model::setConnectionResolver($this-&gt;app[&#039;db&#039;]);
+
+        Model::setEventDispatcher($this-&gt;app[&#039;events&#039;]);
+    }
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        Model::clearBootedModels();
+
+        $this-&gt;registerConnectionServices();
+        $this-&gt;registerFakerGenerator();
+        $this-&gt;registerQueueableEntityResolver();
+    }
+
+    /**
+     * Register the primary database bindings.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerConnectionServices()
+    {
+        // The connection factory is used to create the actual connection instances on
+        // the database. We will inject the factory into the manager so that it may
+        // make the connections while they are actually needed and not of before.
+        $this-&gt;app-&gt;singleton(&#039;db.factory&#039;, <span style="background-color: green">f</span>unction ($app) {
+            return new ConnectionFactory($app);
+        });
+
+        // The database manager is used to resolve various connections, since multiple
+        // connections might be managed. It also implements the connection resolver
+        // interface which may be used by other components requiring connections.
+        $this-&gt;app-&gt;singleton(&#039;db&#039;, <span style="background-color: green">f</span>unction ($app) {
+            return new DatabaseManager($app, $app[&#039;db.factory&#039;]);
+        });
+
+        $this-&gt;app-&gt;bind(&#039;db.connection&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return $app[&#039;db&#039;]-&gt;connection();
+        });
+
+        $this-&gt;app-&gt;bind(&#039;db.schema&#039;, <span style="background-color: red">f</span>unction ($app) {
+            return $app[&#039;db&#039;]-&gt;connection()-&gt;getSchemaBuilder();
+        });
+
+        $this-&gt;app-&gt;singleton(&#039;db.transactions&#039;, <span style="background-color: green">f</span>unction ($app) {
+            return new DatabaseTransactionsManager;
+        });
+    }
+
+    /**
+     * Register the Faker Generator instance in the container.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerFakerGenerator()
+    {
+        $this-&gt;app-&gt;singleton(FakerGenerator::class, <span style="background-color: red">f</span>unction ($app, $parameters) {
+            $locale = $parameters[&#039;locale&#039;] ?? <span style="background-color: red">$</span>app[&#039;config&#039;]-&gt;get(&#039;app.faker_locale&#039;, &#039;en_US&#039;);
+
+            <span style="background-color: red">i</span>f (! isset(static::$fakers[$locale])) {
+                static::$fakers[$locale] = FakerFactory::create($locale);
+            <span style="background-color: red">}</span>
+
+            static::$fakers[$locale]-&gt;unique(true);
+
+            return static::$fakers[$locale];
+        });
+    }
+
+    /**
+     * Register the queueable entity resolver implementation.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerQueueableEntityResolver()
+    {
+        $this-&gt;app-&gt;singleton(EntityResolver::class, <span style="background-color: red">f</span>unction () {
+            return new QueueEntityResolver;
+        });
+    }
+}
+</pre>

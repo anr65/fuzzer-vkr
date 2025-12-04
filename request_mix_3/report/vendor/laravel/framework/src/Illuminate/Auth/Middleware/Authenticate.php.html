@@ -1,0 +1,132 @@
+<pre>&lt;?php
+
+namespace Illuminate\Auth\Middleware;
+
+use Closure;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Auth\Factory as Auth;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
+use Illuminate\Http\Request;
+
+class Authenticate implements AuthenticatesRequests
+{
+    /**
+     * The authentication factory instance.
+     *
+     * @var \Illuminate\Contracts\Auth\Factory
+     */
+    protected $auth;
+
+    /**
+     * The callback that should be used to generate the authentication redirect path.
+     *
+     * @var callable
+     */
+    protected static $redirectToCallback;
+
+    /**
+     * Create a new middleware instance.
+     *
+     * @param  \Illuminate\Contracts\Auth\Factory  $auth
+     */
+    <span style="background-color: red">p</span>ublic function __construct(Auth $auth)
+    {
+        $this-&gt;auth = $auth;
+    }
+
+    /**
+     * Specify the guards for the middleware.
+     *
+     * @param  string  $guard
+     * @param  string  $others
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function using($guard, ...$others)
+    {
+        return static::class.&#039;:&#039;.implode(&#039;,&#039;, [$guard, ...$others]);
+    }
+
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @param  string  ...$guards
+     * @return mixed
+     *
+     * @throws \Illuminate\Auth\AuthenticationException
+     */
+    <span style="background-color: red">p</span>ublic function handle($request, Closure $next, ...$guards)
+    {
+        $this-&gt;authenticate($request, $guards);
+
+        return $next($request);
+    }
+
+    /**
+     * Determine if the user is logged in to any of the given guards.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $guards
+     * @return void
+     *
+     * @throws \Illuminate\Auth\AuthenticationException
+     */
+    <span style="background-color: red">p</span>rotected function authenticate($request, array $guards)
+    {
+        <span style="background-color: red">i</span>f (empty($guards)) {
+            $guards = [null];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($guards as $guard) {
+            <span style="background-color: red">i</span>f ($this-&gt;auth-&gt;guard($guard)-&gt;check()) {
+                return $this-&gt;auth-&gt;shouldUse($guard);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;unauthenticated($request, $guards);
+    }
+
+    /**
+     * Handle an unauthenticated user.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $guards
+     * @return never
+     *
+     * @throws \Illuminate\Auth\AuthenticationException
+     */
+    <span style="background-color: red">p</span>rotected function unauthenticated($request, array $guards)
+    {
+        throw new AuthenticationException(
+            &#039;Unauthenticated.&#039;,
+            $guards,
+            $request-&gt;expectsJson() ? null : <span style="background-color: red">$</span>this-&gt;redirectTo($request),
+        );
+    }
+
+    /**
+     * Get the path the user should be redirected to when they are not authenticated.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function redirectTo(Request $request)
+    {
+        <span style="background-color: red">i</span>f (static::$redirectToCallback) {
+            return call_user_func(static::$redirectToCallback, $request);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Specify the callback that should be used to generate the redirect path.
+     *
+     * @param  callable  $redirectToCallback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function redirectUsing(callable $redirectToCallback)
+    {
+        static::$redirectToCallback = $redirectToCallback;
+    }
+}
+</pre>

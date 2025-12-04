@@ -1,0 +1,8 @@
+sync_fuzzing:
+  varia: '-max_total_time=75'
+  t:
+   !include: .
+  trisync  varARGS: '0tasync_fuzzing:
+zing:
+  variables:
+    COVF  varARGS: '0tal-tt'

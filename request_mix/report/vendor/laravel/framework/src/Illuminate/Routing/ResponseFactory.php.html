@@ -1,0 +1,359 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use Closure;
+use Illuminate\Contracts\Routing\ResponseFactory as FactoryContract;
+use Illuminate\Contracts\View\Factory as ViewFactory;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
+use Illuminate\Http\StreamedEvent;
+use Illuminate\Routing\Exceptions\StreamedResponseException;
+use Illuminate\Support\Js;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedJsonResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
+
+class ResponseFactory implements FactoryContract
+{
+    use Macroable;
+
+    /**
+     * The view factory instance.
+     *
+     * @var \Illuminate\Contracts\View\Factory
+     */
+    protected $view;
+
+    /**
+     * The redirector instance.
+     *
+     * @var \Illuminate\Routing\Redirector
+     */
+    protected $redirector;
+
+    /**
+     * Create a new response factory instance.
+     *
+     * @param  \Illuminate\Contracts\View\Factory  $view
+     * @param  \Illuminate\Routing\Redirector  $redirector
+     */
+    <span style="background-color: green">p</span>ublic function __construct(ViewFactory $view, Redirector $redirector)
+    {
+        $this-&gt;view = $view;
+        $this-&gt;redirector = $redirector;
+    }
+
+    /**
+     * Create a new response instance.
+     *
+     * @param  mixed  $content
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\Response
+     */
+    <span style="background-color: green">p</span>ublic function make($content = &#039;&#039;, $status = 200, array $headers = [])
+    {
+        return new Response($content, $status, $headers);
+    }
+
+    /**
+     * Create a new &quot;no content&quot; response.
+     *
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\Response
+     */
+    <span style="background-color: red">p</span>ublic function noContent($status = 204, array $headers = [])
+    {
+        return $this-&gt;make(&#039;&#039;, $status, $headers);
+    }
+
+    /**
+     * Create a new response for a given view.
+     *
+     * @param  string|array  $view
+     * @param  array  $data
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\Response
+     */
+    <span style="background-color: green">p</span>ublic function view($view, $data = [], $status = 200, array $headers = [])
+    {
+        <span style="background-color: red">i</span>f (is_array($view)) {
+            return $this-&gt;make($this-&gt;view-&gt;first($view, $data), $status, $headers);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;make($this-&gt;view-&gt;make($view, $data), $status, $headers);
+    }
+
+    /**
+     * Create a new JSON response instance.
+     *
+     * @param  mixed  $data
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  int  $options
+     * @return \Illuminate\Http\JsonResponse
+     */
+    <span style="background-color: red">p</span>ublic function json($data = [], $status = 200, array $headers = [], $options = 0)
+    {
+        return new JsonResponse($data, $status, $headers, $options);
+    }
+
+    /**
+     * Create a new JSONP response instance.
+     *
+     * @param  string  $callback
+     * @param  mixed  $data
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  int  $options
+     * @return \Illuminate\Http\JsonResponse
+     */
+    <span style="background-color: red">p</span>ublic function jsonp($callback, $data = [], $status = 200, array $headers = [], $options = 0)
+    {
+        return $this-&gt;json($data, $status, $headers, $options)-&gt;setCallback($callback);
+    }
+
+    /**
+     * Create a new event stream response.
+     *
+     * @param  \Closure  $callback
+     * @param  array  $headers
+     * @param  \Illuminate\Http\StreamedEvent|string|null  $endStreamWith
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    <span style="background-color: red">p</span>ublic function eventStream(Closure $callback, array $headers = [], StreamedEvent|string|null $endStreamWith = &#039;&lt;/stream&gt;&#039;)
+    {
+        return $this-&gt;stream(<span style="background-color: red">f</span>unction () use ($callback, $endStreamWith) {
+            <span style="background-color: red">f</span>oreach ($callback() as $message) {
+                <span style="background-color: red">i</span>f (connection_aborted()) {
+                    break;
+                <span style="background-color: red">}</span>
+
+                $event = &#039;update&#039;;
+
+                <span style="background-color: red">i</span>f ($message instanceof StreamedEvent) {
+                    $event = $message-&gt;event;
+                    $message = $message-&gt;data;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f (! is_string($message) &amp;&amp; <span style="background-color: red">!</span> is_numeric($message)) {
+                    $message = Js::encode($message);
+                <span style="background-color: red">}</span>
+
+                echo &quot;event: $event\n&quot;;
+                echo &#039;data: &#039;.$message;
+                echo &quot;\n\n&quot;;
+
+                <span style="background-color: red">i</span>f (ob_get_level() &gt; 0) {
+                    ob_flush();
+                <span style="background-color: red">}</span>
+
+                flush();
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (filled($endStreamWith)) {
+                $endEvent = &#039;update&#039;;
+
+                <span style="background-color: red">i</span>f ($endStreamWith instanceof StreamedEvent) {
+                    $endEvent = $endStreamWith-&gt;event;
+                    $endStreamWith = $endStreamWith-&gt;data;
+                <span style="background-color: red">}</span>
+
+                echo &quot;event: $endEvent\n&quot;;
+                echo &#039;data: &#039;.$endStreamWith;
+                echo &quot;\n\n&quot;;
+
+                <span style="background-color: red">i</span>f (ob_get_level() &gt; 0) {
+                    ob_flush();
+                <span style="background-color: red">}</span>
+
+                flush();
+            <span style="background-color: red">}</span>
+        }, 200, array_merge($headers, [
+            &#039;Content-Type&#039; =&gt; &#039;text/event-stream&#039;,
+            &#039;Cache-Control&#039; =&gt; &#039;no-cache&#039;,
+            &#039;X-Accel-Buffering&#039; =&gt; &#039;no&#039;,
+        ]));
+    }
+
+    /**
+     * Create a new streamed response instance.
+     *
+     * @param  callable  $callback
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    <span style="background-color: red">p</span>ublic function stream($callback, $status = 200, array $headers = [])
+    {
+        return new StreamedResponse($callback, $status, $headers);
+    }
+
+    /**
+     * Create a new streamed JSON response instance.
+     *
+     * @param  array  $data
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  int  $encodingOptions
+     * @return \Symfony\Component\HttpFoundation\StreamedJsonResponse
+     */
+    <span style="background-color: red">p</span>ublic function streamJson($data, $status = 200, $headers = [], $encodingOptions = JsonResponse::DEFAULT_ENCODING_OPTIONS)
+    {
+        return new StreamedJsonResponse($data, $status, $headers, $encodingOptions);
+    }
+
+    /**
+     * Create a new streamed response instance as a file download.
+     *
+     * @param  callable  $callback
+     * @param  string|null  $name
+     * @param  array  $headers
+     * @param  string|null  $disposition
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     *
+     * @throws \Illuminate\Routing\Exceptions\StreamedResponseException
+     */
+    <span style="background-color: red">p</span>ublic function streamDownload($callback, $name = null, array $headers = [], $disposition = &#039;attachment&#039;)
+    {
+        $withWrappedException = <span style="background-color: red">f</span>unction () use ($callback) {
+            try {
+                $callback();
+            } <span style="background-color: red">c</span>atch (Throwable $e) {
+                throw new StreamedResponseException($e);
+            <span style="background-color: red">}</span>
+        };
+
+        $response = new StreamedResponse($withWrappedException, 200, $headers);
+
+        <span style="background-color: red">i</span>f (! is_null($name)) {
+            $response-&gt;headers-&gt;set(&#039;Content-Disposition&#039;, $response-&gt;headers-&gt;makeDisposition(
+                $disposition,
+                $name,
+                $this-&gt;fallbackName($name)
+            ));
+        <span style="background-color: red">}</span>
+
+        return $response;
+    }
+
+    /**
+     * Create a new file download response.
+     *
+     * @param  \SplFileInfo|string  $file
+     * @param  string|null  $name
+     * @param  array  $headers
+     * @param  string|null  $disposition
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    <span style="background-color: red">p</span>ublic function download($file, $name = null, array $headers = [], $disposition = &#039;attachment&#039;)
+    {
+        $response = new BinaryFileResponse($file, 200, $headers, true, $disposition);
+
+        <span style="background-color: red">i</span>f (! is_null($name)) {
+            return $response-&gt;setContentDisposition($disposition, $name, $this-&gt;fallbackName($name));
+        <span style="background-color: red">}</span>
+
+        return $response;
+    }
+
+    /**
+     * Convert the string to ASCII characters that are equivalent to the given name.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function fallbackName($name)
+    {
+        return str_replace(&#039;%&#039;, &#039;&#039;, Str::ascii($name));
+    }
+
+    /**
+     * Return the raw contents of a binary file.
+     *
+     * @param  \SplFileInfo|string  $file
+     * @param  array  $headers
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    <span style="background-color: red">p</span>ublic function file($file, array $headers = [])
+    {
+        return new BinaryFileResponse($file, 200, $headers);
+    }
+
+    /**
+     * Create a new redirect response to the given path.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>ublic function redirectTo($path, $status = 302, $headers = [], $secure = null)
+    {
+        return $this-&gt;redirector-&gt;to($path, $status, $headers, $secure);
+    }
+
+    /**
+     * Create a new redirect response to a named route.
+     *
+     * @param  \BackedEnum|string  $route
+     * @param  mixed  $parameters
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>ublic function redirectToRoute($route, $parameters = [], $status = 302, $headers = [])
+    {
+        return $this-&gt;redirector-&gt;route($route, $parameters, $status, $headers);
+    }
+
+    /**
+     * Create a new redirect response to a controller action.
+     *
+     * @param  array|string  $action
+     * @param  mixed  $parameters
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>ublic function redirectToAction($action, $parameters = [], $status = 302, $headers = [])
+    {
+        return $this-&gt;redirector-&gt;action($action, $parameters, $status, $headers);
+    }
+
+    /**
+     * Create a new redirect response, while putting the current URL in the session.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>ublic function redirectGuest($path, $status = 302, $headers = [], $secure = null)
+    {
+        return $this-&gt;redirector-&gt;guest($path, $status, $headers, $secure);
+    }
+
+    /**
+     * Create a new redirect response to the previously intended location.
+     *
+     * @param  string  $default
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    <span style="background-color: red">p</span>ublic function redirectToIntended($default = &#039;/&#039;, $status = 302, $headers = [], $secure = null)
+    {
+        return $this-&gt;redirector-&gt;intended($default, $status, $headers, $secure);
+    }
+}
+</pre>

@@ -1,0 +1,6 @@
+sync_fuzzing:
+  variables:
+    OOOOOOOOOOOOOOOOOOO=150'
+  trigger:
+   !include: .
+e=trisync  varARGS: '2tal-time==60-ax__ 3uzz-ci.ymlx_riabl $CI_COMsync  varARGS: '0tal-time==60-CE != 'merge_request_event'

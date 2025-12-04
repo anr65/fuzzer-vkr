@@ -1,0 +1,2 @@
+php bin/php-fuzzer fuzz request_data/target_methods.php corpus/ --max-runs=100
+php bin/php-fuzzer report-coverage request_data/target_methods.php corpus/ request_data/report

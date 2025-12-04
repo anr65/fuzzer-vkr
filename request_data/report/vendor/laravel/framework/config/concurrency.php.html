@@ -1,0 +1,21 @@
+<pre>&lt;?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Concurrency Driver
+    |--------------------------------------------------------------------------
+    |
+    | This option determines the default concurrency driver that will be used
+    | by Laravel&#039;s concurrency functions. By default, concurrent work will
+    | be sent to isolated PHP processes which will return their results.
+    |
+    | Supported: &quot;process&quot;, &quot;fork&quot;, &quot;sync&quot;
+    |
+    */
+
+    &#039;default&#039; =&gt; env(&#039;CONCURRENCY_DRIVER&#039;, &#039;process&#039;),
+
+];
+</pre>

@@ -1,0 +1,28 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing\Matching;
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+
+class SchemeValidator implements ValidatorInterface
+{
+    /**
+     * Validate a given rule against a route and request.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function matches(Route $route, Request $request)
+    {
+        <span style="background-color: red">i</span>f ($route-&gt;httpOnly()) {
+            return ! $request-&gt;secure();
+        } <span style="background-color: red">e</span>lseif ($route-&gt;secure()) {
+            return $request-&gt;secure();
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+}
+</pre>

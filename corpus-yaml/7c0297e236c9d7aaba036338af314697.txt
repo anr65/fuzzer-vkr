@@ -1,0 +1,14 @@
+va_ADDIbles:
+variables:zzin variables:
+ $#` COFUZZ_ADxuzzsync_f"n\\\\\0\\\uzzing:
+  variables:
+    COVFUZZ_toADDIbt"les:
+    ufuzzin variables:
+ $#` COing:
+  variables:  
+  COVFUZZ_ADDIbles:
+    C '-max_total__time=75'
+  trigger:
+    include: .covfuzz-criables:
+ ZZ_ADIsbeDl:
+    COVFU

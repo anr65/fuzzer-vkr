@@ -1,0 +1,82 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log;
+
+use InvalidArgumentException;
+use Monolog\Level;
+
+trait ParsesLogConfiguration
+{
+    /**
+     * The Log levels.
+     *
+     * @var array
+     */
+    protected $levels = [
+        &#039;debug&#039; =&gt; Level::Debug,
+        &#039;info&#039; =&gt; Level::Info,
+        &#039;notice&#039; =&gt; Level::Notice,
+        &#039;warning&#039; =&gt; Level::Warning,
+        &#039;error&#039; =&gt; Level::Error,
+        &#039;critical&#039; =&gt; Level::Critical,
+        &#039;alert&#039; =&gt; Level::Alert,
+        &#039;emergency&#039; =&gt; Level::Emergency,
+    ];
+
+    /**
+     * Get fallback log channel name.
+     *
+     * @return string
+     */
+    abstract protected function getFallbackChannelName();
+
+    /**
+     * Parse the string level into a Monolog constant.
+     *
+     * @param  array  $config
+     * @return int
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function level(array $config)
+    {
+        $level = $config[&#039;level&#039;] ?? <span style="background-color: red">'</span>debug&#039;;
+
+        <span style="background-color: green">i</span>f (isset($this-&gt;levels[$level])) {
+            return $this-&gt;levels[$level];
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&#039;Invalid log level.&#039;);
+    }
+
+    /**
+     * Parse the action level from the given configuration.
+     *
+     * @param  array  $config
+     * @return int
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>rotected function actionLevel(array $config)
+    {
+        $level = $config[&#039;action_level&#039;] ?? <span style="background-color: red">'</span>debug&#039;;
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;levels[$level])) {
+            return $this-&gt;levels[$level];
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&#039;Invalid log action level.&#039;);
+    }
+
+    /**
+     * Extract the log channel from the given configuration.
+     *
+     * @param  array  $config
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function parseChannel(array $config)
+    {
+        return $config[&#039;name&#039;] ?? <span style="background-color: green">$</span>this-&gt;getFallbackChannelName();
+    }
+}
+</pre>

@@ -1,0 +1,378 @@
+<pre>&lt;?php
+
+namespace Illuminate\Encryption;
+
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
+use Illuminate\Contracts\Encryption\EncryptException;
+use Illuminate\Contracts\Encryption\StringEncrypter;
+use RuntimeException;
+
+class Encrypter implements EncrypterContract, StringEncrypter
+{
+    /**
+     * The encryption key.
+     *
+     * @var string
+     */
+    protected $key;
+
+    /**
+     * The previous / legacy encryption keys.
+     *
+     * @var array
+     */
+    protected $previousKeys = [];
+
+    /**
+     * The algorithm used for encryption.
+     *
+     * @var string
+     */
+    protected $cipher;
+
+    /**
+     * The supported cipher algorithms and their properties.
+     *
+     * @var array
+     */
+    private static $supportedCiphers = [
+        &#039;aes-128-cbc&#039; =&gt; [&#039;size&#039; =&gt; 16, &#039;aead&#039; =&gt; false],
+        &#039;aes-256-cbc&#039; =&gt; [&#039;size&#039; =&gt; 32, &#039;aead&#039; =&gt; false],
+        &#039;aes-128-gcm&#039; =&gt; [&#039;size&#039; =&gt; 16, &#039;aead&#039; =&gt; true],
+        &#039;aes-256-gcm&#039; =&gt; [&#039;size&#039; =&gt; 32, &#039;aead&#039; =&gt; true],
+    ];
+
+    /**
+     * Create a new encrypter instance.
+     *
+     * @param  string  $key
+     * @param  string  $cipher
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function __construct($key, $cipher = &#039;aes-128-cbc&#039;)
+    {
+        $key = (string) $key;
+
+        <span style="background-color: red">i</span>f (! static::supported($key, $cipher)) {
+            $ciphers = implode(&#039;, &#039;, array_keys(self::$supportedCiphers));
+
+            throw new RuntimeException(&quot;Unsupported cipher or incorrect key length. Supported ciphers are: {$ciphers}.&quot;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;key = $key;
+        $this-&gt;cipher = $cipher;
+    }
+
+    /**
+     * Determine if the given key and cipher combination is valid.
+     *
+     * @param  string  $key
+     * @param  string  $cipher
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function supported($key, $cipher)
+    {
+        <span style="background-color: red">i</span>f (! isset(self::$supportedCiphers[strtolower($cipher)])) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return mb_strlen($key, &#039;8bit&#039;) === self::$supportedCiphers[strtolower($cipher)][&#039;size&#039;];
+    }
+
+    /**
+     * Create a new encryption key for the given cipher.
+     *
+     * @param  string  $cipher
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function generateKey($cipher)
+    {
+        return random_bytes(self::$supportedCiphers[strtolower($cipher)][&#039;size&#039;] ?? <span style="background-color: red">3</span>2);
+    }
+
+    /**
+     * Encrypt the given value.
+     *
+     * @param  mixed  $value
+     * @param  bool  $serialize
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\Encryption\EncryptException
+     */
+    <span style="background-color: red">p</span>ublic function encrypt(#[\SensitiveParameter] $value, $serialize = true)
+    {
+        $iv = random_bytes(openssl_cipher_iv_length(strtolower($this-&gt;cipher)));
+
+        $value = \openssl_encrypt(
+            $serialize ? serialize($value) : <span style="background-color: red">$</span>value,
+            strtolower($this-&gt;cipher), $this-&gt;key, 0, $iv, $tag
+        );
+
+        <span style="background-color: red">i</span>f ($value === false) {
+            throw new EncryptException(&#039;Could not encrypt the data.&#039;);
+        <span style="background-color: red">}</span>
+
+        $iv = base64_encode($iv);
+        $tag = base64_encode($tag ?? <span style="background-color: red">'</span>&#039;);
+
+        $mac = self::$supportedCiphers[strtolower($this-&gt;cipher)][&#039;aead&#039;]
+            ? &#039;&#039; // For AEAD-algorithms, the tag / MAC is returned by openssl_encrypt...
+            : <span style="background-color: red">$</span>this-&gt;hash($iv, $value, $this-&gt;key);
+
+        $json = json_encode(compact(&#039;iv&#039;, &#039;value&#039;, &#039;mac&#039;, &#039;tag&#039;), JSON_UNESCAPED_SLASHES);
+
+        <span style="background-color: red">i</span>f (json_last_error() !== JSON_ERROR_NONE) {
+            throw new EncryptException(&#039;Could not encrypt the data.&#039;);
+        <span style="background-color: red">}</span>
+
+        return base64_encode($json);
+    }
+
+    /**
+     * Encrypt a string without serialization.
+     *
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\Encryption\EncryptException
+     */
+    <span style="background-color: red">p</span>ublic function encryptString(#[\SensitiveParameter] $value)
+    {
+        return $this-&gt;encrypt($value, false);
+    }
+
+    /**
+     * Decrypt the given value.
+     *
+     * @param  string  $payload
+     * @param  bool  $unserialize
+     * @return mixed
+     *
+     * @throws \Illuminate\Contracts\Encryption\DecryptException
+     */
+    <span style="background-color: red">p</span>ublic function decrypt($payload, $unserialize = true)
+    {
+        $payload = $this-&gt;getJsonPayload($payload);
+
+        $iv = base64_decode($payload[&#039;iv&#039;]);
+
+        $this-&gt;ensureTagIsValid(
+            $tag = empty($payload[&#039;tag&#039;]) ? null : <span style="background-color: red">b</span>ase64_decode($payload[&#039;tag&#039;])
+        );
+
+        $foundValidMac = false;
+
+        // Here we will decrypt the value. If we are able to successfully decrypt it
+        // we will then unserialize it and return it out to the caller. If we are
+        // unable to decrypt this value we will throw out an exception message.
+        <span style="background-color: red">f</span>oreach ($this-&gt;getAllKeys() as $key) {
+            <span style="background-color: red">i</span>f (
+                $this-&gt;shouldValidateMac() &amp;&amp;
+                <span style="background-color: red">!</span> ($foundValidMac = $foundValidMac || <span style="background-color: red">$</span>this-&gt;validMacForKey($payload, $key))
+            ) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            $decrypted = \openssl_decrypt(
+                $payload[&#039;value&#039;], strtolower($this-&gt;cipher), $key, 0, $iv, $tag ?? <span style="background-color: red">'</span>&#039;
+            );
+
+            <span style="background-color: red">i</span>f ($decrypted !== false) {
+                break;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;shouldValidateMac() &amp;&amp; <span style="background-color: red">!</span> $foundValidMac) {
+            throw new DecryptException(&#039;The MAC is invalid.&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (($decrypted ?? <span style="background-color: red">f</span>alse) === false) {
+            throw new DecryptException(&#039;Could not decrypt the data.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $unserialize ? unserialize($decrypted) : <span style="background-color: red">$</span>decrypted;
+    }
+
+    /**
+     * Decrypt the given string without unserialization.
+     *
+     * @param  string  $payload
+     * @return string
+     *
+     * @throws \Illuminate\Contracts\Encryption\DecryptException
+     */
+    <span style="background-color: red">p</span>ublic function decryptString($payload)
+    {
+        return $this-&gt;decrypt($payload, false);
+    }
+
+    /**
+     * Create a MAC for the given value.
+     *
+     * @param  string  $iv
+     * @param  mixed  $value
+     * @param  string  $key
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function hash(#[\SensitiveParameter] $iv, #[\SensitiveParameter] $value, #[\SensitiveParameter] $key)
+    {
+        return hash_hmac(&#039;sha256&#039;, $iv.$value, $key);
+    }
+
+    /**
+     * Get the JSON array from the given payload.
+     *
+     * @param  string  $payload
+     * @return array
+     *
+     * @throws \Illuminate\Contracts\Encryption\DecryptException
+     */
+    <span style="background-color: red">p</span>rotected function getJsonPayload($payload)
+    {
+        <span style="background-color: red">i</span>f (! is_string($payload)) {
+            throw new DecryptException(&#039;The payload is invalid.&#039;);
+        <span style="background-color: red">}</span>
+
+        $payload = json_decode(base64_decode($payload), true);
+
+        // If the payload is not valid JSON or does not have the proper keys set we will
+        // assume it is invalid and bail out of the routine since we will not be able
+        // to decrypt the given value. We&#039;ll also check the MAC for this encryption.
+        <span style="background-color: red">i</span>f (! $this-&gt;validPayload($payload)) {
+            throw new DecryptException(&#039;The payload is invalid.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $payload;
+    }
+
+    /**
+     * Verify that the encryption payload is valid.
+     *
+     * @param  mixed  $payload
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function validPayload($payload)
+    {
+        <span style="background-color: red">i</span>f (! is_array($payload)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ([&#039;iv&#039;, &#039;value&#039;, &#039;mac&#039;] as $item) {
+            <span style="background-color: red">i</span>f (! isset($payload[$item]) || <span style="background-color: red">!</span> is_string($payload[$item])) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($payload[&#039;tag&#039;]) &amp;&amp; <span style="background-color: red">!</span> is_string($payload[&#039;tag&#039;])) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return strlen(base64_decode($payload[&#039;iv&#039;], true)) === openssl_cipher_iv_length(strtolower($this-&gt;cipher));
+    }
+
+    /**
+     * Determine if the MAC for the given payload is valid for the primary key.
+     *
+     * @param  array  $payload
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function validMac(array $payload)
+    {
+        return $this-&gt;validMacForKey($payload, $this-&gt;key);
+    }
+
+    /**
+     * Determine if the MAC is valid for the given payload and key.
+     *
+     * @param  array  $payload
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function validMacForKey(#[\SensitiveParameter] $payload, $key)
+    {
+        return hash_equals(
+            $this-&gt;hash($payload[&#039;iv&#039;], $payload[&#039;value&#039;], $key), $payload[&#039;mac&#039;]
+        );
+    }
+
+    /**
+     * Ensure the given tag is a valid tag given the selected cipher.
+     *
+     * @param  string  $tag
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function ensureTagIsValid($tag)
+    {
+        <span style="background-color: red">i</span>f (self::$supportedCiphers[strtolower($this-&gt;cipher)][&#039;aead&#039;] &amp;&amp; <span style="background-color: red">s</span>trlen($tag) !== 16) {
+            throw new DecryptException(&#039;Could not decrypt the data.&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! self::$supportedCiphers[strtolower($this-&gt;cipher)][&#039;aead&#039;] &amp;&amp; <span style="background-color: red">i</span>s_string($tag)) {
+            throw new DecryptException(&#039;Unable to use tag because the cipher algorithm does not support AEAD.&#039;);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if we should validate the MAC while decrypting.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function shouldValidateMac()
+    {
+        return ! self::$supportedCiphers[strtolower($this-&gt;cipher)][&#039;aead&#039;];
+    }
+
+    /**
+     * Get the encryption key that the encrypter is currently using.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getKey()
+    {
+        return $this-&gt;key;
+    }
+
+    /**
+     * Get the current encryption key and all previous encryption keys.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getAllKeys()
+    {
+        return [$this-&gt;key, ...$this-&gt;previousKeys];
+    }
+
+    /**
+     * Get the previous encryption keys.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getPreviousKeys()
+    {
+        return $this-&gt;previousKeys;
+    }
+
+    /**
+     * Set the previous / legacy encryption keys that should be utilized if decryption fails.
+     *
+     * @param  array  $keys
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function previousKeys(array $keys)
+    {
+        <span style="background-color: red">f</span>oreach ($keys as $key) {
+            <span style="background-color: red">i</span>f (! static::supported($key, $this-&gt;cipher)) {
+                $ciphers = implode(&#039;, &#039;, array_keys(self::$supportedCiphers));
+
+                throw new RuntimeException(&quot;Unsupported cipher or incorrect key length. Supported ciphers are: {$ciphers}.&quot;);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;previousKeys = $keys;
+
+        return $this;
+    }
+}
+</pre>

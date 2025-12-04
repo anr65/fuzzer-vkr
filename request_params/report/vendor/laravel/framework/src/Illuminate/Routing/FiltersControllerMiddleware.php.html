@@ -1,0 +1,20 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+trait FiltersControllerMiddleware
+{
+    /**
+     * Determine if the given options exclude a particular method.
+     *
+     * @param  string  $method
+     * @param  array  $options
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function methodExcludedByOptions($method, array $options)
+    {
+        return (isset($options[&#039;only&#039;]) &amp;&amp; <span style="background-color: red">!</span> in_array($method, (array) $options[&#039;only&#039;])) ||
+               (<span style="background-color: red">!</span> empty($options[&#039;except&#039;]) &amp;&amp; <span style="background-color: red">i</span>n_array($method, (array) $options[&#039;except&#039;]));
+    }
+}
+</pre>

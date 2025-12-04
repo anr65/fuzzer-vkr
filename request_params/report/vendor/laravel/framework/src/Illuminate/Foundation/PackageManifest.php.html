@@ -1,0 +1,187 @@
+<pre>&lt;?php
+
+namespace Illuminate\Foundation;
+
+use Exception;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Env;
+
+class PackageManifest
+{
+    /**
+     * The filesystem instance.
+     *
+     * @var \Illuminate\Filesystem\Filesystem
+     */
+    public $files;
+
+    /**
+     * The base path.
+     *
+     * @var string
+     */
+    public $basePath;
+
+    /**
+     * The vendor path.
+     *
+     * @var string
+     */
+    public $vendorPath;
+
+    /**
+     * The manifest path.
+     *
+     * @var string|null
+     */
+    public $manifestPath;
+
+    /**
+     * The loaded manifest array.
+     *
+     * @var array
+     */
+    public $manifest;
+
+    /**
+     * Create a new package manifest instance.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem  $files
+     * @param  string  $basePath
+     * @param  string  $manifestPath
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Filesystem $files, $basePath, $manifestPath)
+    {
+        $this-&gt;files = $files;
+        $this-&gt;basePath = $basePath;
+        $this-&gt;manifestPath = $manifestPath;
+        $this-&gt;vendorPath = Env::get(&#039;COMPOSER_VENDOR_DIR&#039;) ?: <span style="background-color: green">$</span>basePath.&#039;/vendor&#039;;
+    }
+
+    /**
+     * Get all of the service provider class names for all packages.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function providers()
+    {
+        return $this-&gt;config(&#039;providers&#039;);
+    }
+
+    /**
+     * Get all of the aliases for all packages.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function aliases()
+    {
+        return $this-&gt;config(&#039;aliases&#039;);
+    }
+
+    /**
+     * Get all of the values for all packages for the given configuration name.
+     *
+     * @param  string  $key
+     * @return array
+     */
+    <span style="background-color: green">p</span>ublic function config($key)
+    {
+        return (new Collection($this-&gt;getManifest()))
+            -&gt;flatMap(fn ($configuration) =&gt; <span style="background-color: red">(</span>array) ($configuration[$key] ?? <span style="background-color: red">[</span>]))
+            -&gt;filter()
+            -&gt;all();
+    }
+
+    /**
+     * Get the current package manifest.
+     *
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function getManifest()
+    {
+        <span style="background-color: green">i</span>f (! is_null($this-&gt;manifest)) {
+            return $this-&gt;manifest;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! is_file($this-&gt;manifestPath)) {
+            $this-&gt;build();
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;manifest = is_file($this-&gt;manifestPath) ?
+            $this-&gt;files-&gt;getRequire($this-&gt;manifestPath) : <span style="background-color: red">[</span>];
+    }
+
+    /**
+     * Build the manifest and write it to disk.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function build()
+    {
+        $packages = [];
+
+        <span style="background-color: red">i</span>f ($this-&gt;files-&gt;exists($path = $this-&gt;vendorPath.&#039;/composer/installed.json&#039;)) {
+            $installed = json_decode($this-&gt;files-&gt;get($path), true);
+
+            $packages = $installed[&#039;packages&#039;] ?? <span style="background-color: red">$</span>installed;
+        <span style="background-color: red">}</span>
+
+        $ignoreAll = in_array(&#039;*&#039;, $ignore = $this-&gt;packagesToIgnore());
+
+        $this-&gt;write((new Collection($packages))-&gt;mapWithKeys(<span style="background-color: red">f</span>unction ($package) {
+            return [$this-&gt;format($package[&#039;name&#039;]) =&gt; $package[&#039;extra&#039;][&#039;laravel&#039;] ?? <span style="background-color: red">[</span>]];
+        })-&gt;each(<span style="background-color: red">f</span>unction ($configuration) use (&amp;$ignore) {
+            $ignore = array_merge($ignore, $configuration[&#039;dont-discover&#039;] ?? <span style="background-color: red">[</span>]);
+        })-&gt;reject(<span style="background-color: red">f</span>unction ($configuration, $package) use ($ignore, $ignoreAll) {
+            return $ignoreAll || <span style="background-color: red">i</span>n_array($package, $ignore);
+        })-&gt;filter()-&gt;all());
+    }
+
+    /**
+     * Format the given package name.
+     *
+     * @param  string  $package
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function format($package)
+    {
+        return str_replace($this-&gt;vendorPath.&#039;/&#039;, &#039;&#039;, $package);
+    }
+
+    /**
+     * Get all of the package names that should be ignored.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function packagesToIgnore()
+    {
+        <span style="background-color: red">i</span>f (! is_file($this-&gt;basePath.&#039;/composer.json&#039;)) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        return json_decode(file_get_contents(
+            $this-&gt;basePath.&#039;/composer.json&#039;
+        ), true)[&#039;extra&#039;][&#039;laravel&#039;][&#039;dont-discover&#039;] ?? <span style="background-color: red">[</span>];
+    }
+
+    /**
+     * Write the given manifest array to disk.
+     *
+     * @param  array  $manifest
+     * @return void
+     *
+     * @throws \Exception
+     */
+    <span style="background-color: red">p</span>rotected function write(array $manifest)
+    {
+        <span style="background-color: red">i</span>f (! is_writable($dirname = dirname($this-&gt;manifestPath))) {
+            throw new Exception(&quot;The {$dirname} directory must be present and writable.&quot;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;files-&gt;replace(
+            $this-&gt;manifestPath, &#039;&lt;?php return &#039;.var_export($manifest, true).&#039;;&#039;
+        );
+    }
+}
+</pre>

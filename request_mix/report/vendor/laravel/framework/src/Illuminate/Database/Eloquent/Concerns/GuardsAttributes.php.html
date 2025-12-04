@@ -1,0 +1,261 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+trait GuardsAttributes
+{
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array&lt;int, string&gt;
+     */
+    protected $fillable = [];
+
+    /**
+     * The attributes that aren&#039;t mass assignable.
+     *
+     * @var array&lt;string&gt;|bool
+     */
+    protected $guarded = [&#039;*&#039;];
+
+    /**
+     * Indicates if all mass assignment is enabled.
+     *
+     * @var bool
+     */
+    protected static $unguarded = false;
+
+    /**
+     * The actual columns that exist on the database and can be guarded.
+     *
+     * @var array&lt;string&gt;
+     */
+    protected static $guardableColumns = [];
+
+    /**
+     * Get the fillable attributes for the model.
+     *
+     * @return array&lt;string&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getFillable()
+    {
+        return $this-&gt;fillable;
+    }
+
+    /**
+     * Set the fillable attributes for the model.
+     *
+     * @param  array&lt;string&gt;  $fillable
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function fillable(array $fillable)
+    {
+        $this-&gt;fillable = $fillable;
+
+        return $this;
+    }
+
+    /**
+     * Merge new fillable attributes with existing fillable attributes on the model.
+     *
+     * @param  array&lt;string&gt;  $fillable
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function mergeFillable(array $fillable)
+    {
+        $this-&gt;fillable = array_values(array_unique(array_merge($this-&gt;fillable, $fillable)));
+
+        return $this;
+    }
+
+    /**
+     * Get the guarded attributes for the model.
+     *
+     * @return array&lt;string&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getGuarded()
+    {
+        return $this-&gt;guarded === false
+            ? []
+            : <span style="background-color: red">$</span>this-&gt;guarded;
+    }
+
+    /**
+     * Set the guarded attributes for the model.
+     *
+     * @param  array&lt;string&gt;  $guarded
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function guard(array $guarded)
+    {
+        $this-&gt;guarded = $guarded;
+
+        return $this;
+    }
+
+    /**
+     * Merge new guarded attributes with existing guarded attributes on the model.
+     *
+     * @param  array&lt;string&gt;  $guarded
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function mergeGuarded(array $guarded)
+    {
+        $this-&gt;guarded = array_values(array_unique(array_merge($this-&gt;guarded, $guarded)));
+
+        return $this;
+    }
+
+    /**
+     * Disable all mass assignable restrictions.
+     *
+     * @param  bool  $state
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function unguard($state = true)
+    {
+        static::$unguarded = $state;
+    }
+
+    /**
+     * Enable the mass assignment restrictions.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function reguard()
+    {
+        static::$unguarded = false;
+    }
+
+    /**
+     * Determine if the current state is &quot;unguarded&quot;.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isUnguarded()
+    {
+        return static::$unguarded;
+    }
+
+    /**
+     * Run the given callable while being unguarded.
+     *
+     * @param  callable  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic static function unguarded(callable $callback)
+    {
+        <span style="background-color: red">i</span>f (static::$unguarded) {
+            return $callback();
+        <span style="background-color: red">}</span>
+
+        static::unguard();
+
+        try {
+            return $callback();
+        } <span style="background-color: red">f</span>inally {
+            static::reguard();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if the given attribute may be mass assigned.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isFillable($key)
+    {
+        <span style="background-color: red">i</span>f (static::$unguarded) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        // If the key is in the &quot;fillable&quot; array, we can of course assume that it&#039;s
+        // a fillable attribute. Otherwise, we will check the guarded array when
+        // we need to determine if the attribute is black-listed on the model.
+        <span style="background-color: red">i</span>f (in_array($key, $this-&gt;getFillable())) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        // If the attribute is explicitly listed in the &quot;guarded&quot; array then we can
+        // return false immediately. This means this attribute is definitely not
+        // fillable and there is no point in going any further in this method.
+        <span style="background-color: red">i</span>f ($this-&gt;isGuarded($key)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return empty($this-&gt;getFillable()) &amp;&amp;
+            <span style="background-color: red">!</span> str_contains($key, &#039;.&#039;) &amp;&amp;
+            <span style="background-color: red">!</span> str_starts_with($key, &#039;_&#039;);
+    }
+
+    /**
+     * Determine if the given key is guarded.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isGuarded($key)
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;getGuarded())) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;getGuarded() == [&#039;*&#039;] ||
+               <span style="background-color: red">!</span> empty(preg_grep(&#039;/^&#039;.preg_quote($key, &#039;/&#039;).&#039;$/i&#039;, $this-&gt;getGuarded())) ||
+               <span style="background-color: red">!</span> $this-&gt;isGuardableColumn($key);
+    }
+
+    /**
+     * Determine if the given column is a valid, guardable column.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function isGuardableColumn($key)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;hasSetMutator($key) || <span style="background-color: red">$</span>this-&gt;hasAttributeSetMutator($key)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! isset(static::$guardableColumns[get_class($this)])) {
+            $columns = $this-&gt;getConnection()
+                -&gt;getSchemaBuilder()
+                -&gt;getColumnListing($this-&gt;getTable());
+
+            <span style="background-color: red">i</span>f (empty($columns)) {
+                return true;
+            <span style="background-color: red">}</span>
+
+            static::$guardableColumns[get_class($this)] = $columns;
+        <span style="background-color: red">}</span>
+
+        return in_array($key, static::$guardableColumns[get_class($this)]);
+    }
+
+    /**
+     * Determine if the model is totally guarded.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function totallyGuarded()
+    {
+        return count($this-&gt;getFillable()) === 0 &amp;&amp; <span style="background-color: red">$</span>this-&gt;getGuarded() == [&#039;*&#039;];
+    }
+
+    /**
+     * Get the fillable attributes of a given array.
+     *
+     * @param  array  $attributes
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function fillableFromArray(array $attributes)
+    {
+        <span style="background-color: red">i</span>f (count($this-&gt;getFillable()) &gt; 0 &amp;&amp; <span style="background-color: red">!</span> static::$unguarded) {
+            return array_intersect_key($attributes, array_flip($this-&gt;getFillable()));
+        <span style="background-color: red">}</span>
+
+        return $attributes;
+    }
+}
+</pre>

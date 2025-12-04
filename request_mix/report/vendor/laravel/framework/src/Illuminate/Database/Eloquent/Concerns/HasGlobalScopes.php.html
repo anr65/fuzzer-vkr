@@ -1,0 +1,140 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+use Closure;
+use Illuminate\Database\Eloquent\Attributes\ScopedBy;
+use Illuminate\Database\Eloquent\Scope;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use InvalidArgumentException;
+use ReflectionClass;
+
+trait HasGlobalScopes
+{
+    /**
+     * Boot the has global scopes trait for a model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function bootHasGlobalScopes()
+    {
+        static::addGlobalScopes(static::resolveGlobalScopeAttributes());
+    }
+
+    /**
+     * Resolve the global scope class names from the attributes.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function resolveGlobalScopeAttributes()
+    {
+        $reflectionClass = new ReflectionClass(static::class);
+
+        return (new Collection($reflectionClass-&gt;getAttributes(ScopedBy::class)))
+            -&gt;map(fn ($attribute) =&gt; <span style="background-color: red">$</span>attribute-&gt;getArguments())
+            -&gt;flatten()
+            -&gt;all();
+    }
+
+    /**
+     * Register a new global scope on the model.
+     *
+     * @param  \Illuminate\Database\Eloquent\Scope|(\Closure(\Illuminate\Database\Eloquent\Builder&lt;static&gt;): mixed)|string  $scope
+     * @param  \Illuminate\Database\Eloquent\Scope|(\Closure(\Illuminate\Database\Eloquent\Builder&lt;static&gt;): mixed)|null  $implementation
+     * @return mixed
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic static function addGlobalScope($scope, $implementation = null)
+    {
+        <span style="background-color: red">i</span>f (is_string($scope) &amp;&amp; (<span style="background-color: red">$</span>implementation instanceof Closure || <span style="background-color: red">$</span>implementation instanceof Scope)) {
+            return static::$globalScopes[static::class][$scope] = $implementation;
+        } <span style="background-color: red">e</span>lseif ($scope instanceof Closure) {
+            return static::$globalScopes[static::class][spl_object_hash($scope)] = $scope;
+        } <span style="background-color: red">e</span>lseif ($scope instanceof Scope) {
+            return static::$globalScopes[static::class][get_class($scope)] = $scope;
+        } <span style="background-color: red">e</span>lseif (is_string($scope) &amp;&amp; <span style="background-color: red">c</span>lass_exists($scope) &amp;&amp; <span style="background-color: red">i</span>s_subclass_of($scope, Scope::class)) {
+            return static::$globalScopes[static::class][$scope] = new $scope;
+        <span style="background-color: red">}</span>
+
+        throw new InvalidArgumentException(&#039;Global scope must be an instance of Closure or Scope or be a class name of a class extending &#039;.Scope::class);
+    }
+
+    /**
+     * Register multiple global scopes on the model.
+     *
+     * @param  array  $scopes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function addGlobalScopes(array $scopes)
+    {
+        <span style="background-color: red">f</span>oreach ($scopes as $key =&gt; $scope) {
+            <span style="background-color: red">i</span>f (is_string($key)) {
+                static::addGlobalScope($key, $scope);
+            } <span style="background-color: red">e</span>lse {
+                static::addGlobalScope($scope);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determine if a model has a global scope.
+     *
+     * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function hasGlobalScope($scope)
+    {
+        return ! is_null(static::getGlobalScope($scope));
+    }
+
+    /**
+     * Get a global scope registered with the model.
+     *
+     * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
+     * @return \Illuminate\Database\Eloquent\Scope|(\Closure(\Illuminate\Database\Eloquent\Builder&lt;static&gt;): mixed)|null
+     */
+    <span style="background-color: red">p</span>ublic static function getGlobalScope($scope)
+    {
+        <span style="background-color: red">i</span>f (is_string($scope)) {
+            return Arr::get(static::$globalScopes, static::class.&#039;.&#039;.$scope);
+        <span style="background-color: red">}</span>
+
+        return Arr::get(
+            static::$globalScopes, static::class.&#039;.&#039;.get_class($scope)
+        );
+    }
+
+    /**
+     * Get all of the global scopes that are currently registered.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function getAllGlobalScopes()
+    {
+        return static::$globalScopes;
+    }
+
+    /**
+     * Set the current global scopes.
+     *
+     * @param  array  $scopes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setAllGlobalScopes($scopes)
+    {
+        static::$globalScopes = $scopes;
+    }
+
+    /**
+     * Get the global scopes for this class instance.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getGlobalScopes()
+    {
+        return Arr::get(static::$globalScopes, static::class, []);
+    }
+}
+</pre>

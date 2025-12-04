@@ -1,0 +1,135 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers;
+
+use ErrorException;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+
+abstract class Compiler
+{
+    /**
+     * The filesystem instance.
+     *
+     * @var \Illuminate\Filesystem\Filesystem
+     */
+    protected $files;
+
+    /**
+     * The cache path for the compiled views.
+     *
+     * @var string
+     */
+    protected $cachePath;
+
+    /**
+     * The base path that should be removed from paths before hashing.
+     *
+     * @var string
+     */
+    protected $basePath;
+
+    /**
+     * Determines if compiled views should be cached.
+     *
+     * @var bool
+     */
+    protected $shouldCache;
+
+    /**
+     * The compiled view file extension.
+     *
+     * @var string
+     */
+    protected $compiledExtension = &#039;php&#039;;
+
+    /**
+     * Create a new compiler instance.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem  $files
+     * @param  string  $cachePath
+     * @param  string  $basePath
+     * @param  bool  $shouldCache
+     * @param  string  $compiledExtension
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        Filesystem $files,
+        $cachePath,
+        $basePath = &#039;&#039;,
+        $shouldCache = true,
+        $compiledExtension = &#039;php&#039;,
+    ) {
+        <span style="background-color: red">i</span>f (! $cachePath) {
+            throw new InvalidArgumentException(&#039;Please provide a valid cache path.&#039;);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;files = $files;
+        $this-&gt;cachePath = $cachePath;
+        $this-&gt;basePath = $basePath;
+        $this-&gt;shouldCache = $shouldCache;
+        $this-&gt;compiledExtension = $compiledExtension;
+    }
+
+    /**
+     * Get the path to the compiled version of a view.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic function getCompiledPath($path)
+    {
+        return $this-&gt;cachePath.&#039;/&#039;.hash(&#039;xxh128&#039;, &#039;v2&#039;.Str::after($path, $this-&gt;basePath)).&#039;.&#039;.$this-&gt;compiledExtension;
+    }
+
+    /**
+     * Determine if the view at the given path is expired.
+     *
+     * @param  string  $path
+     * @return bool
+     *
+     * @throws \ErrorException
+     */
+    <span style="background-color: green">p</span>ublic function isExpired($path)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;shouldCache) {
+            return true;
+        <span style="background-color: green">}</span>
+
+        $compiled = $this-&gt;getCompiledPath($path);
+
+        // If the compiled file doesn&#039;t exist we will indicate that the view is expired
+        // so that it can be re-compiled. Else, we will verify the last modification
+        // of the views is less than the modification times of the compiled views.
+        <span style="background-color: red">i</span>f (! $this-&gt;files-&gt;exists($compiled)) {
+            return true;
+        <span style="background-color: green">}</span>
+
+        try {
+            return $this-&gt;files-&gt;lastModified($path) &gt;=
+                $this-&gt;files-&gt;lastModified($compiled);
+        } <span style="background-color: red">c</span>atch (ErrorException $exception) {
+            <span style="background-color: red">i</span>f (! $this-&gt;files-&gt;exists($compiled)) {
+                return true;
+            <span style="background-color: red">}</span>
+
+            throw $exception;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create the compiled file directory if necessary.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function ensureCompiledDirectoryExists($path)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;files-&gt;exists(dirname($path))) {
+            $this-&gt;files-&gt;makeDirectory(dirname($path), 0777, true, true);
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

@@ -1,0 +1,58 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog\Handler;
+
+use Monolog\Formatter\FormatterInterface;
+use Monolog\Formatter\LineFormatter;
+
+/**
+ * Helper trait for implementing FormattableInterface
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ */
+trait FormattableHandlerTrait
+{
+    protected FormatterInterface|null $formatter = null;
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: green">p</span>ublic function setFormatter(FormatterInterface $formatter): HandlerInterface
+    {
+        $this-&gt;formatter = $formatter;
+
+        return $this;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: green">p</span>ublic function getFormatter(): FormatterInterface
+    {
+        <span style="background-color: red">i</span>f (null === $this-&gt;formatter) {
+            $this-&gt;formatter = $this-&gt;getDefaultFormatter();
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;formatter;
+    }
+
+    /**
+     * Gets the default formatter.
+     *
+     * Overwrite this if the LineFormatter is not a good default for your handler.
+     */
+    <span style="background-color: red">p</span>rotected function getDefaultFormatter(): FormatterInterface
+    {
+        return new LineFormatter();
+    }
+}
+</pre>

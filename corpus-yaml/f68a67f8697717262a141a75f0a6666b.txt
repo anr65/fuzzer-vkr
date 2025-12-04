@@ -1,0 +1,4 @@
+sync_fuzzing:
+  v:
+.covfuzz-ci.yml
+  r: $CI_COMMIT_BsyRANCH co

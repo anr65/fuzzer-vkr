@@ -1,0 +1,752 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog;
+
+use Closure;
+use DateTimeZone;
+use Fiber;
+use Monolog\Handler\HandlerInterface;
+use Monolog\Processor\ProcessorInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\InvalidArgumentException;
+use Psr\Log\LogLevel;
+use Throwable;
+use Stringable;
+use WeakMap;
+
+/**
+ * Monolog log channel
+ *
+ * It contains a stack of Handlers and a stack of Processors,
+ * and uses them to store records that are added to it.
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ * @final
+ */
+class Logger implements LoggerInterface, ResettableInterface
+{
+    /**
+     * Detailed debug information
+     *
+     * @deprecated Use \Monolog\Level::Debug
+     */
+    public const DEBUG = 100;
+
+    /**
+     * Interesting events
+     *
+     * Examples: User logs in, SQL logs.
+     *
+     * @deprecated Use \Monolog\Level::Info
+     */
+    public const INFO = 200;
+
+    /**
+     * Uncommon events
+     *
+     * @deprecated Use \Monolog\Level::Notice
+     */
+    public const NOTICE = 250;
+
+    /**
+     * Exceptional occurrences that are not errors
+     *
+     * Examples: Use of deprecated APIs, poor use of an API,
+     * undesirable things that are not necessarily wrong.
+     *
+     * @deprecated Use \Monolog\Level::Warning
+     */
+    public const WARNING = 300;
+
+    /**
+     * Runtime errors
+     *
+     * @deprecated Use \Monolog\Level::Error
+     */
+    public const ERROR = 400;
+
+    /**
+     * Critical conditions
+     *
+     * Example: Application component unavailable, unexpected exception.
+     *
+     * @deprecated Use \Monolog\Level::Critical
+     */
+    public const CRITICAL = 500;
+
+    /**
+     * Action must be taken immediately
+     *
+     * Example: Entire website down, database unavailable, etc.
+     * This should trigger the SMS alerts and wake you up.
+     *
+     * @deprecated Use \Monolog\Level::Alert
+     */
+    public const ALERT = 550;
+
+    /**
+     * Urgent alert.
+     *
+     * @deprecated Use \Monolog\Level::Emergency
+     */
+    public const EMERGENCY = 600;
+
+    /**
+     * Monolog API version
+     *
+     * This is only bumped when API breaks are done and should
+     * follow the major version of the library
+     */
+    public const API = 3;
+
+    /**
+     * Mapping between levels numbers defined in RFC 5424 and Monolog ones
+     *
+     * @phpstan-var array&lt;int, Level&gt; $rfc_5424_levels
+     */
+    private const RFC_5424_LEVELS = [
+        7 =&gt; Level::Debug,
+        6 =&gt; Level::Info,
+        5 =&gt; Level::Notice,
+        4 =&gt; Level::Warning,
+        3 =&gt; Level::Error,
+        2 =&gt; Level::Critical,
+        1 =&gt; Level::Alert,
+        0 =&gt; Level::Emergency,
+    ];
+
+    protected string $name;
+
+    /**
+     * The handler stack
+     *
+     * @var list&lt;HandlerInterface&gt;
+     */
+    protected array $handlers;
+
+    /**
+     * Processors that will process all log records
+     *
+     * To process records of a single handler instead, add the processor on that specific handler
+     *
+     * @var array&lt;(callable(LogRecord): LogRecord)|ProcessorInterface&gt;
+     */
+    protected array $processors;
+
+    protected bool $microsecondTimestamps = true;
+
+    protected DateTimeZone $timezone;
+
+    protected Closure|null $exceptionHandler = null;
+
+    /**
+     * Keeps track of depth to prevent infinite logging loops
+     */
+    private int $logDepth = 0;
+
+    /**
+     * @var WeakMap&lt;Fiber&lt;mixed, mixed, mixed, mixed&gt;, int&gt; Keeps track of depth inside fibers to prevent infinite logging loops
+     */
+    private WeakMap $fiberLogDepth;
+
+    /**
+     * Whether to detect infinite logging loops
+     * This can be disabled via {@see useLoggingLoopDetection} if you have async handlers that do not play well with this
+     */
+    private bool $detectCycles = true;
+
+    /**
+     * @param string             $name       The logging channel, a simple descriptive name that is attached to all log records
+     * @param list&lt;HandlerInterface&gt; $handlers   Optional stack of handlers, the first one in the array is called first, etc.
+     * @param callable[]         $processors Optional array of processors
+     * @param DateTimeZone|null  $timezone   Optional timezone, if not provided date_default_timezone_get() will be used
+     *
+     * @phpstan-param array&lt;(callable(LogRecord): LogRecord)|ProcessorInterface&gt; $processors
+     */
+    <span style="background-color: green">p</span>ublic function __construct(string $name, array $handlers = [], array $processors = [], DateTimeZone|null $timezone = null)
+    {
+        $this-&gt;name = $name;
+        $this-&gt;setHandlers($handlers);
+        $this-&gt;processors = $processors;
+        $this-&gt;timezone = $timezone ?? <span style="background-color: green">n</span>ew DateTimeZone(date_default_timezone_get());
+        $this-&gt;fiberLogDepth = new \WeakMap();
+    }
+
+    <span style="background-color: red">p</span>ublic function getName(): string
+    {
+        return $this-&gt;name;
+    }
+
+    /**
+     * Return a new cloned instance with the name changed
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function withName(string $name): self
+    {
+        $new = clone $this;
+        $new-&gt;name = $name;
+
+        return $new;
+    }
+
+    /**
+     * Pushes a handler on to the stack.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function pushHandler(HandlerInterface $handler): self
+    {
+        array_unshift($this-&gt;handlers, $handler);
+
+        return $this;
+    }
+
+    /**
+     * Pops a handler from the stack
+     *
+     * @throws \LogicException If empty handler stack
+     */
+    <span style="background-color: red">p</span>ublic function popHandler(): HandlerInterface
+    {
+        <span style="background-color: red">i</span>f (0 === \count($this-&gt;handlers)) {
+            throw new \LogicException(&#039;You tried to pop from an empty handler stack.&#039;);
+        <span style="background-color: red">}</span>
+
+        return array_shift($this-&gt;handlers);
+    }
+
+    /**
+     * Set handlers, replacing all existing ones.
+     *
+     * If a map is passed, keys will be ignored.
+     *
+     * @param  list&lt;HandlerInterface&gt; $handlers
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setHandlers(array $handlers): self
+    {
+        $this-&gt;handlers = [];
+        <span style="background-color: green">f</span>oreach (array_reverse($handlers) as $handler) {
+            $this-&gt;pushHandler($handler);
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+
+    /**
+     * @return list&lt;HandlerInterface&gt;
+     */
+    <span style="background-color: green">p</span>ublic function getHandlers(): array
+    {
+        return $this-&gt;handlers;
+    }
+
+    /**
+     * Adds a processor on to the stack.
+     *
+     * @phpstan-param ProcessorInterface|(callable(LogRecord): LogRecord) $callback
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function pushProcessor(ProcessorInterface|callable $callback): self
+    {
+        array_unshift($this-&gt;processors, $callback);
+
+        return $this;
+    }
+
+    /**
+     * Removes the processor on top of the stack and returns it.
+     *
+     * @phpstan-return ProcessorInterface|(callable(LogRecord): LogRecord)
+     * @throws \LogicException If empty processor stack
+     */
+    <span style="background-color: red">p</span>ublic function popProcessor(): callable
+    {
+        <span style="background-color: red">i</span>f (0 === \count($this-&gt;processors)) {
+            throw new \LogicException(&#039;You tried to pop from an empty processor stack.&#039;);
+        <span style="background-color: red">}</span>
+
+        return array_shift($this-&gt;processors);
+    }
+
+    /**
+     * @return callable[]
+     * @phpstan-return array&lt;ProcessorInterface|(callable(LogRecord): LogRecord)&gt;
+     */
+    <span style="background-color: green">p</span>ublic function getProcessors(): array
+    {
+        return $this-&gt;processors;
+    }
+
+    /**
+     * Control the use of microsecond resolution timestamps in the &#039;datetime&#039;
+     * member of new records.
+     *
+     * As of PHP7.1 microseconds are always included by the engine, so
+     * there is no performance penalty and Monolog 2 enabled microseconds
+     * by default. This function lets you disable them though in case you want
+     * to suppress microseconds from the output.
+     *
+     * @param  bool  $micro True to use microtime() to create timestamps
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function useMicrosecondTimestamps(bool $micro): self
+    {
+        $this-&gt;microsecondTimestamps = $micro;
+
+        return $this;
+    }
+
+    /**
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function useLoggingLoopDetection(bool $detectCycles): self
+    {
+        $this-&gt;detectCycles = $detectCycles;
+
+        return $this;
+    }
+
+    /**
+     * Adds a log record.
+     *
+     * @param  int                    $level    The logging level (a Monolog or RFC 5424 level)
+     * @param  string                 $message  The log message
+     * @param  mixed[]                $context  The log context
+     * @param  JsonSerializableDateTimeImmutable|null $datetime Optional log date to log into the past or future
+     *
+     * @return bool                   Whether the record has been processed
+     *
+     * @phpstan-param value-of&lt;Level::VALUES&gt;|Level $level
+     */
+    <span style="background-color: green">p</span>ublic function addRecord(int|Level $level, string $message, array $context = [], JsonSerializableDateTimeImmutable|null $datetime = null): bool
+    {
+        <span style="background-color: red">i</span>f (\is_int($level) &amp;&amp; <span style="background-color: red">i</span>sset(self::RFC_5424_LEVELS[$level])) {
+            $level = self::RFC_5424_LEVELS[$level];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($this-&gt;detectCycles) {
+            <span style="background-color: red">i</span>f (null !== ($fiber = Fiber::getCurrent())) {
+                $logDepth = $this-&gt;fiberLogDepth[$fiber] = ($this-&gt;fiberLogDepth[$fiber] ?? <span style="background-color: red">0</span>) + 1;
+            } <span style="background-color: green">e</span>lse {
+                $logDepth = ++$this-&gt;logDepth;
+            <span style="background-color: green">}</span>
+        } <span style="background-color: red">e</span>lse {
+            $logDepth = 0;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($logDepth === 3) {
+            $this-&gt;warning(&#039;A possible infinite logging loop was detected and aborted. It appears some of your handler code is triggering logging, see the previous log record for a hint as to what may be the cause.&#039;);
+
+            return false;
+        } <span style="background-color: red">e</span>lseif ($logDepth &gt;= 5) { // log depth 4 is let through, so we can log the warning above
+            return false;
+        <span style="background-color: green">}</span>
+
+        try {
+            $recordInitialized = \count($this-&gt;processors) === 0;
+
+            $record = new LogRecord(
+                datetime: $datetime ?? <span style="background-color: green">n</span>ew JsonSerializableDateTimeImmutable($this-&gt;microsecondTimestamps, $this-&gt;timezone),
+                channel: $this-&gt;name,
+                level: self::toMonologLevel($level),
+                message: $message,
+                context: $context,
+                extra: [],
+            );
+            $handled = false;
+
+            <span style="background-color: green">f</span>oreach ($this-&gt;handlers as $handler) {
+                <span style="background-color: green">i</span>f (false === $recordInitialized) {
+                    // skip initializing the record as long as no handler is going to handle it
+                    <span style="background-color: red">i</span>f (!$handler-&gt;isHandling($record)) {
+                        continue;
+                    <span style="background-color: green">}</span>
+
+                    try {
+                        <span style="background-color: green">f</span>oreach ($this-&gt;processors as $processor) {
+                            $record = $processor($record);
+                        <span style="background-color: green">}</span>
+                        $recordInitialized = true;
+                    } <span style="background-color: red">c</span>atch (Throwable $e) {
+                        $this-&gt;handleException($e, $record);
+
+                        return true;
+                    <span style="background-color: green">}</span>
+                <span style="background-color: green">}</span>
+
+                // once the record is initialized, send it to all handlers as long as the bubbling chain is not interrupted
+                try {
+                    $handled = true;
+                    <span style="background-color: red">i</span>f (true === $handler-&gt;handle(clone $record)) {
+                        break;
+                    <span style="background-color: green">}</span>
+                } <span style="background-color: red">c</span>atch (Throwable $e) {
+                    $this-&gt;handleException($e, $record);
+
+                    return true;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            return $handled;
+        } <span style="background-color: green">f</span>inally {
+            <span style="background-color: green">i</span>f ($this-&gt;detectCycles) {
+                <span style="background-color: red">i</span>f (isset($fiber)) {
+                    $this-&gt;fiberLogDepth[$fiber]--;
+                } <span style="background-color: green">e</span>lse {
+                    $this-&gt;logDepth--;
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Ends a log cycle and frees all resources used by handlers.
+     *
+     * Closing a Handler means flushing all buffers and freeing any open resources/handles.
+     * Handlers that have been closed should be able to accept log records again and re-open
+     * themselves on demand, but this may not always be possible depending on implementation.
+     *
+     * This is useful at the end of a request and will be called automatically on every handler
+     * when they get destructed.
+     */
+    <span style="background-color: red">p</span>ublic function close(): void
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;handlers as $handler) {
+            $handler-&gt;close();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Ends a log cycle and resets all handlers and processors to their initial state.
+     *
+     * Resetting a Handler or a Processor means flushing/cleaning all buffers, resetting internal
+     * state, and getting it back to a state in which it can receive log records again.
+     *
+     * This is useful in case you want to avoid logs leaking between two requests or jobs when you
+     * have a long running process like a worker or an application server serving multiple requests
+     * in one process.
+     */
+    <span style="background-color: red">p</span>ublic function reset(): void
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;handlers as $handler) {
+            <span style="background-color: red">i</span>f ($handler instanceof ResettableInterface) {
+                $handler-&gt;reset();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;processors as $processor) {
+            <span style="background-color: red">i</span>f ($processor instanceof ResettableInterface) {
+                $processor-&gt;reset();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Gets the name of the logging level as a string.
+     *
+     * This still returns a string instead of a Level for BC, but new code should not rely on this method.
+     *
+     * @throws \Psr\Log\InvalidArgumentException If level is not defined
+     *
+     * @phpstan-param  value-of&lt;Level::VALUES&gt;|Level $level
+     * @phpstan-return value-of&lt;Level::NAMES&gt;
+     *
+     * @deprecated Since 3.0, use {@see toMonologLevel} or {@see \Monolog\Level-&gt;getName()} instead
+     */
+    <span style="background-color: red">p</span>ublic static function getLevelName(int|Level $level): string
+    {
+        return self::toMonologLevel($level)-&gt;getName();
+    }
+
+    /**
+     * Converts PSR-3 levels to Monolog ones if necessary
+     *
+     * @param  int|string|Level|LogLevel::*      $level Level number (monolog) or name (PSR-3)
+     * @throws \Psr\Log\InvalidArgumentException If level is not defined
+     *
+     * @phpstan-param value-of&lt;Level::VALUES&gt;|value-of&lt;Level::NAMES&gt;|Level|LogLevel::* $level
+     */
+    <span style="background-color: green">p</span>ublic static function toMonologLevel(string|int|Level $level): Level
+    {
+        <span style="background-color: green">i</span>f ($level instanceof Level) {
+            return $level;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_string($level)) {
+            <span style="background-color: red">i</span>f (is_numeric($level)) {
+                $levelEnum = Level::tryFrom((int) $level);
+                <span style="background-color: red">i</span>f ($levelEnum === null) {
+                    throw new InvalidArgumentException(&#039;Level &quot;&#039;.$level.&#039;&quot; is not defined, use one of: &#039;.implode(&#039;, &#039;, Level::NAMES + Level::VALUES));
+                <span style="background-color: red">}</span>
+
+                return $levelEnum;
+            <span style="background-color: red">}</span>
+
+            // Contains first char of all log levels and avoids using strtoupper() which may have
+            // strange results depending on locale (for example, &quot;i&quot; will become &quot;İ&quot; in Turkish locale)
+            $upper = strtr(substr($level, 0, 1), &#039;dinweca&#039;, &#039;DINWECA&#039;) . strtolower(substr($level, 1));
+            <span style="background-color: red">i</span>f (\defined(Level::class.&#039;::&#039;.$upper)) {
+                return \constant(Level::class . &#039;::&#039; . $upper);
+            <span style="background-color: red">}</span>
+
+            throw new InvalidArgumentException(&#039;Level &quot;&#039;.$level.&#039;&quot; is not defined, use one of: &#039;.implode(&#039;, &#039;, Level::NAMES + Level::VALUES));
+        <span style="background-color: red">}</span>
+
+        $levelEnum = Level::tryFrom($level);
+        <span style="background-color: red">i</span>f ($levelEnum === null) {
+            throw new InvalidArgumentException(&#039;Level &quot;&#039;.var_export($level, true).&#039;&quot; is not defined, use one of: &#039;.implode(&#039;, &#039;, Level::NAMES + Level::VALUES));
+        <span style="background-color: red">}</span>
+
+        return $levelEnum;
+    }
+
+    /**
+     * Checks whether the Logger has a handler that listens on the given level
+     *
+     * @phpstan-param value-of&lt;Level::VALUES&gt;|value-of&lt;Level::NAMES&gt;|Level|LogLevel::* $level
+     */
+    <span style="background-color: red">p</span>ublic function isHandling(int|string|Level $level): bool
+    {
+        $record = new LogRecord(
+            datetime: new JsonSerializableDateTimeImmutable($this-&gt;microsecondTimestamps, $this-&gt;timezone),
+            channel: $this-&gt;name,
+            message: &#039;&#039;,
+            level: self::toMonologLevel($level),
+        );
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;handlers as $handler) {
+            <span style="background-color: red">i</span>f ($handler-&gt;isHandling($record)) {
+                return true;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Set a custom exception handler that will be called if adding a new record fails
+     *
+     * The Closure will receive an exception object and the record that failed to be logged
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setExceptionHandler(Closure|null $callback): self
+    {
+        $this-&gt;exceptionHandler = $callback;
+
+        return $this;
+    }
+
+    <span style="background-color: red">p</span>ublic function getExceptionHandler(): Closure|null
+    {
+        return $this-&gt;exceptionHandler;
+    }
+
+    /**
+     * Adds a log record at an arbitrary level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param mixed             $level   The log level (a Monolog, PSR-3 or RFC 5424 level)
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     *
+     * @phpstan-param Level|LogLevel::* $level
+     */
+    <span style="background-color: red">p</span>ublic function log($level, string|\Stringable $message, array $context = []): void
+    {
+        <span style="background-color: red">i</span>f (!$level instanceof Level) {
+            <span style="background-color: red">i</span>f (!\is_string($level) &amp;&amp; <span style="background-color: red">!</span>\is_int($level)) {
+                throw new \InvalidArgumentException(&#039;$level is expected to be a string, int or &#039;.Level::class.&#039; instance&#039;);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset(self::RFC_5424_LEVELS[$level])) {
+                $level = self::RFC_5424_LEVELS[$level];
+            <span style="background-color: red">}</span>
+
+            $level = static::toMonologLevel($level);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;addRecord($level, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the DEBUG level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function debug(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Debug, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the INFO level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function info(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Info, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the NOTICE level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function notice(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Notice, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the WARNING level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function warning(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Warning, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the ERROR level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: green">p</span>ublic function error(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Error, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the CRITICAL level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function critical(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Critical, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the ALERT level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function alert(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Alert, (string) $message, $context);
+    }
+
+    /**
+     * Adds a log record at the EMERGENCY level.
+     *
+     * This method allows for compatibility with common interfaces.
+     *
+     * @param string|Stringable $message The log message
+     * @param mixed[]           $context The log context
+     */
+    <span style="background-color: red">p</span>ublic function emergency(string|\Stringable $message, array $context = []): void
+    {
+        $this-&gt;addRecord(Level::Emergency, (string) $message, $context);
+    }
+
+    /**
+     * Sets the timezone to be used for the timestamp of log records.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setTimezone(DateTimeZone $tz): self
+    {
+        $this-&gt;timezone = $tz;
+
+        return $this;
+    }
+
+    /**
+     * Returns the timezone to be used for the timestamp of log records.
+     */
+    <span style="background-color: red">p</span>ublic function getTimezone(): DateTimeZone
+    {
+        return $this-&gt;timezone;
+    }
+
+    /**
+     * Delegates exception management to the custom exception handler,
+     * or throws the exception if no custom handler is set.
+     */
+    <span style="background-color: red">p</span>rotected function handleException(Throwable $e, LogRecord $record): void
+    {
+        <span style="background-color: red">i</span>f (null === $this-&gt;exceptionHandler) {
+            throw $e;
+        <span style="background-color: red">}</span>
+
+        ($this-&gt;exceptionHandler)($e, $record);
+    }
+
+    /**
+     * @return array&lt;string, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function __serialize(): array
+    {
+        return [
+            &#039;name&#039; =&gt; $this-&gt;name,
+            &#039;handlers&#039; =&gt; $this-&gt;handlers,
+            &#039;processors&#039; =&gt; $this-&gt;processors,
+            &#039;microsecondTimestamps&#039; =&gt; $this-&gt;microsecondTimestamps,
+            &#039;timezone&#039; =&gt; $this-&gt;timezone,
+            &#039;exceptionHandler&#039; =&gt; $this-&gt;exceptionHandler,
+            &#039;logDepth&#039; =&gt; $this-&gt;logDepth,
+            &#039;detectCycles&#039; =&gt; $this-&gt;detectCycles,
+        ];
+    }
+
+    /**
+     * @param array&lt;string, mixed&gt; $data
+     */
+    <span style="background-color: red">p</span>ublic function __unserialize(array $data): void
+    {
+        <span style="background-color: red">f</span>oreach ([&#039;name&#039;, &#039;handlers&#039;, &#039;processors&#039;, &#039;microsecondTimestamps&#039;, &#039;timezone&#039;, &#039;exceptionHandler&#039;, &#039;logDepth&#039;, &#039;detectCycles&#039;] as $property) {
+            <span style="background-color: red">i</span>f (isset($data[$property])) {
+                $this-&gt;$property = $data[$property];
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;fiberLogDepth = new \WeakMap();
+    }
+}
+</pre>

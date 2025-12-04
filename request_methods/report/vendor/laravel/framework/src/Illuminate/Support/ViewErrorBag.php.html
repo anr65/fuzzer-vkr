@@ -1,0 +1,132 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use Countable;
+use Illuminate\Contracts\Support\MessageBag as MessageBagContract;
+use Stringable;
+
+/**
+ * @mixin \Illuminate\Contracts\Support\MessageBag
+ */
+class ViewErrorBag implements Countable, Stringable
+{
+    /**
+     * The array of the view error bags.
+     *
+     * @var array
+     */
+    protected $bags = [];
+
+    /**
+     * Checks if a named MessageBag exists in the bags.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasBag($key = &#039;default&#039;)
+    {
+        return isset($this-&gt;bags[$key]);
+    }
+
+    /**
+     * Get a MessageBag instance from the bags.
+     *
+     * @param  string  $key
+     * @return \Illuminate\Contracts\Support\MessageBag
+     */
+    <span style="background-color: red">p</span>ublic function getBag($key)
+    {
+        return Arr::get($this-&gt;bags, $key) ?: <span style="background-color: red">n</span>ew MessageBag;
+    }
+
+    /**
+     * Get all the bags.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getBags()
+    {
+        return $this-&gt;bags;
+    }
+
+    /**
+     * Add a new MessageBag instance to the bags.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\MessageBag  $bag
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function put($key, MessageBagContract $bag)
+    {
+        $this-&gt;bags[$key] = $bag;
+
+        return $this;
+    }
+
+    /**
+     * Determine if the default message bag has any messages.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function any()
+    {
+        return $this-&gt;count() &gt; 0;
+    }
+
+    /**
+     * Get the number of messages in the default bag.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return $this-&gt;getBag(&#039;default&#039;)-&gt;count();
+    }
+
+    /**
+     * Dynamically call methods on the default bag.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        return $this-&gt;getBag(&#039;default&#039;)-&gt;$method(...$parameters);
+    }
+
+    /**
+     * Dynamically access a view error bag.
+     *
+     * @param  string  $key
+     * @return \Illuminate\Contracts\Support\MessageBag
+     */
+    <span style="background-color: red">p</span>ublic function __get($key)
+    {
+        return $this-&gt;getBag($key);
+    }
+
+    /**
+     * Dynamically set a view error bag.
+     *
+     * @param  string  $key
+     * @param  \Illuminate\Contracts\Support\MessageBag  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function __set($key, $value)
+    {
+        $this-&gt;put($key, $value);
+    }
+
+    /**
+     * Convert the default bag to its string representation.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function __toString()
+    {
+        return (string) $this-&gt;getBag(&#039;default&#039;);
+    }
+}
+</pre>

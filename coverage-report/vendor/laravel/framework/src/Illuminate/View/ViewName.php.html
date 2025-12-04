@@ -1,0 +1,26 @@
+<pre>&lt;?php
+
+namespace Illuminate\View;
+
+class ViewName
+{
+    /**
+     * Normalize the given view name.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    <span style="background-color: green">p</span>ublic static function normalize($name)
+    {
+        $delimiter = ViewFinderInterface::HINT_PATH_DELIMITER;
+
+        <span style="background-color: red">i</span>f (! str_contains($name, $delimiter)) {
+            return str_replace(&#039;/&#039;, &#039;.&#039;, $name);
+        <span style="background-color: green">}</span>
+
+        [$namespace, $name] = explode($delimiter, $name);
+
+        return $namespace.$delimiter.str_replace(&#039;/&#039;, &#039;.&#039;, $name);
+    }
+}
+</pre>

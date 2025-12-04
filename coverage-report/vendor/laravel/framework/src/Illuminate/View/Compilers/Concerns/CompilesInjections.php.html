@@ -1,0 +1,24 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesInjections
+{
+    /**
+     * Compile the inject statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileInject($expression)
+    {
+        $segments = explode(&#039;,&#039;, preg_replace(&quot;/[\(\)]/&quot;, &#039;&#039;, $expression));
+
+        $variable = trim($segments[0], &quot; &#039;\&quot;&quot;);
+
+        $service = trim($segments[1]);
+
+        return &quot;&lt;?php \${$variable} = app({$service}); ?&gt;&quot;;
+    }
+}
+</pre>

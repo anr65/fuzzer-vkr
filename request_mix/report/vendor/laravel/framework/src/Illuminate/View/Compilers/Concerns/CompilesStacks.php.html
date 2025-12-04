@@ -1,0 +1,118 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Illuminate\Support\Str;
+
+trait CompilesStacks
+{
+    /**
+     * Compile the stack statements into the content.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileStack($expression)
+    {
+        return &quot;&lt;?php echo \$__env-&gt;yieldPushContent{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the push statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compilePush($expression)
+    {
+        return &quot;&lt;?php \$__env-&gt;startPush{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the push-once statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compilePushOnce($expression)
+    {
+        $parts = explode(&#039;,&#039;, $this-&gt;stripParentheses($expression), 2);
+
+        [$stack, $id] = [$parts[0], $parts[1] ?? <span style="background-color: red">'</span>&#039;];
+
+        $id = trim($id) ?: <span style="background-color: red">"</span>&#039;&quot;.(string) Str::uuid().&quot;&#039;&quot;;
+
+        return &#039;&lt;?php if (! $__env-&gt;hasRenderedOnce(&#039;.$id.&#039;)): $__env-&gt;markAsRenderedOnce(&#039;.$id.&#039;);
+$__env-&gt;startPush(&#039;.$stack.&#039;); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-push statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndpush()
+    {
+        return &#039;&lt;?php $__env-&gt;stopPush(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-push-once statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndpushOnce()
+    {
+        return &#039;&lt;?php $__env-&gt;stopPush(); endif; ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the prepend statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compilePrepend($expression)
+    {
+        return &quot;&lt;?php \$__env-&gt;startPrepend{$expression}; ?&gt;&quot;;
+    }
+
+    /**
+     * Compile the prepend-once statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compilePrependOnce($expression)
+    {
+        $parts = explode(&#039;,&#039;, $this-&gt;stripParentheses($expression), 2);
+
+        [$stack, $id] = [$parts[0], $parts[1] ?? <span style="background-color: red">'</span>&#039;];
+
+        $id = trim($id) ?: <span style="background-color: red">"</span>&#039;&quot;.(string) Str::uuid().&quot;&#039;&quot;;
+
+        return &#039;&lt;?php if (! $__env-&gt;hasRenderedOnce(&#039;.$id.&#039;)): $__env-&gt;markAsRenderedOnce(&#039;.$id.&#039;);
+$__env-&gt;startPrepend(&#039;.$stack.&#039;); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-prepend statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndprepend()
+    {
+        return &#039;&lt;?php $__env-&gt;stopPrepend(); ?&gt;&#039;;
+    }
+
+    /**
+     * Compile the end-prepend-once statements into valid PHP.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileEndprependOnce()
+    {
+        return &#039;&lt;?php $__env-&gt;stopPrepend(); endif; ?&gt;&#039;;
+    }
+}
+</pre>

@@ -1,0 +1,63 @@
+<pre>&lt;?php declare(strict_types=1);
+
+/*
+ * This file is part of the Monolog package.
+ *
+ * (c) Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Monolog\Handler;
+
+/**
+ * Base Handler class providing basic close() support as well as handleBatch
+ *
+ * @author Jordi Boggiano &lt;j.boggiano@seld.be&gt;
+ */
+abstract class Handler implements HandlerInterface
+{
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: red">p</span>ublic function handleBatch(array $records): void
+    {
+        <span style="background-color: red">f</span>oreach ($records as $record) {
+            $this-&gt;handle($record);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * @inheritDoc
+     */
+    <span style="background-color: red">p</span>ublic function close(): void
+    {
+    }
+
+    <span style="background-color: red">p</span>ublic function __destruct()
+    {
+        try {
+            $this-&gt;close();
+        } <span style="background-color: red">c</span>atch (\Throwable $e) {
+            // do nothing
+        <span style="background-color: red">}</span>
+    }
+
+    <span style="background-color: red">p</span>ublic function __sleep()
+    {
+        $this-&gt;close();
+
+        $reflClass = new \ReflectionClass($this);
+
+        $keys = [];
+        <span style="background-color: red">f</span>oreach ($reflClass-&gt;getProperties() as $reflProp) {
+            <span style="background-color: red">i</span>f (!$reflProp-&gt;isStatic()) {
+                $keys[] = $reflProp-&gt;getName();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $keys;
+    }
+}
+</pre>

@@ -1,0 +1,19 @@
+<pre>&lt;?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+
+return Application::configure(basePath: dirname(__DIR__))
+    -&gt;withRouting(
+        web: __DIR__.&#039;/../routes/web.php&#039;,
+        commands: __DIR__.&#039;/../routes/console.php&#039;,
+        health: &#039;/up&#039;,
+    )
+    -&gt;withMiddleware(<span style="background-color: red">f</span>unction (Middleware $middleware) {
+        //
+    })
+    -&gt;withExceptions(<span style="background-color: red">f</span>unction (Exceptions $exceptions) {
+        //
+    })-&gt;create();
+</pre>

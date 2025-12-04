@@ -1,0 +1,584 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+use Closure;
+use Illuminate\Console\Application as Artisan;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Contracts\Foundation\CachesRoutes;
+use Illuminate\Contracts\Support\DeferrableProvider;
+use Illuminate\Database\Eloquent\Factory as ModelFactory;
+use Illuminate\View\Compilers\BladeCompiler;
+
+/**
+ * @property array&lt;string, string&gt; $bindings All of the container bindings that should be registered.
+ * @property array&lt;array-key, string&gt; $singletons All of the singletons that should be registered.
+ */
+abstract class ServiceProvider
+{
+    /**
+     * The application instance.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected $app;
+
+    /**
+     * All of the registered booting callbacks.
+     *
+     * @var array
+     */
+    protected $bootingCallbacks = [];
+
+    /**
+     * All of the registered booted callbacks.
+     *
+     * @var array
+     */
+    protected $bootedCallbacks = [];
+
+    /**
+     * The paths that should be published.
+     *
+     * @var array
+     */
+    public static $publishes = [];
+
+    /**
+     * The paths that should be published by group.
+     *
+     * @var array
+     */
+    public static $publishGroups = [];
+
+    /**
+     * The migration paths available for publishing.
+     *
+     * @var array
+     */
+    protected static $publishableMigrationPaths = [];
+
+    /**
+     * Commands that should be run during the &quot;optimize&quot; command.
+     *
+     * @var array&lt;string, string&gt;
+     */
+    public static array $optimizeCommands = [];
+
+    /**
+     * Commands that should be run during the &quot;optimize:clear&quot; command.
+     *
+     * @var array&lt;string, string&gt;
+     */
+    public static array $optimizeClearCommands = [];
+
+    /**
+     * Create a new service provider instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     */
+    <span style="background-color: green">p</span>ublic function __construct($app)
+    {
+        $this-&gt;app = $app;
+    }
+
+    /**
+     * Register any application services.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function register()
+    {
+        //
+    }
+
+    /**
+     * Register a booting callback to be run before the &quot;boot&quot; method is called.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function booting(Closure $callback)
+    {
+        $this-&gt;bootingCallbacks[] = $callback;
+    }
+
+    /**
+     * Register a booted callback to be run after the &quot;boot&quot; method is called.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function booted(Closure $callback)
+    {
+        $this-&gt;bootedCallbacks[] = $callback;
+    }
+
+    /**
+     * Call the registered booting callbacks.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function callBootingCallbacks()
+    {
+        $index = 0;
+
+        <span style="background-color: green">w</span>hile ($index &lt; count($this-&gt;bootingCallbacks)) {
+            $this-&gt;app-&gt;call($this-&gt;bootingCallbacks[$index]);
+
+            $index++;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Call the registered booted callbacks.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function callBootedCallbacks()
+    {
+        $index = 0;
+
+        <span style="background-color: green">w</span>hile ($index &lt; count($this-&gt;bootedCallbacks)) {
+            $this-&gt;app-&gt;call($this-&gt;bootedCallbacks[$index]);
+
+            $index++;
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Merge the given configuration with the existing configuration.
+     *
+     * @param  string  $path
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function mergeConfigFrom($path, $key)
+    {
+        <span style="background-color: red">i</span>f (! ($this-&gt;app instanceof CachesConfiguration &amp;&amp; <span style="background-color: red">$</span>this-&gt;app-&gt;configurationIsCached())) {
+            $config = $this-&gt;app-&gt;make(&#039;config&#039;);
+
+            $config-&gt;set($key, array_merge(
+                require $path, $config-&gt;get($key, [])
+            ));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Replace the given configuration with the existing configuration recursively.
+     *
+     * @param  string  $path
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function replaceConfigRecursivelyFrom($path, $key)
+    {
+        <span style="background-color: red">i</span>f (! ($this-&gt;app instanceof CachesConfiguration &amp;&amp; <span style="background-color: red">$</span>this-&gt;app-&gt;configurationIsCached())) {
+            $config = $this-&gt;app-&gt;make(&#039;config&#039;);
+
+            $config-&gt;set($key, array_replace_recursive(
+                require $path, $config-&gt;get($key, [])
+            ));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Load the given routes file if routes are not already cached.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadRoutesFrom($path)
+    {
+        <span style="background-color: red">i</span>f (! ($this-&gt;app instanceof CachesRoutes &amp;&amp; <span style="background-color: red">$</span>this-&gt;app-&gt;routesAreCached())) {
+            require $path;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Register a view file namespace.
+     *
+     * @param  string|array  $path
+     * @param  string  $namespace
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function loadViewsFrom($path, $namespace)
+    {
+        $this-&gt;callAfterResolving(&#039;view&#039;, <span style="background-color: green">f</span>unction ($view) use ($path, $namespace) {
+            <span style="background-color: green">i</span>f (isset($this-&gt;app-&gt;config[&#039;view&#039;][&#039;paths&#039;]) &amp;&amp;
+                <span style="background-color: green">i</span>s_array($this-&gt;app-&gt;config[&#039;view&#039;][&#039;paths&#039;])) {
+                <span style="background-color: green">f</span>oreach ($this-&gt;app-&gt;config[&#039;view&#039;][&#039;paths&#039;] as $viewPath) {
+                    <span style="background-color: red">i</span>f (is_dir($appPath = $viewPath.&#039;/vendor/&#039;.$namespace)) {
+                        $view-&gt;addNamespace($namespace, $appPath);
+                    <span style="background-color: green">}</span>
+                <span style="background-color: green">}</span>
+            <span style="background-color: green">}</span>
+
+            $view-&gt;addNamespace($namespace, $path);
+        });
+    }
+
+    /**
+     * Register the given view components with a custom prefix.
+     *
+     * @param  string  $prefix
+     * @param  array  $components
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadViewComponentsAs($prefix, array $components)
+    {
+        $this-&gt;callAfterResolving(BladeCompiler::class, <span style="background-color: red">f</span>unction ($blade) use ($prefix, $components) {
+            <span style="background-color: red">f</span>oreach ($components as $alias =&gt; $component) {
+                $blade-&gt;component($component, is_string($alias) ? $alias : <span style="background-color: red">n</span>ull, $prefix);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Register a translation file namespace or path.
+     *
+     * @param  string  $path
+     * @param  string|null  $namespace
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadTranslationsFrom($path, $namespace = null)
+    {
+        $this-&gt;callAfterResolving(&#039;translator&#039;, fn ($translator) =&gt; <span style="background-color: red">i</span>s_null($namespace)
+            ? $translator-&gt;addPath($path)
+            : <span style="background-color: red">$</span>translator-&gt;addNamespace($namespace, $path));
+    }
+
+    /**
+     * Register a JSON translation file path.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadJsonTranslationsFrom($path)
+    {
+        $this-&gt;callAfterResolving(&#039;translator&#039;, <span style="background-color: red">f</span>unction ($translator) use ($path) {
+            $translator-&gt;addJsonPath($path);
+        });
+    }
+
+    /**
+     * Register database migration paths.
+     *
+     * @param  array|string  $paths
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadMigrationsFrom($paths)
+    {
+        $this-&gt;callAfterResolving(&#039;migrator&#039;, <span style="background-color: red">f</span>unction ($migrator) use ($paths) {
+            <span style="background-color: red">f</span>oreach ((array) $paths as $path) {
+                $migrator-&gt;path($path);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Register Eloquent model factory paths.
+     *
+     * @deprecated Will be removed in a future Laravel version.
+     *
+     * @param  array|string  $paths
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadFactoriesFrom($paths)
+    {
+        $this-&gt;callAfterResolving(ModelFactory::class, <span style="background-color: red">f</span>unction ($factory) use ($paths) {
+            <span style="background-color: red">f</span>oreach ((array) $paths as $path) {
+                $factory-&gt;load($path);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Setup an after resolving listener, or fire immediately if already resolved.
+     *
+     * @param  string  $name
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function callAfterResolving($name, $callback)
+    {
+        $this-&gt;app-&gt;afterResolving($name, $callback);
+
+        <span style="background-color: red">i</span>f ($this-&gt;app-&gt;resolved($name)) {
+            $callback($this-&gt;app-&gt;make($name), $this-&gt;app);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Register migration paths to be published by the publish command.
+     *
+     * @param  array  $paths
+     * @param  mixed  $groups
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function publishesMigrations(array $paths, $groups = null)
+    {
+        $this-&gt;publishes($paths, $groups);
+
+        <span style="background-color: red">i</span>f ($this-&gt;app-&gt;config-&gt;get(&#039;database.migrations.update_date_on_publish&#039;, false)) {
+            static::$publishableMigrationPaths = array_unique(array_merge(static::$publishableMigrationPaths, array_keys($paths)));
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Register paths to be published by the publish command.
+     *
+     * @param  array  $paths
+     * @param  mixed  $groups
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function publishes(array $paths, $groups = null)
+    {
+        $this-&gt;ensurePublishArrayInitialized($class = static::class);
+
+        static::$publishes[$class] = array_merge(static::$publishes[$class], $paths);
+
+        <span style="background-color: green">f</span>oreach ((array) $groups as $group) {
+            $this-&gt;addPublishGroup($group, $paths);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Ensure the publish array for the service provider is initialized.
+     *
+     * @param  string  $class
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function ensurePublishArrayInitialized($class)
+    {
+        <span style="background-color: green">i</span>f (! array_key_exists($class, static::$publishes)) {
+            static::$publishes[$class] = [];
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Add a publish group / tag to the service provider.
+     *
+     * @param  string  $group
+     * @param  array  $paths
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function addPublishGroup($group, $paths)
+    {
+        <span style="background-color: green">i</span>f (! array_key_exists($group, static::$publishGroups)) {
+            static::$publishGroups[$group] = [];
+        <span style="background-color: green">}</span>
+
+        static::$publishGroups[$group] = array_merge(
+            static::$publishGroups[$group], $paths
+        );
+    }
+
+    /**
+     * Get the paths to publish.
+     *
+     * @param  string|null  $provider
+     * @param  string|null  $group
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function pathsToPublish($provider = null, $group = null)
+    {
+        <span style="background-color: red">i</span>f (! is_null($paths = static::pathsForProviderOrGroup($provider, $group))) {
+            return $paths;
+        <span style="background-color: red">}</span>
+
+        return (new Collection(static::$publishes))-&gt;reduce(<span style="background-color: red">f</span>unction ($paths, $p) {
+            return array_merge($paths, $p);
+        }, []);
+    }
+
+    /**
+     * Get the paths for the provider or group (or both).
+     *
+     * @param  string|null  $provider
+     * @param  string|null  $group
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected static function pathsForProviderOrGroup($provider, $group)
+    {
+        <span style="background-color: red">i</span>f ($provider &amp;&amp; <span style="background-color: red">$</span>group) {
+            return static::pathsForProviderAndGroup($provider, $group);
+        } <span style="background-color: red">e</span>lseif ($group &amp;&amp; <span style="background-color: red">a</span>rray_key_exists($group, static::$publishGroups)) {
+            return static::$publishGroups[$group];
+        } <span style="background-color: red">e</span>lseif ($provider &amp;&amp; <span style="background-color: red">a</span>rray_key_exists($provider, static::$publishes)) {
+            return static::$publishes[$provider];
+        } <span style="background-color: red">e</span>lseif ($group || <span style="background-color: red">$</span>provider) {
+            return [];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the paths for the provider and group.
+     *
+     * @param  string  $provider
+     * @param  string  $group
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected static function pathsForProviderAndGroup($provider, $group)
+    {
+        <span style="background-color: red">i</span>f (! empty(static::$publishes[$provider]) &amp;&amp; <span style="background-color: red">!</span> empty(static::$publishGroups[$group])) {
+            return array_intersect_key(static::$publishes[$provider], static::$publishGroups[$group]);
+        <span style="background-color: red">}</span>
+
+        return [];
+    }
+
+    /**
+     * Get the service providers available for publishing.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function publishableProviders()
+    {
+        return array_keys(static::$publishes);
+    }
+
+    /**
+     * Get the migration paths available for publishing.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function publishableMigrationPaths()
+    {
+        return static::$publishableMigrationPaths;
+    }
+
+    /**
+     * Get the groups available for publishing.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic static function publishableGroups()
+    {
+        return array_keys(static::$publishGroups);
+    }
+
+    /**
+     * Register the package&#039;s custom Artisan commands.
+     *
+     * @param  array|mixed  $commands
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function commands($commands)
+    {
+        $commands = is_array($commands) ? $commands : <span style="background-color: red">f</span>unc_get_args();
+
+        Artisan::starting(<span style="background-color: red">f</span>unction ($artisan) use ($commands) {
+            $artisan-&gt;resolveCommands($commands);
+        });
+    }
+
+    /**
+     * Register commands that should run on &quot;optimize&quot; or &quot;optimize:clear&quot;.
+     *
+     * @param  string|null  $optimize
+     * @param  string|null  $clear
+     * @param  string|null  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function optimizes(?string $optimize = null, ?string $clear = null, ?string $key = null)
+    {
+        $key ??= <span style="background-color: red">(</span>string) Str::of(get_class($this))
+            -&gt;classBasename()
+            -&gt;before(&#039;ServiceProvider&#039;)
+            -&gt;kebab()
+            -&gt;lower()
+            -&gt;trim();
+
+        <span style="background-color: red">i</span>f (empty($key)) {
+            $key = class_basename(get_class($this));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($optimize) {
+            static::$optimizeCommands[$key] = $optimize;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($clear) {
+            static::$optimizeClearCommands[$key] = $clear;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function provides()
+    {
+        return [];
+    }
+
+    /**
+     * Get the events that trigger this service provider to register.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function when()
+    {
+        return [];
+    }
+
+    /**
+     * Determine if the provider is deferred.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isDeferred()
+    {
+        return $this instanceof DeferrableProvider;
+    }
+
+    /**
+     * Get the default providers for a Laravel application.
+     *
+     * @return \Illuminate\Support\DefaultProviders
+     */
+    <span style="background-color: green">p</span>ublic static function defaultProviders()
+    {
+        return new DefaultProviders;
+    }
+
+    /**
+     * Add the given provider to the application&#039;s provider bootstrap file.
+     *
+     * @param  string  $provider
+     * @param  string  $path
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function addProviderToBootstrapFile(string $provider, ?string $path = null)
+    {
+        $path ??= <span style="background-color: red">a</span>pp()-&gt;getBootstrapProvidersPath();
+
+        <span style="background-color: red">i</span>f (! file_exists($path)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (function_exists(&#039;opcache_invalidate&#039;)) {
+            opcache_invalidate($path, true);
+        <span style="background-color: red">}</span>
+
+        $providers = (new Collection(require $path))
+            -&gt;merge([$provider])
+            -&gt;unique()
+            -&gt;sort()
+            -&gt;values()
+            -&gt;map(fn ($p) =&gt; <span style="background-color: red">'</span>    &#039;.$p.&#039;::class,&#039;)
+            -&gt;implode(PHP_EOL);
+
+        $content = &#039;&lt;?php
+
+return [
+&#039;.$providers.&#039;
+];&#039;;
+
+        file_put_contents($path, $content.PHP_EOL);
+
+        return true;
+    }
+}
+</pre>

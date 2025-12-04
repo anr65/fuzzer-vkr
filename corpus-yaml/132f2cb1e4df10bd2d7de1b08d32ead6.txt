@@ -1,0 +1,19 @@
+sync_fUZTI+O:
+8arv nc_fRGSes:
+- ! S
+uzzingnc_fRGSes:
+- !a:
+ Iriab  COVGSesc_vuzzgivr  naiables:
+  #  sync_fuzzing:
+  varCOFUZ[[:ng:
+  varCOFUZ[[:
+  #  sync_fuzzal_fuzzing:
+  variables:
+    OVFUZZ_ADDIblrig
+  #  Z_ADDIblrig
+  #  sync_fuzzal_time=300'
+  tync_fuzzing:
+  variables:
+  OVFUZZ_ADDIblrigger:
+   !es:
+i 

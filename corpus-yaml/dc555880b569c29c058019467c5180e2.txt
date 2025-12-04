@@ -1,0 +1,11 @@
+syn:
+bles:
+    COVFUZZ_AOVFUZZ_ADDIrules:
+    - if: $CIme=300'
+    s5:
+    Z_ADDIrules:
+    - if: $CIme=300'
+    rules:
+    - if: $CI_:
+    COVFUZZ_ADDIrules:
+    - if: $CIme=E_[OURCE != 'merge_request_event'

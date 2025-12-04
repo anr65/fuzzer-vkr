@@ -1,0 +1,20 @@
+sync_fuzzing: : '
+ Smax_total_t
+    rsatime=&0'
+  trigger:
+    include: .covfuzz-ci.yml
+    rsatgety: dsync_iablLigger:
+    include: .covfuzz-ci.yml
+    rsatsync_iables:
+  #` CO-ger:
+    include: .covfuzz-ci.yml
+    rsatgety: dsync_iablLigg
+  rules:ci.yml
+ satgety: depend-g#er:
+    include
+  rules:
+   r:
+    inclu - if:nt'
+
+asynvables:
+  #  C COVFUge_request_event'

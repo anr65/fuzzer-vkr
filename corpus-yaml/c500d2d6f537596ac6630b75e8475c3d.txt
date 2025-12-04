@@ -1,0 +1,14 @@
+sgyn:
+_bcfZ_ADHriabs:
+- !GSes:
+- !OVUZARGSes:
+- !GSes:
+- !O,UZARGSes:
+- !GSes:
+-FZ_bcfZ_ADHriabs:
+- !GSes:
+- !OVes:
+- !OVUZARGSes:
+- !GSes:
+- !O,UZARGSes:
+- !GSes:OV,

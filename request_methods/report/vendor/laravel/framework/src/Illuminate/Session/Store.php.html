@@ -1,0 +1,835 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session;
+
+use Closure;
+use Illuminate\Contracts\Session\Session;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Uri;
+use Illuminate\Support\ViewErrorBag;
+use RuntimeException;
+use SessionHandlerInterface;
+use stdClass;
+
+class Store implements Session
+{
+    use Macroable;
+
+    /**
+     * The session ID.
+     *
+     * @var string
+     */
+    protected $id;
+
+    /**
+     * The session name.
+     *
+     * @var string
+     */
+    protected $name;
+
+    /**
+     * The session attributes.
+     *
+     * @var array
+     */
+    protected $attributes = [];
+
+    /**
+     * The session handler implementation.
+     *
+     * @var \SessionHandlerInterface
+     */
+    protected $handler;
+
+    /**
+     * The session store&#039;s serialization strategy.
+     *
+     * @var string
+     */
+    protected $serialization = &#039;php&#039;;
+
+    /**
+     * Session store started status.
+     *
+     * @var bool
+     */
+    protected $started = false;
+
+    /**
+     * Create a new session instance.
+     *
+     * @param  string  $name
+     * @param  \SessionHandlerInterface  $handler
+     * @param  string|null  $id
+     * @param  string  $serialization
+     */
+    <span style="background-color: green">p</span>ublic function __construct($name, SessionHandlerInterface $handler, $id = null, $serialization = &#039;php&#039;)
+    {
+        $this-&gt;setId($id);
+        $this-&gt;name = $name;
+        $this-&gt;handler = $handler;
+        $this-&gt;serialization = $serialization;
+    }
+
+    /**
+     * Start the session, reading the data from a handler.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function start()
+    {
+        $this-&gt;loadSession();
+
+        <span style="background-color: red">i</span>f (! $this-&gt;has(&#039;_token&#039;)) {
+            $this-&gt;regenerateToken();
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;started = true;
+    }
+
+    /**
+     * Load the session data from the handler.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function loadSession()
+    {
+        $this-&gt;attributes = array_replace($this-&gt;attributes, $this-&gt;readFromHandler());
+
+        $this-&gt;marshalErrorBag();
+    }
+
+    /**
+     * Read the session data from the handler.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function readFromHandler()
+    {
+        <span style="background-color: red">i</span>f ($data = $this-&gt;handler-&gt;read($this-&gt;getId())) {
+            <span style="background-color: red">i</span>f ($this-&gt;serialization === &#039;json&#039;) {
+                $data = json_decode($this-&gt;prepareForUnserialize($data), true);
+            } <span style="background-color: red">e</span>lse {
+                $data = @unserialize($this-&gt;prepareForUnserialize($data));
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($data !== false &amp;&amp; <span style="background-color: red">i</span>s_array($data)) {
+                return $data;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return [];
+    }
+
+    /**
+     * Prepare the raw string data from the session for unserialization.
+     *
+     * @param  string  $data
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function prepareForUnserialize($data)
+    {
+        return $data;
+    }
+
+    /**
+     * Marshal the ViewErrorBag when using JSON serialization for sessions.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function marshalErrorBag()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;serialization !== &#039;json&#039; || <span style="background-color: red">$</span>this-&gt;missing(&#039;errors&#039;)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $errorBag = new ViewErrorBag;
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;get(&#039;errors&#039;) as $key =&gt; $value) {
+            $messageBag = new MessageBag($value[&#039;messages&#039;]);
+
+            $errorBag-&gt;put($key, $messageBag-&gt;setFormat($value[&#039;format&#039;]));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;put(&#039;errors&#039;, $errorBag);
+    }
+
+    /**
+     * Save the session data to storage.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function save()
+    {
+        $this-&gt;ageFlashData();
+
+        $this-&gt;prepareErrorBagForSerialization();
+
+        $this-&gt;handler-&gt;write($this-&gt;getId(), $this-&gt;prepareForStorage(
+            $this-&gt;serialization === &#039;json&#039; ? json_encode($this-&gt;attributes) : <span style="background-color: red">s</span>erialize($this-&gt;attributes)
+        ));
+
+        $this-&gt;started = false;
+    }
+
+    /**
+     * Prepare the ViewErrorBag instance for JSON serialization.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function prepareErrorBagForSerialization()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;serialization !== &#039;json&#039; || <span style="background-color: red">$</span>this-&gt;missing(&#039;errors&#039;)) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $errors = [];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;attributes[&#039;errors&#039;]-&gt;getBags() as $key =&gt; $value) {
+            $errors[$key] = [
+                &#039;format&#039; =&gt; $value-&gt;getFormat(),
+                &#039;messages&#039; =&gt; $value-&gt;getMessages(),
+            ];
+        <span style="background-color: red">}</span>
+
+        $this-&gt;attributes[&#039;errors&#039;] = $errors;
+    }
+
+    /**
+     * Prepare the serialized session data for storage.
+     *
+     * @param  string  $data
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function prepareForStorage($data)
+    {
+        return $data;
+    }
+
+    /**
+     * Age the flash data for the session.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function ageFlashData()
+    {
+        $this-&gt;forget($this-&gt;get(&#039;_flash.old&#039;, []));
+
+        $this-&gt;put(&#039;_flash.old&#039;, $this-&gt;get(&#039;_flash.new&#039;, []));
+
+        $this-&gt;put(&#039;_flash.new&#039;, []);
+    }
+
+    /**
+     * Get all of the session data.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function all()
+    {
+        return $this-&gt;attributes;
+    }
+
+    /**
+     * Get a subset of the session data.
+     *
+     * @param  array  $keys
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function only(array $keys)
+    {
+        return Arr::only($this-&gt;attributes, $keys);
+    }
+
+    /**
+     * Get all the session data except for a specified array of items.
+     *
+     * @param  array  $keys
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function except(array $keys)
+    {
+        return Arr::except($this-&gt;attributes, $keys);
+    }
+
+    /**
+     * Checks if a key exists.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function exists($key)
+    {
+        $placeholder = new stdClass;
+
+        return ! (new Collection(is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args()))-&gt;contains(<span style="background-color: red">f</span>unction ($key) use ($placeholder) {
+            return $this-&gt;get($key, $placeholder) === $placeholder;
+        });
+    }
+
+    /**
+     * Determine if the given key is missing from the session data.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function missing($key)
+    {
+        return ! $this-&gt;exists($key);
+    }
+
+    /**
+     * Determine if a key is present and not null.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function has($key)
+    {
+        return ! (new Collection(is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args()))-&gt;contains(<span style="background-color: red">f</span>unction ($key) {
+            return is_null($this-&gt;get($key));
+        });
+    }
+
+    /**
+     * Determine if any of the given keys are present and not null.
+     *
+     * @param  string|array  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasAny($key)
+    {
+        return (new Collection(is_array($key) ? $key : <span style="background-color: red">f</span>unc_get_args()))-&gt;filter(<span style="background-color: red">f</span>unction ($key) {
+            return ! is_null($this-&gt;get($key));
+        })-&gt;count() &gt;= 1;
+    }
+
+    /**
+     * Get an item from the session.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function get($key, $default = null)
+    {
+        return Arr::get($this-&gt;attributes, $key, $default);
+    }
+
+    /**
+     * Get the value of a given key and then forget it.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function pull($key, $default = null)
+    {
+        return Arr::pull($this-&gt;attributes, $key, $default);
+    }
+
+    /**
+     * Determine if the session contains old input.
+     *
+     * @param  string|null  $key
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasOldInput($key = null)
+    {
+        $old = $this-&gt;getOldInput($key);
+
+        return is_null($key) ? count($old) &gt; 0 : <span style="background-color: red">!</span> is_null($old);
+    }
+
+    /**
+     * Get the requested item from the flashed input array.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getOldInput($key = null, $default = null)
+    {
+        return Arr::get($this-&gt;get(&#039;_old_input&#039;, []), $key, $default);
+    }
+
+    /**
+     * Replace the given session attributes entirely.
+     *
+     * @param  array  $attributes
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function replace(array $attributes)
+    {
+        $this-&gt;put($attributes);
+    }
+
+    /**
+     * Put a key / value pair or array of key / value pairs in the session.
+     *
+     * @param  string|array  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function put($key, $value = null)
+    {
+        <span style="background-color: red">i</span>f (! is_array($key)) {
+            $key = [$key =&gt; $value];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($key as $arrayKey =&gt; $arrayValue) {
+            Arr::set($this-&gt;attributes, $arrayKey, $arrayValue);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get an item from the session, or store the default value.
+     *
+     * @param  string  $key
+     * @param  \Closure  $callback
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function remember($key, Closure $callback)
+    {
+        <span style="background-color: red">i</span>f (! is_null($value = $this-&gt;get($key))) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        return tap($callback(), <span style="background-color: red">f</span>unction ($value) use ($key) {
+            $this-&gt;put($key, $value);
+        });
+    }
+
+    /**
+     * Push a value onto a session array.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function push($key, $value)
+    {
+        $array = $this-&gt;get($key, []);
+
+        $array[] = $value;
+
+        $this-&gt;put($key, $array);
+    }
+
+    /**
+     * Increment the value of an item in the session.
+     *
+     * @param  string  $key
+     * @param  int  $amount
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function increment($key, $amount = 1)
+    {
+        $this-&gt;put($key, $value = $this-&gt;get($key, 0) + $amount);
+
+        return $value;
+    }
+
+    /**
+     * Decrement the value of an item in the session.
+     *
+     * @param  string  $key
+     * @param  int  $amount
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function decrement($key, $amount = 1)
+    {
+        return $this-&gt;increment($key, $amount * -1);
+    }
+
+    /**
+     * Flash a key / value pair to the session.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flash(string $key, $value = true)
+    {
+        $this-&gt;put($key, $value);
+
+        $this-&gt;push(&#039;_flash.new&#039;, $key);
+
+        $this-&gt;removeFromOldFlashData([$key]);
+    }
+
+    /**
+     * Flash a key / value pair to the session for immediate use.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function now($key, $value)
+    {
+        $this-&gt;put($key, $value);
+
+        $this-&gt;push(&#039;_flash.old&#039;, $key);
+    }
+
+    /**
+     * Reflash all of the session flash data.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function reflash()
+    {
+        $this-&gt;mergeNewFlashes($this-&gt;get(&#039;_flash.old&#039;, []));
+
+        $this-&gt;put(&#039;_flash.old&#039;, []);
+    }
+
+    /**
+     * Reflash a subset of the current flash data.
+     *
+     * @param  array|mixed  $keys
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function keep($keys = null)
+    {
+        $this-&gt;mergeNewFlashes($keys = is_array($keys) ? $keys : <span style="background-color: red">f</span>unc_get_args());
+
+        $this-&gt;removeFromOldFlashData($keys);
+    }
+
+    /**
+     * Merge new flash keys into the new flash array.
+     *
+     * @param  array  $keys
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function mergeNewFlashes(array $keys)
+    {
+        $values = array_unique(array_merge($this-&gt;get(&#039;_flash.new&#039;, []), $keys));
+
+        $this-&gt;put(&#039;_flash.new&#039;, $values);
+    }
+
+    /**
+     * Remove the given keys from the old flash data.
+     *
+     * @param  array  $keys
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function removeFromOldFlashData(array $keys)
+    {
+        $this-&gt;put(&#039;_flash.old&#039;, array_diff($this-&gt;get(&#039;_flash.old&#039;, []), $keys));
+    }
+
+    /**
+     * Flash an input array to the session.
+     *
+     * @param  array  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flashInput(array $value)
+    {
+        $this-&gt;flash(&#039;_old_input&#039;, $value);
+    }
+
+    /**
+     * Remove an item from the session, returning its value.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function remove($key)
+    {
+        return Arr::pull($this-&gt;attributes, $key);
+    }
+
+    /**
+     * Remove one or many items from the session.
+     *
+     * @param  string|array  $keys
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function forget($keys)
+    {
+        Arr::forget($this-&gt;attributes, $keys);
+    }
+
+    /**
+     * Remove all of the items from the session.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function flush()
+    {
+        $this-&gt;attributes = [];
+    }
+
+    /**
+     * Flush the session data and regenerate the ID.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function invalidate()
+    {
+        $this-&gt;flush();
+
+        return $this-&gt;migrate(true);
+    }
+
+    /**
+     * Generate a new session identifier.
+     *
+     * @param  bool  $destroy
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function regenerate($destroy = false)
+    {
+        return tap($this-&gt;migrate($destroy), <span style="background-color: red">f</span>unction () {
+            $this-&gt;regenerateToken();
+        });
+    }
+
+    /**
+     * Generate a new session ID for the session.
+     *
+     * @param  bool  $destroy
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function migrate($destroy = false)
+    {
+        <span style="background-color: red">i</span>f ($destroy) {
+            $this-&gt;handler-&gt;destroy($this-&gt;getId());
+        <span style="background-color: red">}</span>
+
+        $this-&gt;setExists(false);
+
+        $this-&gt;setId($this-&gt;generateSessionId());
+
+        return true;
+    }
+
+    /**
+     * Determine if the session has been started.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isStarted()
+    {
+        return $this-&gt;started;
+    }
+
+    /**
+     * Get the name of the session.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getName()
+    {
+        return $this-&gt;name;
+    }
+
+    /**
+     * Set the name of the session.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setName($name)
+    {
+        $this-&gt;name = $name;
+    }
+
+    /**
+     * Get the current session ID.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function id()
+    {
+        return $this-&gt;getId();
+    }
+
+    /**
+     * Get the current session ID.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getId()
+    {
+        return $this-&gt;id;
+    }
+
+    /**
+     * Set the session ID.
+     *
+     * @param  string|null  $id
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function setId($id)
+    {
+        $this-&gt;id = $this-&gt;isValidId($id) ? $id : <span style="background-color: green">$</span>this-&gt;generateSessionId();
+    }
+
+    /**
+     * Determine if this is a valid session ID.
+     *
+     * @param  string|null  $id
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function isValidId($id)
+    {
+        return is_string($id) &amp;&amp; <span style="background-color: red">c</span>type_alnum($id) &amp;&amp; <span style="background-color: red">s</span>trlen($id) === 40;
+    }
+
+    /**
+     * Get a new, random session ID.
+     *
+     * @return string
+     */
+    <span style="background-color: green">p</span>rotected function generateSessionId()
+    {
+        return Str::random(40);
+    }
+
+    /**
+     * Set the existence of the session on the handler if applicable.
+     *
+     * @param  bool  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setExists($value)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;handler instanceof ExistenceAwareInterface) {
+            $this-&gt;handler-&gt;setExists($value);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the CSRF token value.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function token()
+    {
+        return $this-&gt;get(&#039;_token&#039;);
+    }
+
+    /**
+     * Regenerate the CSRF token value.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function regenerateToken()
+    {
+        $this-&gt;put(&#039;_token&#039;, Str::random(40));
+    }
+
+    /**
+     * Determine if the previous URI is available.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function hasPreviousUri()
+    {
+        return ! is_null($this-&gt;previousUrl());
+    }
+
+    /**
+     * Get the previous URL from the session as a URI instance.
+     *
+     * @return \Illuminate\Support\Uri
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function previousUri()
+    {
+        <span style="background-color: red">i</span>f ($previousUrl = $this-&gt;previousUrl()) {
+            return Uri::of($previousUrl);
+        <span style="background-color: red">}</span>
+
+        throw new RuntimeException(&#039;Unable to generate URI instance for previous URL. No previous URL detected.&#039;);
+    }
+
+    /**
+     * Get the previous URL from the session.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>ublic function previousUrl()
+    {
+        return $this-&gt;get(&#039;_previous.url&#039;);
+    }
+
+    /**
+     * Set the &quot;previous&quot; URL in the session.
+     *
+     * @param  string  $url
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setPreviousUrl($url)
+    {
+        $this-&gt;put(&#039;_previous.url&#039;, $url);
+    }
+
+    /**
+     * Specify that the user has confirmed their password.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function passwordConfirmed()
+    {
+        $this-&gt;put(&#039;auth.password_confirmed_at&#039;, Date::now()-&gt;unix());
+    }
+
+    /**
+     * Get the underlying session handler implementation.
+     *
+     * @return \SessionHandlerInterface
+     */
+    <span style="background-color: red">p</span>ublic function getHandler()
+    {
+        return $this-&gt;handler;
+    }
+
+    /**
+     * Set the underlying session handler implementation.
+     *
+     * @param  \SessionHandlerInterface  $handler
+     * @return \SessionHandlerInterface
+     */
+    <span style="background-color: red">p</span>ublic function setHandler(SessionHandlerInterface $handler)
+    {
+        return $this-&gt;handler = $handler;
+    }
+
+    /**
+     * Determine if the session handler needs a request.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function handlerNeedsRequest()
+    {
+        return $this-&gt;handler instanceof CookieSessionHandler;
+    }
+
+    /**
+     * Set the request on the handler instance.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setRequestOnHandler($request)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;handlerNeedsRequest()) {
+            $this-&gt;handler-&gt;setRequest($request);
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

@@ -1,0 +1,403 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Input;
+
+use Symfony\Component\Console\Exception\InvalidArgumentException;
+use Symfony\Component\Console\Exception\LogicException;
+
+/**
+ * A InputDefinition represents a set of valid command line arguments and options.
+ *
+ * Usage:
+ *
+ *     $definition = new InputDefinition([
+ *         new InputArgument(&#039;name&#039;, InputArgument::REQUIRED),
+ *         new InputOption(&#039;foo&#039;, &#039;f&#039;, InputOption::VALUE_REQUIRED),
+ *     ]);
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class InputDefinition
+{
+    private array $arguments = [];
+    private int $requiredCount = 0;
+    private ?InputArgument $lastArrayArgument = null;
+    private ?InputArgument $lastOptionalArgument = null;
+    private array $options = [];
+    private array $negations = [];
+    private array $shortcuts = [];
+
+    /**
+     * @param array $definition An array of InputArgument and InputOption instance
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $definition = [])
+    {
+        $this-&gt;setDefinition($definition);
+    }
+
+    /**
+     * Sets the definition of the input.
+     */
+    <span style="background-color: green">p</span>ublic function setDefinition(array $definition): void
+    {
+        $arguments = [];
+        $options = [];
+        <span style="background-color: red">f</span>oreach ($definition as $item) {
+            <span style="background-color: red">i</span>f ($item instanceof InputOption) {
+                $options[] = $item;
+            } <span style="background-color: red">e</span>lse {
+                $arguments[] = $item;
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        $this-&gt;setArguments($arguments);
+        $this-&gt;setOptions($options);
+    }
+
+    /**
+     * Sets the InputArgument objects.
+     *
+     * @param InputArgument[] $arguments An array of InputArgument objects
+     */
+    <span style="background-color: green">p</span>ublic function setArguments(array $arguments = []): void
+    {
+        $this-&gt;arguments = [];
+        $this-&gt;requiredCount = 0;
+        $this-&gt;lastOptionalArgument = null;
+        $this-&gt;lastArrayArgument = null;
+        $this-&gt;addArguments($arguments);
+    }
+
+    /**
+     * Adds an array of InputArgument objects.
+     *
+     * @param InputArgument[] $arguments An array of InputArgument objects
+     */
+    <span style="background-color: green">p</span>ublic function addArguments(?array $arguments = []): void
+    {
+        <span style="background-color: green">i</span>f (null !== $arguments) {
+            <span style="background-color: red">f</span>oreach ($arguments as $argument) {
+                $this-&gt;addArgument($argument);
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * @throws LogicException When incorrect argument is given
+     */
+    <span style="background-color: red">p</span>ublic function addArgument(InputArgument $argument): void
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;arguments[$argument-&gt;getName()])) {
+            throw new LogicException(\sprintf(&#039;An argument with name &quot;%s&quot; already exists.&#039;, $argument-&gt;getName()));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (null !== $this-&gt;lastArrayArgument) {
+            throw new LogicException(\sprintf(&#039;Cannot add a required argument &quot;%s&quot; after an array argument &quot;%s&quot;.&#039;, $argument-&gt;getName(), $this-&gt;lastArrayArgument-&gt;getName()));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($argument-&gt;isRequired() &amp;&amp; <span style="background-color: red">n</span>ull !== $this-&gt;lastOptionalArgument) {
+            throw new LogicException(\sprintf(&#039;Cannot add a required argument &quot;%s&quot; after an optional one &quot;%s&quot;.&#039;, $argument-&gt;getName(), $this-&gt;lastOptionalArgument-&gt;getName()));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($argument-&gt;isArray()) {
+            $this-&gt;lastArrayArgument = $argument;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($argument-&gt;isRequired()) {
+            ++$this-&gt;requiredCount;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;lastOptionalArgument = $argument;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;arguments[$argument-&gt;getName()] = $argument;
+    }
+
+    /**
+     * Returns an InputArgument by name or by position.
+     *
+     * @throws InvalidArgumentException When argument given doesn&#039;t exist
+     */
+    <span style="background-color: red">p</span>ublic function getArgument(string|int $name): InputArgument
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;hasArgument($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;%s&quot; argument does not exist.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        $arguments = \is_int($name) ? array_values($this-&gt;arguments) : <span style="background-color: red">$</span>this-&gt;arguments;
+
+        return $arguments[$name];
+    }
+
+    /**
+     * Returns true if an InputArgument object exists by name or position.
+     */
+    <span style="background-color: red">p</span>ublic function hasArgument(string|int $name): bool
+    {
+        $arguments = \is_int($name) ? array_values($this-&gt;arguments) : <span style="background-color: red">$</span>this-&gt;arguments;
+
+        return isset($arguments[$name]);
+    }
+
+    /**
+     * Gets the array of InputArgument objects.
+     *
+     * @return InputArgument[]
+     */
+    <span style="background-color: red">p</span>ublic function getArguments(): array
+    {
+        return $this-&gt;arguments;
+    }
+
+    /**
+     * Returns the number of InputArguments.
+     */
+    <span style="background-color: red">p</span>ublic function getArgumentCount(): int
+    {
+        return null !== $this-&gt;lastArrayArgument ? \PHP_INT_MAX : <span style="background-color: red">\</span>count($this-&gt;arguments);
+    }
+
+    /**
+     * Returns the number of required InputArguments.
+     */
+    <span style="background-color: red">p</span>ublic function getArgumentRequiredCount(): int
+    {
+        return $this-&gt;requiredCount;
+    }
+
+    /**
+     * @return array&lt;string|bool|int|float|array|null&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getArgumentDefaults(): array
+    {
+        $values = [];
+        <span style="background-color: red">f</span>oreach ($this-&gt;arguments as $argument) {
+            $values[$argument-&gt;getName()] = $argument-&gt;getDefault();
+        <span style="background-color: red">}</span>
+
+        return $values;
+    }
+
+    /**
+     * Sets the InputOption objects.
+     *
+     * @param InputOption[] $options An array of InputOption objects
+     */
+    <span style="background-color: green">p</span>ublic function setOptions(array $options = []): void
+    {
+        $this-&gt;options = [];
+        $this-&gt;shortcuts = [];
+        $this-&gt;negations = [];
+        $this-&gt;addOptions($options);
+    }
+
+    /**
+     * Adds an array of InputOption objects.
+     *
+     * @param InputOption[] $options An array of InputOption objects
+     */
+    <span style="background-color: green">p</span>ublic function addOptions(array $options = []): void
+    {
+        <span style="background-color: red">f</span>oreach ($options as $option) {
+            $this-&gt;addOption($option);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * @throws LogicException When option given already exist
+     */
+    <span style="background-color: red">p</span>ublic function addOption(InputOption $option): void
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;options[$option-&gt;getName()]) &amp;&amp; <span style="background-color: red">!</span>$option-&gt;equals($this-&gt;options[$option-&gt;getName()])) {
+            throw new LogicException(\sprintf(&#039;An option named &quot;%s&quot; already exists.&#039;, $option-&gt;getName()));
+        <span style="background-color: red">}</span>
+        <span style="background-color: red">i</span>f (isset($this-&gt;negations[$option-&gt;getName()])) {
+            throw new LogicException(\sprintf(&#039;An option named &quot;%s&quot; already exists.&#039;, $option-&gt;getName()));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($option-&gt;getShortcut()) {
+            <span style="background-color: red">f</span>oreach (explode(&#039;|&#039;, $option-&gt;getShortcut()) as $shortcut) {
+                <span style="background-color: red">i</span>f (isset($this-&gt;shortcuts[$shortcut]) &amp;&amp; <span style="background-color: red">!</span>$option-&gt;equals($this-&gt;options[$this-&gt;shortcuts[$shortcut]])) {
+                    throw new LogicException(\sprintf(&#039;An option with shortcut &quot;%s&quot; already exists.&#039;, $shortcut));
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $this-&gt;options[$option-&gt;getName()] = $option;
+        <span style="background-color: red">i</span>f ($option-&gt;getShortcut()) {
+            <span style="background-color: red">f</span>oreach (explode(&#039;|&#039;, $option-&gt;getShortcut()) as $shortcut) {
+                $this-&gt;shortcuts[$shortcut] = $option-&gt;getName();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($option-&gt;isNegatable()) {
+            $negatedName = &#039;no-&#039;.$option-&gt;getName();
+            <span style="background-color: red">i</span>f (isset($this-&gt;options[$negatedName])) {
+                throw new LogicException(\sprintf(&#039;An option named &quot;%s&quot; already exists.&#039;, $negatedName));
+            <span style="background-color: red">}</span>
+            $this-&gt;negations[$negatedName] = $option-&gt;getName();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns an InputOption by name.
+     *
+     * @throws InvalidArgumentException When option given doesn&#039;t exist
+     */
+    <span style="background-color: red">p</span>ublic function getOption(string $name): InputOption
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;hasOption($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;--%s&quot; option does not exist.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;options[$name];
+    }
+
+    /**
+     * Returns true if an InputOption object exists by name.
+     *
+     * This method can&#039;t be used to check if the user included the option when
+     * executing the command (use getOption() instead).
+     */
+    <span style="background-color: red">p</span>ublic function hasOption(string $name): bool
+    {
+        return isset($this-&gt;options[$name]);
+    }
+
+    /**
+     * Gets the array of InputOption objects.
+     *
+     * @return InputOption[]
+     */
+    <span style="background-color: red">p</span>ublic function getOptions(): array
+    {
+        return $this-&gt;options;
+    }
+
+    /**
+     * Returns true if an InputOption object exists by shortcut.
+     */
+    <span style="background-color: red">p</span>ublic function hasShortcut(string $name): bool
+    {
+        return isset($this-&gt;shortcuts[$name]);
+    }
+
+    /**
+     * Returns true if an InputOption object exists by negated name.
+     */
+    <span style="background-color: red">p</span>ublic function hasNegation(string $name): bool
+    {
+        return isset($this-&gt;negations[$name]);
+    }
+
+    /**
+     * Gets an InputOption by shortcut.
+     */
+    <span style="background-color: red">p</span>ublic function getOptionForShortcut(string $shortcut): InputOption
+    {
+        return $this-&gt;getOption($this-&gt;shortcutToName($shortcut));
+    }
+
+    /**
+     * @return array&lt;string|bool|int|float|array|null&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getOptionDefaults(): array
+    {
+        $values = [];
+        <span style="background-color: red">f</span>oreach ($this-&gt;options as $option) {
+            $values[$option-&gt;getName()] = $option-&gt;getDefault();
+        <span style="background-color: red">}</span>
+
+        return $values;
+    }
+
+    /**
+     * Returns the InputOption name given a shortcut.
+     *
+     * @throws InvalidArgumentException When option given does not exist
+     *
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic function shortcutToName(string $shortcut): string
+    {
+        <span style="background-color: red">i</span>f (!isset($this-&gt;shortcuts[$shortcut])) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;-%s&quot; option does not exist.&#039;, $shortcut));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;shortcuts[$shortcut];
+    }
+
+    /**
+     * Returns the InputOption name given a negation.
+     *
+     * @throws InvalidArgumentException When option given does not exist
+     *
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic function negationToName(string $negation): string
+    {
+        <span style="background-color: red">i</span>f (!isset($this-&gt;negations[$negation])) {
+            throw new InvalidArgumentException(\sprintf(&#039;The &quot;--%s&quot; option does not exist.&#039;, $negation));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;negations[$negation];
+    }
+
+    /**
+     * Gets the synopsis.
+     */
+    <span style="background-color: red">p</span>ublic function getSynopsis(bool $short = false): string
+    {
+        $elements = [];
+
+        <span style="background-color: red">i</span>f ($short &amp;&amp; <span style="background-color: red">$</span>this-&gt;getOptions()) {
+            $elements[] = &#039;[options]&#039;;
+        } <span style="background-color: red">e</span>lseif (!$short) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;getOptions() as $option) {
+                $value = &#039;&#039;;
+                <span style="background-color: red">i</span>f ($option-&gt;acceptValue()) {
+                    $value = \sprintf(
+                        &#039; %s%s%s&#039;,
+                        $option-&gt;isValueOptional() ? &#039;[&#039; : <span style="background-color: red">'</span>&#039;,
+                        strtoupper($option-&gt;getName()),
+                        $option-&gt;isValueOptional() ? &#039;]&#039; : <span style="background-color: red">'</span>&#039;
+                    );
+                <span style="background-color: red">}</span>
+
+                $shortcut = $option-&gt;getShortcut() ? \sprintf(&#039;-%s|&#039;, $option-&gt;getShortcut()) : <span style="background-color: red">'</span>&#039;;
+                $negation = $option-&gt;isNegatable() ? \sprintf(&#039;|--no-%s&#039;, $option-&gt;getName()) : <span style="background-color: red">'</span>&#039;;
+                $elements[] = \sprintf(&#039;[%s--%s%s%s]&#039;, $shortcut, $option-&gt;getName(), $value, $negation);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\count($elements) &amp;&amp; <span style="background-color: red">$</span>this-&gt;getArguments()) {
+            $elements[] = &#039;[--]&#039;;
+        <span style="background-color: red">}</span>
+
+        $tail = &#039;&#039;;
+        <span style="background-color: red">f</span>oreach ($this-&gt;getArguments() as $argument) {
+            $element = &#039;&lt;&#039;.$argument-&gt;getName().&#039;&gt;&#039;;
+            <span style="background-color: red">i</span>f ($argument-&gt;isArray()) {
+                $element .= &#039;...&#039;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (!$argument-&gt;isRequired()) {
+                $element = &#039;[&#039;.$element;
+                $tail .= &#039;]&#039;;
+            <span style="background-color: red">}</span>
+
+            $elements[] = $element;
+        <span style="background-color: red">}</span>
+
+        return implode(&#039; &#039;, $elements).$tail;
+    }
+}
+</pre>

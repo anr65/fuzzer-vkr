@@ -1,0 +1,300 @@
+<pre>&lt;?php
+
+namespace Illuminate\Routing;
+
+use BackedEnum;
+use BadMethodCallException;
+use Closure;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Reflector;
+use InvalidArgumentException;
+
+/**
+ * @method \Illuminate\Routing\Route any(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\Route delete(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\Route get(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\Route options(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\Route patch(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\Route post(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\Route put(string $uri, \Closure|array|string|null $action = null)
+ * @method \Illuminate\Routing\RouteRegistrar as(string $value)
+ * @method \Illuminate\Routing\RouteRegistrar can(\UnitEnum|string  $ability, array|string $models = [])
+ * @method \Illuminate\Routing\RouteRegistrar controller(string $controller)
+ * @method \Illuminate\Routing\RouteRegistrar domain(\BackedEnum|string $value)
+ * @method \Illuminate\Routing\RouteRegistrar middleware(array|string|null $middleware)
+ * @method \Illuminate\Routing\RouteRegistrar missing(\Closure $missing)
+ * @method \Illuminate\Routing\RouteRegistrar name(\BackedEnum|string $value)
+ * @method \Illuminate\Routing\RouteRegistrar namespace(string|null $value)
+ * @method \Illuminate\Routing\RouteRegistrar prefix(string $prefix)
+ * @method \Illuminate\Routing\RouteRegistrar scopeBindings()
+ * @method \Illuminate\Routing\RouteRegistrar where(array $where)
+ * @method \Illuminate\Routing\RouteRegistrar withoutMiddleware(array|string $middleware)
+ * @method \Illuminate\Routing\RouteRegistrar withoutScopedBindings()
+ */
+class RouteRegistrar
+{
+    use CreatesRegularExpressionRouteConstraints;
+
+    /**
+     * The router instance.
+     *
+     * @var \Illuminate\Routing\Router
+     */
+    protected $router;
+
+    /**
+     * The attributes to pass on to the router.
+     *
+     * @var array
+     */
+    protected $attributes = [];
+
+    /**
+     * The methods to dynamically pass through to the router.
+     *
+     * @var string[]
+     */
+    protected $passthru = [
+        &#039;get&#039;, &#039;post&#039;, &#039;put&#039;, &#039;patch&#039;, &#039;delete&#039;, &#039;options&#039;, &#039;any&#039;,
+    ];
+
+    /**
+     * The attributes that can be set through this class.
+     *
+     * @var string[]
+     */
+    protected $allowedAttributes = [
+        &#039;as&#039;,
+        &#039;can&#039;,
+        &#039;controller&#039;,
+        &#039;domain&#039;,
+        &#039;middleware&#039;,
+        &#039;missing&#039;,
+        &#039;name&#039;,
+        &#039;namespace&#039;,
+        &#039;prefix&#039;,
+        &#039;scopeBindings&#039;,
+        &#039;where&#039;,
+        &#039;withoutMiddleware&#039;,
+        &#039;withoutScopedBindings&#039;,
+    ];
+
+    /**
+     * The attributes that are aliased.
+     *
+     * @var array
+     */
+    protected $aliases = [
+        &#039;name&#039; =&gt; &#039;as&#039;,
+        &#039;scopeBindings&#039; =&gt; &#039;scope_bindings&#039;,
+        &#039;withoutScopedBindings&#039; =&gt; &#039;scope_bindings&#039;,
+        &#039;withoutMiddleware&#039; =&gt; &#039;excluded_middleware&#039;,
+    ];
+
+    /**
+     * Create a new route registrar instance.
+     *
+     * @param  \Illuminate\Routing\Router  $router
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Router $router)
+    {
+        $this-&gt;router = $router;
+    }
+
+    /**
+     * Set the value for a given attribute.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function attribute($key, $value)
+    {
+        <span style="background-color: red">i</span>f (! in_array($key, $this-&gt;allowedAttributes)) {
+            throw new InvalidArgumentException(&quot;Attribute [{$key}] does not exist.&quot;);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f ($key === &#039;middleware&#039;) {
+            <span style="background-color: green">f</span>oreach ($value as $index =&gt; $middleware) {
+                $value[$index] = (string) $middleware;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        $attributeKey = Arr::get($this-&gt;aliases, $key, $key);
+
+        <span style="background-color: red">i</span>f ($key === &#039;withoutMiddleware&#039;) {
+            $value = array_merge(
+                (array) ($this-&gt;attributes[$attributeKey] ?? <span style="background-color: red">[</span>]), Arr::wrap($value)
+            );
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($key === &#039;withoutScopedBindings&#039;) {
+            $value = false;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($value instanceof BackedEnum &amp;&amp; <span style="background-color: red">!</span> is_string($value = $value-&gt;value)) {
+            throw new InvalidArgumentException(&quot;Attribute [{$key}] expects a string backed enum.&quot;);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;attributes[$attributeKey] = $value;
+
+        return $this;
+    }
+
+    /**
+     * Route a resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function resource($name, $controller, array $options = [])
+    {
+        return $this-&gt;router-&gt;resource($name, $controller, $this-&gt;attributes + $options);
+    }
+
+    /**
+     * Route an API resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function apiResource($name, $controller, array $options = [])
+    {
+        return $this-&gt;router-&gt;apiResource($name, $controller, $this-&gt;attributes + $options);
+    }
+
+    /**
+     * Route a singleton resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingSingletonResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function singleton($name, $controller, array $options = [])
+    {
+        return $this-&gt;router-&gt;singleton($name, $controller, $this-&gt;attributes + $options);
+    }
+
+    /**
+     * Route an API singleton resource to a controller.
+     *
+     * @param  string  $name
+     * @param  string  $controller
+     * @param  array  $options
+     * @return \Illuminate\Routing\PendingSingletonResourceRegistration
+     */
+    <span style="background-color: red">p</span>ublic function apiSingleton($name, $controller, array $options = [])
+    {
+        return $this-&gt;router-&gt;apiSingleton($name, $controller, $this-&gt;attributes + $options);
+    }
+
+    /**
+     * Create a route group with shared attributes.
+     *
+     * @param  \Closure|array|string  $callback
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function group($callback)
+    {
+        $this-&gt;router-&gt;group($this-&gt;attributes, $callback);
+
+        return $this;
+    }
+
+    /**
+     * Register a new route with the given verbs.
+     *
+     * @param  array|string  $methods
+     * @param  string  $uri
+     * @param  \Closure|array|string|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>ublic function match($methods, $uri, $action = null)
+    {
+        return $this-&gt;router-&gt;match($methods, $uri, $this-&gt;compileAction($action));
+    }
+
+    /**
+     * Register a new route with the router.
+     *
+     * @param  string  $method
+     * @param  string  $uri
+     * @param  \Closure|array|string|null  $action
+     * @return \Illuminate\Routing\Route
+     */
+    <span style="background-color: red">p</span>rotected function registerRoute($method, $uri, $action = null)
+    {
+        <span style="background-color: red">i</span>f (! is_array($action)) {
+            $action = array_merge($this-&gt;attributes, $action ? [&#039;uses&#039; =&gt; $action] : <span style="background-color: red">[</span>]);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;router-&gt;{$method}($uri, $this-&gt;compileAction($action));
+    }
+
+    /**
+     * Compile the action into an array including the attributes.
+     *
+     * @param  \Closure|array|string|null  $action
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function compileAction($action)
+    {
+        <span style="background-color: red">i</span>f (is_null($action)) {
+            return $this-&gt;attributes;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_string($action) || <span style="background-color: red">$</span>action instanceof Closure) {
+            $action = [&#039;uses&#039; =&gt; $action];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (is_array($action) &amp;&amp;
+            <span style="background-color: red">a</span>rray_is_list($action) &amp;&amp;
+            <span style="background-color: red">R</span>eflector::isCallable($action)) {
+            <span style="background-color: red">i</span>f (strncmp($action[0], &#039;\\&#039;, 1)) {
+                $action[0] = &#039;\\&#039;.$action[0];
+            <span style="background-color: red">}</span>
+            $action = [
+                &#039;uses&#039; =&gt; $action[0].&#039;@&#039;.$action[1],
+                &#039;controller&#039; =&gt; $action[0].&#039;@&#039;.$action[1],
+            ];
+        <span style="background-color: red">}</span>
+
+        return array_merge($this-&gt;attributes, $action);
+    }
+
+    /**
+     * Dynamically handle calls into the route registrar.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return \Illuminate\Routing\Route|$this
+     *
+     * @throws \BadMethodCallException
+     */
+    <span style="background-color: red">p</span>ublic function __call($method, $parameters)
+    {
+        <span style="background-color: red">i</span>f (in_array($method, $this-&gt;passthru)) {
+            return $this-&gt;registerRoute($method, ...$parameters);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (in_array($method, $this-&gt;allowedAttributes)) {
+            <span style="background-color: red">i</span>f ($method === &#039;middleware&#039;) {
+                return $this-&gt;attribute($method, is_array($parameters[0]) ? $parameters[0] : <span style="background-color: red">$</span>parameters);
+            <span style="background-color: red">}</span>
+
+            return $this-&gt;attribute($method, array_key_exists(0, $parameters) ? $parameters[0] : <span style="background-color: red">t</span>rue);
+        <span style="background-color: red">}</span>
+
+        throw new BadMethodCallException(sprintf(
+            &#039;Method %s::%s does not exist.&#039;, static::class, $method
+        ));
+    }
+}
+</pre>

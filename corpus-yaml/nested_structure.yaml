@@ -1,0 +1,13 @@
+app:
+  name: "fuzzer-app"
+  version: "1.2.3"
+  features:
+    - login
+    - upload
+    - export
+  limits:
+    memory: 256
+    cpu: 2
+logging:
+  level: "debug"
+  file: "/var/log/app.log"

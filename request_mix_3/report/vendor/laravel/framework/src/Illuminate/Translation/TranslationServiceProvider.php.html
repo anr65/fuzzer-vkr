@@ -1,0 +1,57 @@
+<pre>&lt;?php
+
+namespace Illuminate\Translation;
+
+use Illuminate\Contracts\Support\DeferrableProvider;
+use Illuminate\Support\ServiceProvider;
+
+class TranslationServiceProvider extends ServiceProvider implements DeferrableProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;registerLoader();
+
+        $this-&gt;app-&gt;singleton(&#039;translator&#039;, <span style="background-color: green">f</span>unction ($app) {
+            $loader = $app[&#039;translation.loader&#039;];
+
+            // When registering the translator component, we&#039;ll need to set the default
+            // locale as well as the fallback locale. So, we&#039;ll grab the application
+            // configuration so we can easily get both of these values from there.
+            $locale = $app-&gt;getLocale();
+
+            $trans = new Translator($loader, $locale);
+
+            $trans-&gt;setFallback($app-&gt;getFallbackLocale());
+
+            return $trans;
+        });
+    }
+
+    /**
+     * Register the translation line loader.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerLoader()
+    {
+        $this-&gt;app-&gt;singleton(&#039;translation.loader&#039;, <span style="background-color: green">f</span>unction ($app) {
+            return new FileLoader($app[&#039;files&#039;], [__DIR__.&#039;/lang&#039;, $app[&#039;path.lang&#039;]]);
+        });
+    }
+
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function provides()
+    {
+        return [&#039;translator&#039;, &#039;translation.loader&#039;];
+    }
+}
+</pre>

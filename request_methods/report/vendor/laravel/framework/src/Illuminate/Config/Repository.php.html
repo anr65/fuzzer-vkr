@@ -1,0 +1,283 @@
+<pre>&lt;?php
+
+namespace Illuminate\Config;
+
+use ArrayAccess;
+use Illuminate\Contracts\Config\Repository as ConfigContract;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+
+class Repository implements ArrayAccess, ConfigContract
+{
+    use Macroable;
+
+    /**
+     * All of the configuration items.
+     *
+     * @var array&lt;string,mixed&gt;
+     */
+    protected $items = [];
+
+    /**
+     * Create a new configuration repository.
+     *
+     * @param  array  $items
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $items = [])
+    {
+        $this-&gt;items = $items;
+    }
+
+    /**
+     * Determine if the given configuration value exists.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function has($key)
+    {
+        return Arr::has($this-&gt;items, $key);
+    }
+
+    /**
+     * Get the specified configuration value.
+     *
+     * @param  array|string  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function get($key, $default = null)
+    {
+        <span style="background-color: red">i</span>f (is_array($key)) {
+            return $this-&gt;getMany($key);
+        <span style="background-color: green">}</span>
+
+        return Arr::get($this-&gt;items, $key, $default);
+    }
+
+    /**
+     * Get many configuration values.
+     *
+     * @param  array&lt;string|int,mixed&gt;  $keys
+     * @return array&lt;string,mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getMany($keys)
+    {
+        $config = [];
+
+        <span style="background-color: red">f</span>oreach ($keys as $key =&gt; $default) {
+            <span style="background-color: red">i</span>f (is_numeric($key)) {
+                [$key, $default] = [$default, null];
+            <span style="background-color: red">}</span>
+
+            $config[$key] = Arr::get($this-&gt;items, $key, $default);
+        <span style="background-color: red">}</span>
+
+        return $config;
+    }
+
+    /**
+     * Get the specified string configuration value.
+     *
+     * @param  string  $key
+     * @param  (\Closure():(string|null))|string|null  $default
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function string(string $key, $default = null): string
+    {
+        $value = $this-&gt;get($key, $default);
+
+        <span style="background-color: red">i</span>f (! is_string($value)) {
+            throw new InvalidArgumentException(
+                sprintf(&#039;Configuration value for key [%s] must be a string, %s given.&#039;, $key, gettype($value))
+            );
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get the specified integer configuration value.
+     *
+     * @param  string  $key
+     * @param  (\Closure():(int|null))|int|null  $default
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function integer(string $key, $default = null): int
+    {
+        $value = $this-&gt;get($key, $default);
+
+        <span style="background-color: red">i</span>f (! is_int($value)) {
+            throw new InvalidArgumentException(
+                sprintf(&#039;Configuration value for key [%s] must be an integer, %s given.&#039;, $key, gettype($value))
+            );
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get the specified float configuration value.
+     *
+     * @param  string  $key
+     * @param  (\Closure():(float|null))|float|null  $default
+     * @return float
+     */
+    <span style="background-color: red">p</span>ublic function float(string $key, $default = null): float
+    {
+        $value = $this-&gt;get($key, $default);
+
+        <span style="background-color: red">i</span>f (! is_float($value)) {
+            throw new InvalidArgumentException(
+                sprintf(&#039;Configuration value for key [%s] must be a float, %s given.&#039;, $key, gettype($value))
+            );
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get the specified boolean configuration value.
+     *
+     * @param  string  $key
+     * @param  (\Closure():(bool|null))|bool|null  $default
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function boolean(string $key, $default = null): bool
+    {
+        $value = $this-&gt;get($key, $default);
+
+        <span style="background-color: red">i</span>f (! is_bool($value)) {
+            throw new InvalidArgumentException(
+                sprintf(&#039;Configuration value for key [%s] must be a boolean, %s given.&#039;, $key, gettype($value))
+            );
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Get the specified array configuration value.
+     *
+     * @param  string  $key
+     * @param  (\Closure():(array&lt;array-key, mixed&gt;|null))|array&lt;array-key, mixed&gt;|null  $default
+     * @return array&lt;array-key, mixed&gt;
+     */
+    <span style="background-color: red">p</span>ublic function array(string $key, $default = null): array
+    {
+        $value = $this-&gt;get($key, $default);
+
+        <span style="background-color: red">i</span>f (! is_array($value)) {
+            throw new InvalidArgumentException(
+                sprintf(&#039;Configuration value for key [%s] must be an array, %s given.&#039;, $key, gettype($value))
+            );
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Set a given configuration value.
+     *
+     * @param  array|string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function set($key, $value = null)
+    {
+        $keys = is_array($key) ? $key : <span style="background-color: green">[</span>$key =&gt; $value];
+
+        <span style="background-color: green">f</span>oreach ($keys as $key =&gt; $value) {
+            Arr::set($this-&gt;items, $key, $value);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Prepend a value onto an array configuration value.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function prepend($key, $value)
+    {
+        $array = $this-&gt;get($key, []);
+
+        array_unshift($array, $value);
+
+        $this-&gt;set($key, $array);
+    }
+
+    /**
+     * Push a value onto an array configuration value.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function push($key, $value)
+    {
+        $array = $this-&gt;get($key, []);
+
+        $array[] = $value;
+
+        $this-&gt;set($key, $array);
+    }
+
+    /**
+     * Get all of the configuration items for the application.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function all()
+    {
+        return $this-&gt;items;
+    }
+
+    /**
+     * Determine if the given configuration option exists.
+     *
+     * @param  string  $key
+     * @return bool
+     */
+    <span style="background-color: green">p</span>ublic function offsetExists($key): bool
+    {
+        return $this-&gt;has($key);
+    }
+
+    /**
+     * Get a configuration option.
+     *
+     * @param  string  $key
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function offsetGet($key): mixed
+    {
+        return $this-&gt;get($key);
+    }
+
+    /**
+     * Set a configuration option.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetSet($key, $value): void
+    {
+        $this-&gt;set($key, $value);
+    }
+
+    /**
+     * Unset a configuration option.
+     *
+     * @param  string  $key
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function offsetUnset($key): void
+    {
+        $this-&gt;set($key, null);
+    }
+}
+</pre>

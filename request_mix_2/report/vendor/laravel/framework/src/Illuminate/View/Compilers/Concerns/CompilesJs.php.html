@@ -1,0 +1,23 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+use Illuminate\Support\Js;
+
+trait CompilesJs
+{
+    /**
+     * Compile the &quot;@js&quot; directive into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileJs(string $expression)
+    {
+        return sprintf(
+            &quot;&lt;?php echo \%s::from(%s)-&gt;toHtml() ?&gt;&quot;,
+            Js::class, $this-&gt;stripParentheses($expression)
+        );
+    }
+}
+</pre>

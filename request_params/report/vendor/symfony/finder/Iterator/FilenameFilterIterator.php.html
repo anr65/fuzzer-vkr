@@ -1,0 +1,46 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Finder\Iterator;
+
+use Symfony\Component\Finder\Glob;
+
+/**
+ * FilenameFilterIterator filters files by patterns (a regexp, a glob, or a string).
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @extends MultiplePcreFilterIterator&lt;string, \SplFileInfo&gt;
+ */
+class FilenameFilterIterator extends MultiplePcreFilterIterator
+{
+    /**
+     * Filters the iterator values.
+     */
+    <span style="background-color: green">p</span>ublic function accept(): bool
+    {
+        return $this-&gt;isAccepted($this-&gt;current()-&gt;getFilename());
+    }
+
+    /**
+     * Converts glob to regexp.
+     *
+     * PCRE patterns are left unchanged.
+     * Glob strings are transformed with Glob::toRegex().
+     *
+     * @param string $str Pattern: glob or regexp
+     */
+    <span style="background-color: green">p</span>rotected function toRegex(string $str): string
+    {
+        return $this-&gt;isRegex($str) ? $str : <span style="background-color: green">G</span>lob::toRegex($str);
+    }
+}
+</pre>

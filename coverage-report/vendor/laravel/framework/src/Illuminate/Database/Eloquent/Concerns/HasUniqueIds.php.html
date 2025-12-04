@@ -1,0 +1,58 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+trait HasUniqueIds
+{
+    /**
+     * Indicates if the model uses unique ids.
+     *
+     * @var bool
+     */
+    public $usesUniqueIds = false;
+
+    /**
+     * Determine if the model uses unique ids.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function usesUniqueIds()
+    {
+        return $this-&gt;usesUniqueIds;
+    }
+
+    /**
+     * Generate unique keys for the model.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setUniqueIds()
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;uniqueIds() as $column) {
+            <span style="background-color: red">i</span>f (empty($this-&gt;{$column})) {
+                $this-&gt;{$column} = $this-&gt;newUniqueId();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Generate a new key for the model.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function newUniqueId()
+    {
+        return null;
+    }
+
+    /**
+     * Get the columns that should receive a unique identifier.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function uniqueIds()
+    {
+        return [];
+    }
+}
+</pre>

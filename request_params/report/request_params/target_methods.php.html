@@ -1,0 +1,33 @@
+<pre>&lt;?php
+
+use PhpFuzzer\Config;
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
+
+// Подключаем автозагрузчик
+require __DIR__ . &#039;/../vendor/autoload.php&#039;;
+
+// Создаем Laravel приложение
+$app = require __DIR__ . &#039;/../vendor/laravel/laravel/bootstrap/app.php&#039;;
+$kernel = $app-&gt;make(Kernel::class);
+/** @var \PhpFuzzer\Config $config*/
+
+// Настройка цели фаззинга
+$config-&gt;setTarget(<span style="background-color: green">f</span>unction (string $input) use ($kernel) {
+    try {
+        // Кодировка данных как URI
+        $uri = &quot;/?query=&quot; . rawurlencode($input);
+        // Создаем Laravel Request
+        $request = Request::create($uri, &#039;GET&#039;);
+
+        // Обработка запроса ядром Laravel
+        $response = $kernel-&gt;handle($request);
+
+        // Завершение middleware
+        $kernel-&gt;terminate($request, $response);
+    } <span style="background-color: green">c</span>atch (Throwable $e) {
+        // Бросаем ошибку дальше — фаззер зафиксирует crash
+        throw $e;
+    <span style="background-color: red">}</span>
+});
+</pre>

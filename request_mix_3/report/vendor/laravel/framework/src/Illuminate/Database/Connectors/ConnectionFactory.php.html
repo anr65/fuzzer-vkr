@@ -1,0 +1,282 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Connectors;
+
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\Connection;
+use Illuminate\Database\MariaDbConnection;
+use Illuminate\Database\MySqlConnection;
+use Illuminate\Database\PostgresConnection;
+use Illuminate\Database\SQLiteConnection;
+use Illuminate\Database\SqlServerConnection;
+use Illuminate\Support\Arr;
+use InvalidArgumentException;
+use PDOException;
+
+class ConnectionFactory
+{
+    /**
+     * The IoC container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+    protected $container;
+
+    /**
+     * Create a new connection factory instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Container $container)
+    {
+        $this-&gt;container = $container;
+    }
+
+    /**
+     * Establish a PDO connection based on the configuration.
+     *
+     * @param  array  $config
+     * @param  string|null  $name
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>ublic function make(array $config, $name = null)
+    {
+        $config = $this-&gt;parseConfig($config, $name);
+
+        <span style="background-color: red">i</span>f (isset($config[&#039;read&#039;])) {
+            return $this-&gt;createReadWriteConnection($config);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;createSingleConnection($config);
+    }
+
+    /**
+     * Parse and prepare the database configuration.
+     *
+     * @param  array  $config
+     * @param  string  $name
+     * @return array
+     */
+    <span style="background-color: green">p</span>rotected function parseConfig(array $config, $name)
+    {
+        return Arr::add(Arr::add($config, &#039;prefix&#039;, &#039;&#039;), &#039;name&#039;, $name);
+    }
+
+    /**
+     * Create a single database connection instance.
+     *
+     * @param  array  $config
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: green">p</span>rotected function createSingleConnection(array $config)
+    {
+        $pdo = $this-&gt;createPdoResolver($config);
+
+        return $this-&gt;createConnection(
+            $config[&#039;driver&#039;], $pdo, $config[&#039;database&#039;], $config[&#039;prefix&#039;], $config
+        );
+    }
+
+    /**
+     * Create a read / write database connection instance.
+     *
+     * @param  array  $config
+     * @return \Illuminate\Database\Connection
+     */
+    <span style="background-color: red">p</span>rotected function createReadWriteConnection(array $config)
+    {
+        $connection = $this-&gt;createSingleConnection($this-&gt;getWriteConfig($config));
+
+        return $connection-&gt;setReadPdo($this-&gt;createReadPdo($config));
+    }
+
+    /**
+     * Create a new PDO instance for reading.
+     *
+     * @param  array  $config
+     * @return \Closure
+     */
+    <span style="background-color: red">p</span>rotected function createReadPdo(array $config)
+    {
+        return $this-&gt;createPdoResolver($this-&gt;getReadConfig($config));
+    }
+
+    /**
+     * Get the read configuration for a read / write connection.
+     *
+     * @param  array  $config
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getReadConfig(array $config)
+    {
+        return $this-&gt;mergeReadWriteConfig(
+            $config, $this-&gt;getReadWriteConfig($config, &#039;read&#039;)
+        );
+    }
+
+    /**
+     * Get the write configuration for a read / write connection.
+     *
+     * @param  array  $config
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getWriteConfig(array $config)
+    {
+        return $this-&gt;mergeReadWriteConfig(
+            $config, $this-&gt;getReadWriteConfig($config, &#039;write&#039;)
+        );
+    }
+
+    /**
+     * Get a read / write level configuration.
+     *
+     * @param  array  $config
+     * @param  string  $type
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function getReadWriteConfig(array $config, $type)
+    {
+        return isset($config[$type][0])
+            ? Arr::random($config[$type])
+            : <span style="background-color: red">$</span>config[$type];
+    }
+
+    /**
+     * Merge a configuration for a read / write connection.
+     *
+     * @param  array  $config
+     * @param  array  $merge
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function mergeReadWriteConfig(array $config, array $merge)
+    {
+        return Arr::except(array_merge($config, $merge), [&#039;read&#039;, &#039;write&#039;]);
+    }
+
+    /**
+     * Create a new Closure that resolves to a PDO instance.
+     *
+     * @param  array  $config
+     * @return \Closure
+     */
+    <span style="background-color: green">p</span>rotected function createPdoResolver(array $config)
+    {
+        return array_key_exists(&#039;host&#039;, $config)
+            ? $this-&gt;createPdoResolverWithHosts($config)
+            : <span style="background-color: green">$</span>this-&gt;createPdoResolverWithoutHosts($config);
+    }
+
+    /**
+     * Create a new Closure that resolves to a PDO instance with a specific host or an array of hosts.
+     *
+     * @param  array  $config
+     * @return \Closure
+     *
+     * @throws \PDOException
+     */
+    <span style="background-color: red">p</span>rotected function createPdoResolverWithHosts(array $config)
+    {
+        return <span style="background-color: red">f</span>unction () use ($config) {
+            <span style="background-color: red">f</span>oreach (Arr::shuffle($this-&gt;parseHosts($config)) as $host) {
+                $config[&#039;host&#039;] = $host;
+
+                try {
+                    return $this-&gt;createConnector($config)-&gt;connect($config);
+                } <span style="background-color: red">c</span>atch (PDOException $e) {
+                    continue;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (isset($e)) {
+                throw $e;
+            <span style="background-color: red">}</span>
+        };
+    }
+
+    /**
+     * Parse the hosts configuration item into an array.
+     *
+     * @param  array  $config
+     * @return array
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>rotected function parseHosts(array $config)
+    {
+        $hosts = Arr::wrap($config[&#039;host&#039;]);
+
+        <span style="background-color: red">i</span>f (empty($hosts)) {
+            throw new InvalidArgumentException(&#039;Database hosts array is empty.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $hosts;
+    }
+
+    /**
+     * Create a new Closure that resolves to a PDO instance where there is no configured host.
+     *
+     * @param  array  $config
+     * @return \Closure
+     */
+    <span style="background-color: green">p</span>rotected function createPdoResolverWithoutHosts(array $config)
+    {
+        return fn () =&gt; <span style="background-color: red">$</span>this-&gt;createConnector($config)-&gt;connect($config);
+    }
+
+    /**
+     * Create a connector instance based on the configuration.
+     *
+     * @param  array  $config
+     * @return \Illuminate\Database\Connectors\ConnectorInterface
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function createConnector(array $config)
+    {
+        <span style="background-color: red">i</span>f (! isset($config[&#039;driver&#039;])) {
+            throw new InvalidArgumentException(&#039;A driver must be specified.&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;container-&gt;bound($key = &quot;db.connector.{$config[&#039;driver&#039;]}&quot;)) {
+            return $this-&gt;container-&gt;make($key);
+        <span style="background-color: red">}</span>
+
+        return match ($config[&#039;driver&#039;]) {
+            &#039;mysql&#039; =&gt; <span style="background-color: red">n</span>ew MySqlConnector,
+            &#039;mariadb&#039; =&gt; <span style="background-color: red">n</span>ew MariaDbConnector,
+            &#039;pgsql&#039; =&gt; <span style="background-color: red">n</span>ew PostgresConnector,
+            &#039;sqlite&#039; =&gt; <span style="background-color: red">n</span>ew SQLiteConnector,
+            &#039;sqlsrv&#039; =&gt; <span style="background-color: red">n</span>ew SqlServerConnector,
+            default =&gt; <span style="background-color: red">t</span>hrow new InvalidArgumentException(&quot;Unsupported driver [{$config[&#039;driver&#039;]}].&quot;),
+        };
+    }
+
+    /**
+     * Create a new connection instance.
+     *
+     * @param  string  $driver
+     * @param  \PDO|\Closure  $connection
+     * @param  string  $database
+     * @param  string  $prefix
+     * @param  array  $config
+     * @return \Illuminate\Database\Connection
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>rotected function createConnection($driver, $connection, $database, $prefix = &#039;&#039;, array $config = [])
+    {
+        <span style="background-color: red">i</span>f ($resolver = Connection::getResolver($driver)) {
+            return $resolver($connection, $database, $prefix, $config);
+        <span style="background-color: green">}</span>
+
+        return match ($driver) {
+            &#039;mysql&#039; =&gt; <span style="background-color: red">n</span>ew MySqlConnection($connection, $database, $prefix, $config),
+            &#039;mariadb&#039; =&gt; <span style="background-color: red">n</span>ew MariaDbConnection($connection, $database, $prefix, $config),
+            &#039;pgsql&#039; =&gt; <span style="background-color: red">n</span>ew PostgresConnection($connection, $database, $prefix, $config),
+            &#039;sqlite&#039; =&gt; <span style="background-color: green">n</span>ew SQLiteConnection($connection, $database, $prefix, $config),
+            &#039;sqlsrv&#039; =&gt; <span style="background-color: red">n</span>ew SqlServerConnection($connection, $database, $prefix, $config),
+            default =&gt; <span style="background-color: red">t</span>hrow new InvalidArgumentException(&quot;Unsupported driver [{$driver}].&quot;),
+        };
+    }
+}
+</pre>

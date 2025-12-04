@@ -1,0 +1,82 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Store\File;
+
+use Dotenv\Exception\InvalidEncodingException;
+use Dotenv\Util\Str;
+use PhpOption\Option;
+
+/**
+ * @internal
+ */
+final class Reader
+{
+    /**
+     * This class is a singleton.
+     *
+     * @codeCoverageIgnore
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate function __construct()
+    {
+        //
+    }
+
+    /**
+     * Read the file(s), and return their raw content.
+     *
+     * We provide the file path as the key, and its content as the value. If
+     * short circuit mode is enabled, then the returned array with have length
+     * at most one. File paths that couldn&#039;t be read are omitted entirely.
+     *
+     * @param string[]    $filePaths
+     * @param bool        $shortCircuit
+     * @param string|null $fileEncoding
+     *
+     * @throws \Dotenv\Exception\InvalidEncodingException
+     *
+     * @return array&lt;string,string&gt;
+     */
+    <span style="background-color: green">p</span>ublic static function read(array $filePaths, bool $shortCircuit = true, ?string $fileEncoding = null)
+    {
+        $output = [];
+
+        <span style="background-color: green">f</span>oreach ($filePaths as $filePath) {
+            $content = self::readFromFile($filePath, $fileEncoding);
+            <span style="background-color: red">i</span>f ($content-&gt;isDefined()) {
+                $output[$filePath] = $content-&gt;get();
+                <span style="background-color: red">i</span>f ($shortCircuit) {
+                    break;
+                <span style="background-color: red">}</span>
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        return $output;
+    }
+
+    /**
+     * Read the given file.
+     *
+     * @param string      $path
+     * @param string|null $encoding
+     *
+     * @throws \Dotenv\Exception\InvalidEncodingException
+     *
+     * @return \PhpOption\Option&lt;string&gt;
+     */
+    <span style="background-color: green">p</span>rivate static function readFromFile(string $path, ?string $encoding = null)
+    {
+        /** @var Option&lt;string&gt; */
+        $content = Option::fromValue(@\file_get_contents($path), false);
+
+        return $content-&gt;flatMap(<span style="background-color: red">s</span>tatic function (string $content) use ($encoding) {
+            return Str::utf8($content, $encoding)-&gt;mapError(<span style="background-color: red">s</span>tatic function (string $error) {
+                throw new InvalidEncodingException($error);
+            })-&gt;success();
+        });
+    }
+}
+</pre>

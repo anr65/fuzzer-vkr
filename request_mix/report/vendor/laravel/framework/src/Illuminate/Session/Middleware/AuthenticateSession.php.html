@@ -1,0 +1,143 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session\Middleware;
+
+use Closure;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
+use Illuminate\Contracts\Session\Middleware\AuthenticatesSessions;
+use Illuminate\Http\Request;
+
+class AuthenticateSession implements AuthenticatesSessions
+{
+    /**
+     * The authentication factory implementation.
+     *
+     * @var \Illuminate\Contracts\Auth\Factory
+     */
+    protected $auth;
+
+    /**
+     * The callback that should be used to generate the authentication redirect path.
+     *
+     * @var callable
+     */
+    protected static $redirectToCallback;
+
+    /**
+     * Create a new middleware instance.
+     *
+     * @param  \Illuminate\Contracts\Auth\Factory  $auth
+     */
+    <span style="background-color: red">p</span>ublic function __construct(AuthFactory $auth)
+    {
+        $this-&gt;auth = $auth;
+    }
+
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function handle($request, Closure $next)
+    {
+        <span style="background-color: red">i</span>f (! $request-&gt;hasSession() || <span style="background-color: red">!</span> $request-&gt;user() || <span style="background-color: red">!</span> $request-&gt;user()-&gt;getAuthPassword()) {
+            return $next($request);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;guard()-&gt;viaRemember()) {
+            $passwordHash = explode(&#039;|&#039;, $request-&gt;cookies-&gt;get($this-&gt;guard()-&gt;getRecallerName()))[2] ?? <span style="background-color: red">n</span>ull;
+
+            <span style="background-color: red">i</span>f (! $passwordHash || <span style="background-color: red">!</span> hash_equals($request-&gt;user()-&gt;getAuthPassword(), $passwordHash)) {
+                $this-&gt;logout($request);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! $request-&gt;session()-&gt;has(&#039;password_hash_&#039;.$this-&gt;auth-&gt;getDefaultDriver())) {
+            $this-&gt;storePasswordHashInSession($request);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! hash_equals($request-&gt;session()-&gt;get(&#039;password_hash_&#039;.$this-&gt;auth-&gt;getDefaultDriver()), $request-&gt;user()-&gt;getAuthPassword())) {
+            $this-&gt;logout($request);
+        <span style="background-color: red">}</span>
+
+        return tap($next($request), <span style="background-color: red">f</span>unction () use ($request) {
+            <span style="background-color: red">i</span>f (! is_null($this-&gt;guard()-&gt;user())) {
+                $this-&gt;storePasswordHashInSession($request);
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Store the user&#039;s current password hash in the session.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     */
+    <span style="background-color: red">p</span>rotected function storePasswordHashInSession($request)
+    {
+        <span style="background-color: red">i</span>f (! $request-&gt;user()) {
+            return;
+        <span style="background-color: red">}</span>
+
+        $request-&gt;session()-&gt;put([
+            &#039;password_hash_&#039;.$this-&gt;auth-&gt;getDefaultDriver() =&gt; $request-&gt;user()-&gt;getAuthPassword(),
+        ]);
+    }
+
+    /**
+     * Log the user out of the application.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     *
+     * @throws \Illuminate\Auth\AuthenticationException
+     */
+    <span style="background-color: red">p</span>rotected function logout($request)
+    {
+        $this-&gt;guard()-&gt;logoutCurrentDevice();
+
+        $request-&gt;session()-&gt;flush();
+
+        throw new AuthenticationException(
+            &#039;Unauthenticated.&#039;, [$this-&gt;auth-&gt;getDefaultDriver()], $this-&gt;redirectTo($request)
+        );
+    }
+
+    /**
+     * Get the guard instance that should be used by the middleware.
+     *
+     * @return \Illuminate\Contracts\Auth\Factory|\Illuminate\Contracts\Auth\Guard
+     */
+    <span style="background-color: red">p</span>rotected function guard()
+    {
+        return $this-&gt;auth;
+    }
+
+    /**
+     * Get the path the user should be redirected to when their session is not authenticated.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected function redirectTo(Request $request)
+    {
+        <span style="background-color: red">i</span>f (static::$redirectToCallback) {
+            return call_user_func(static::$redirectToCallback, $request);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Specify the callback that should be used to generate the redirect path.
+     *
+     * @param  callable  $redirectToCallback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function redirectUsing(callable $redirectToCallback)
+    {
+        static::$redirectToCallback = $redirectToCallback;
+    }
+}
+</pre>

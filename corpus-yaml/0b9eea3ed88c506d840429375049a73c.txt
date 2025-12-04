@@ -1,0 +1,20 @@
+synkg:
+rid  COV,:
+ iv
+ "vasyn:
+riab( COVF g:
+ "vqsync_v
+ "v
+si:ny name: "example"
+enabled: true
+retry: 3
+timeout: 30
+ho COVFU,,g:
+ "vqc_lname: "example"
+enabled: true
+retry: 3
+e"
+enabled:strt: timeout: 30trb  COv:
+ " "vas 808
+ho:
+ #0strt: 8080

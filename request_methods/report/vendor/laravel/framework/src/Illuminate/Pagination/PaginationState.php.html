@@ -1,0 +1,36 @@
+<pre>&lt;?php
+
+namespace Illuminate\Pagination;
+
+class PaginationState
+{
+    /**
+     * Bind the pagination state resolvers using the given application container as a base.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function resolveUsing($app)
+    {
+        Paginator::viewFactoryResolver(fn () =&gt; <span style="background-color: red">$</span>app[&#039;view&#039;]);
+
+        Paginator::currentPathResolver(fn () =&gt; <span style="background-color: red">$</span>app[&#039;request&#039;]-&gt;url());
+
+        Paginator::currentPageResolver(<span style="background-color: red">f</span>unction ($pageName = &#039;page&#039;) use ($app) {
+            $page = $app[&#039;request&#039;]-&gt;input($pageName);
+
+            <span style="background-color: red">i</span>f (filter_var($page, FILTER_VALIDATE_INT) !== false &amp;&amp; <span style="background-color: red">(</span>int) $page &gt;= 1) {
+                return (int) $page;
+            <span style="background-color: red">}</span>
+
+            return 1;
+        });
+
+        Paginator::queryStringResolver(fn () =&gt; <span style="background-color: red">$</span>app[&#039;request&#039;]-&gt;query());
+
+        CursorPaginator::currentCursorResolver(<span style="background-color: red">f</span>unction ($cursorName = &#039;cursor&#039;) use ($app) {
+            return Cursor::fromEncoded($app[&#039;request&#039;]-&gt;input($cursorName));
+        });
+    }
+}
+</pre>

@@ -1,0 +1,109 @@
+<pre>&lt;?php
+
+use Illuminate\Support\Str;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Cache Store
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the default cache store that will be used by the
+    | framework. This connection is utilized if another isn&#039;t explicitly
+    | specified when running a cache operation inside the application.
+    |
+    */
+
+    &#039;default&#039; =&gt; env(&#039;CACHE_STORE&#039;, &#039;database&#039;),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cache Stores
+    |--------------------------------------------------------------------------
+    |
+    | Here you may define all of the cache &quot;stores&quot; for your application as
+    | well as their drivers. You may even define multiple stores for the
+    | same cache driver to group types of items stored in your caches.
+    |
+    | Supported drivers: &quot;array&quot;, &quot;database&quot;, &quot;file&quot;, &quot;memcached&quot;,
+    |                    &quot;redis&quot;, &quot;dynamodb&quot;, &quot;octane&quot;, &quot;null&quot;
+    |
+    */
+
+    &#039;stores&#039; =&gt; [
+
+        &#039;array&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;array&#039;,
+            &#039;serialize&#039; =&gt; false,
+        ],
+
+        &#039;database&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;database&#039;,
+            &#039;connection&#039; =&gt; env(&#039;DB_CACHE_CONNECTION&#039;),
+            &#039;table&#039; =&gt; env(&#039;DB_CACHE_TABLE&#039;, &#039;cache&#039;),
+            &#039;lock_connection&#039; =&gt; env(&#039;DB_CACHE_LOCK_CONNECTION&#039;),
+            &#039;lock_table&#039; =&gt; env(&#039;DB_CACHE_LOCK_TABLE&#039;),
+        ],
+
+        &#039;file&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;file&#039;,
+            &#039;path&#039; =&gt; storage_path(&#039;framework/cache/data&#039;),
+            &#039;lock_path&#039; =&gt; storage_path(&#039;framework/cache/data&#039;),
+        ],
+
+        &#039;memcached&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;memcached&#039;,
+            &#039;persistent_id&#039; =&gt; env(&#039;MEMCACHED_PERSISTENT_ID&#039;),
+            &#039;sasl&#039; =&gt; [
+                env(&#039;MEMCACHED_USERNAME&#039;),
+                env(&#039;MEMCACHED_PASSWORD&#039;),
+            ],
+            &#039;options&#039; =&gt; [
+                // Memcached::OPT_CONNECT_TIMEOUT =&gt; 2000,
+            ],
+            &#039;servers&#039; =&gt; [
+                [
+                    &#039;host&#039; =&gt; env(&#039;MEMCACHED_HOST&#039;, &#039;127.0.0.1&#039;),
+                    &#039;port&#039; =&gt; env(&#039;MEMCACHED_PORT&#039;, 11211),
+                    &#039;weight&#039; =&gt; 100,
+                ],
+            ],
+        ],
+
+        &#039;redis&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;redis&#039;,
+            &#039;connection&#039; =&gt; env(&#039;REDIS_CACHE_CONNECTION&#039;, &#039;cache&#039;),
+            &#039;lock_connection&#039; =&gt; env(&#039;REDIS_CACHE_LOCK_CONNECTION&#039;, &#039;default&#039;),
+        ],
+
+        &#039;dynamodb&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;dynamodb&#039;,
+            &#039;key&#039; =&gt; env(&#039;AWS_ACCESS_KEY_ID&#039;),
+            &#039;secret&#039; =&gt; env(&#039;AWS_SECRET_ACCESS_KEY&#039;),
+            &#039;region&#039; =&gt; env(&#039;AWS_DEFAULT_REGION&#039;, &#039;us-east-1&#039;),
+            &#039;table&#039; =&gt; env(&#039;DYNAMODB_CACHE_TABLE&#039;, &#039;cache&#039;),
+            &#039;endpoint&#039; =&gt; env(&#039;DYNAMODB_ENDPOINT&#039;),
+        ],
+
+        &#039;octane&#039; =&gt; [
+            &#039;driver&#039; =&gt; &#039;octane&#039;,
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cache Key Prefix
+    |--------------------------------------------------------------------------
+    |
+    | When utilizing the APC, database, memcached, Redis, and DynamoDB cache
+    | stores, there might be other applications using the same cache. For
+    | that reason, you may prefix every cache key to avoid collisions.
+    |
+    */
+
+    &#039;prefix&#039; =&gt; env(&#039;CACHE_PREFIX&#039;, Str::slug(env(&#039;APP_NAME&#039;, &#039;laravel&#039;), &#039;_&#039;).&#039;_cache_&#039;),
+
+];
+</pre>

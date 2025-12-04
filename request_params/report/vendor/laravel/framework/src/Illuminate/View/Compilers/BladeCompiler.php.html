@@ -1,0 +1,1047 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers;
+
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\View\Factory as ViewFactory;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Stringable;
+use Illuminate\Support\Traits\ReflectsClosures;
+use Illuminate\View\Component;
+use InvalidArgumentException;
+
+class BladeCompiler extends Compiler implements CompilerInterface
+{
+    use Concerns\CompilesAuthorizations,
+        Concerns\CompilesClasses,
+        Concerns\CompilesComments,
+        Concerns\CompilesComponents,
+        Concerns\CompilesConditionals,
+        Concerns\CompilesEchos,
+        Concerns\CompilesErrors,
+        Concerns\CompilesFragments,
+        Concerns\CompilesHelpers,
+        Concerns\CompilesIncludes,
+        Concerns\CompilesInjections,
+        Concerns\CompilesJson,
+        Concerns\CompilesJs,
+        Concerns\CompilesLayouts,
+        Concerns\CompilesLoops,
+        Concerns\CompilesRawPhp,
+        Concerns\CompilesSessions,
+        Concerns\CompilesStacks,
+        Concerns\CompilesStyles,
+        Concerns\CompilesTranslations,
+        Concerns\CompilesUseStatements,
+        ReflectsClosures;
+
+    /**
+     * All of the registered extensions.
+     *
+     * @var array
+     */
+    protected $extensions = [];
+
+    /**
+     * All custom &quot;directive&quot; handlers.
+     *
+     * @var array
+     */
+    protected $customDirectives = [];
+
+    /**
+     * All custom &quot;condition&quot; handlers.
+     *
+     * @var array
+     */
+    protected $conditions = [];
+
+    /**
+     * The registered string preparation callbacks.
+     *
+     * @var array
+     */
+    protected $prepareStringsForCompilationUsing = [];
+
+    /**
+     * All of the registered precompilers.
+     *
+     * @var array
+     */
+    protected $precompilers = [];
+
+    /**
+     * The file currently being compiled.
+     *
+     * @var string
+     */
+    protected $path;
+
+    /**
+     * All of the available compiler functions.
+     *
+     * @var string[]
+     */
+    protected $compilers = [
+        // &#039;Comments&#039;,
+        &#039;Extensions&#039;,
+        &#039;Statements&#039;,
+        &#039;Echos&#039;,
+    ];
+
+    /**
+     * Array of opening and closing tags for raw echos.
+     *
+     * @var string[]
+     */
+    protected $rawTags = [&#039;{!!&#039;, &#039;!!}&#039;];
+
+    /**
+     * Array of opening and closing tags for regular echos.
+     *
+     * @var string[]
+     */
+    protected $contentTags = [&#039;{{&#039;, &#039;}}&#039;];
+
+    /**
+     * Array of opening and closing tags for escaped echos.
+     *
+     * @var string[]
+     */
+    protected $escapedTags = [&#039;{{{&#039;, &#039;}}}&#039;];
+
+    /**
+     * The &quot;regular&quot; / legacy echo string format.
+     *
+     * @var string
+     */
+    protected $echoFormat = &#039;e(%s)&#039;;
+
+    /**
+     * Array of footer lines to be added to the template.
+     *
+     * @var array
+     */
+    protected $footer = [];
+
+    /**
+     * Array to temporarily store the raw blocks found in the template.
+     *
+     * @var array
+     */
+    protected $rawBlocks = [];
+
+    /**
+     * The array of anonymous component paths to search for components in.
+     *
+     * @var array
+     */
+    protected $anonymousComponentPaths = [];
+
+    /**
+     * The array of anonymous component namespaces to autoload from.
+     *
+     * @var array
+     */
+    protected $anonymousComponentNamespaces = [];
+
+    /**
+     * The array of class component aliases and their class names.
+     *
+     * @var array
+     */
+    protected $classComponentAliases = [];
+
+    /**
+     * The array of class component namespaces to autoload from.
+     *
+     * @var array
+     */
+    protected $classComponentNamespaces = [];
+
+    /**
+     * Indicates if component tags should be compiled.
+     *
+     * @var bool
+     */
+    protected $compilesComponentTags = true;
+
+    /**
+     * Compile the view at the given path.
+     *
+     * @param  string|null  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function compile($path = null)
+    {
+        <span style="background-color: red">i</span>f ($path) {
+            $this-&gt;setPath($path);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! is_null($this-&gt;cachePath)) {
+            $contents = $this-&gt;compileString($this-&gt;files-&gt;get($this-&gt;getPath()));
+
+            <span style="background-color: red">i</span>f (! empty($this-&gt;getPath())) {
+                $contents = $this-&gt;appendFilePath($contents);
+            <span style="background-color: red">}</span>
+
+            $this-&gt;ensureCompiledDirectoryExists(
+                $compiledPath = $this-&gt;getCompiledPath($this-&gt;getPath())
+            );
+
+            $this-&gt;files-&gt;put($compiledPath, $contents);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Append the file path to the compiled string.
+     *
+     * @param  string  $contents
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function appendFilePath($contents)
+    {
+        $tokens = $this-&gt;getOpenAndClosingPhpTokens($contents);
+
+        <span style="background-color: red">i</span>f ($tokens-&gt;isNotEmpty() &amp;&amp; <span style="background-color: red">$</span>tokens-&gt;last() !== T_CLOSE_TAG) {
+            $contents .= &#039; ?&gt;&#039;;
+        <span style="background-color: red">}</span>
+
+        return $contents.&quot;&lt;?php /**PATH {$this-&gt;getPath()} ENDPATH**/ ?&gt;&quot;;
+    }
+
+    /**
+     * Get the open and closing PHP tag tokens from the given string.
+     *
+     * @param  string  $contents
+     * @return \Illuminate\Support\Collection
+     */
+    <span style="background-color: red">p</span>rotected function getOpenAndClosingPhpTokens($contents)
+    {
+        return (new Collection(token_get_all($contents)))
+            -&gt;pluck(0)
+            -&gt;filter(<span style="background-color: red">f</span>unction ($token) {
+                return in_array($token, [T_OPEN_TAG, T_OPEN_TAG_WITH_ECHO, T_CLOSE_TAG]);
+            });
+    }
+
+    /**
+     * Get the path currently being compiled.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function getPath()
+    {
+        return $this-&gt;path;
+    }
+
+    /**
+     * Set the path currently being compiled.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setPath($path)
+    {
+        $this-&gt;path = $path;
+    }
+
+    /**
+     * Compile the given Blade template contents.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function compileString($value)
+    {
+        [$this-&gt;footer, $result] = [[], &#039;&#039;];
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;prepareStringsForCompilationUsing as $callback) {
+            $value = $callback($value);
+        <span style="background-color: red">}</span>
+
+        $value = $this-&gt;storeUncompiledBlocks($value);
+
+        // First we will compile the Blade component tags. This is a precompile style
+        // step which compiles the component Blade tags into @component directives
+        // that may be used by Blade. Then we should call any other precompilers.
+        $value = $this-&gt;compileComponentTags(
+            $this-&gt;compileComments($value)
+        );
+
+        <span style="background-color: red">f</span>oreach ($this-&gt;precompilers as $precompiler) {
+            $value = $precompiler($value);
+        <span style="background-color: red">}</span>
+
+        // Here we will loop through all of the tokens returned by the Zend lexer and
+        // parse each one into the corresponding valid PHP. We will then have this
+        // template as the correctly rendered PHP that can be rendered natively.
+        <span style="background-color: red">f</span>oreach (token_get_all($value) as $token) {
+            $result .= is_array($token) ? $this-&gt;parseToken($token) : <span style="background-color: red">$</span>token;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! empty($this-&gt;rawBlocks)) {
+            $result = $this-&gt;restoreRawContent($result);
+        <span style="background-color: red">}</span>
+
+        // If there are any footer lines that need to get added to a template we will
+        // add them here at the end of the template. This gets used mainly for the
+        // template inheritance via the extends keyword that should be appended.
+        <span style="background-color: red">i</span>f (count($this-&gt;footer) &gt; 0) {
+            $result = $this-&gt;addFooters($result);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (! empty($this-&gt;echoHandlers)) {
+            $result = $this-&gt;addBladeCompilerVariable($result);
+        <span style="background-color: red">}</span>
+
+        return str_replace(
+            [&#039;##BEGIN-COMPONENT-CLASS##&#039;, &#039;##END-COMPONENT-CLASS##&#039;],
+            &#039;&#039;,
+            $result);
+    }
+
+    /**
+     * Evaluate and render a Blade string to HTML.
+     *
+     * @param  string  $string
+     * @param  array  $data
+     * @param  bool  $deleteCachedView
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function render($string, $data = [], $deleteCachedView = false)
+    {
+        $component = new class($string) extends Component
+        {
+            protected $template;
+
+            <span style="background-color: red">p</span>ublic function __construct($template)
+            {
+                $this-&gt;template = $template;
+            }
+
+            <span style="background-color: red">p</span>ublic function render()
+            {
+                return $this-&gt;template;
+            }
+        };
+
+        $view = Container::getInstance()
+            -&gt;make(ViewFactory::class)
+            -&gt;make($component-&gt;resolveView(), $data);
+
+        return tap($view-&gt;render(), <span style="background-color: red">f</span>unction () use ($view, $deleteCachedView) {
+            <span style="background-color: red">i</span>f ($deleteCachedView) {
+                @unlink($view-&gt;getPath());
+            <span style="background-color: red">}</span>
+        });
+    }
+
+    /**
+     * Render a component instance to HTML.
+     *
+     * @param  \Illuminate\View\Component  $component
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic static function renderComponent(Component $component)
+    {
+        $data = $component-&gt;data();
+
+        $view = value($component-&gt;resolveView(), $data);
+
+        <span style="background-color: red">i</span>f ($view instanceof View) {
+            return $view-&gt;with($data)-&gt;render();
+        } <span style="background-color: red">e</span>lseif ($view instanceof Htmlable) {
+            return $view-&gt;toHtml();
+        } <span style="background-color: red">e</span>lse {
+            return Container::getInstance()
+                -&gt;make(ViewFactory::class)
+                -&gt;make($view, $data)
+                -&gt;render();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Store the blocks that do not receive compilation.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function storeUncompiledBlocks($value)
+    {
+        <span style="background-color: red">i</span>f (str_contains($value, &#039;@verbatim&#039;)) {
+            $value = $this-&gt;storeVerbatimBlocks($value);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (str_contains($value, &#039;@php&#039;)) {
+            $value = $this-&gt;storePhpBlocks($value);
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Store the verbatim blocks and replace them with a temporary placeholder.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function storeVerbatimBlocks($value)
+    {
+        return preg_replace_callback(&#039;/(?&lt;!@)@verbatim(\s*)(.*?)@endverbatim/s&#039;, <span style="background-color: red">f</span>unction ($matches) {
+            return $matches[1].$this-&gt;storeRawBlock($matches[2]);
+        }, $value);
+    }
+
+    /**
+     * Store the PHP blocks and replace them with a temporary placeholder.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function storePhpBlocks($value)
+    {
+        return preg_replace_callback(&#039;/(?&lt;!@)@php(.*?)@endphp/s&#039;, <span style="background-color: red">f</span>unction ($matches) {
+            return $this-&gt;storeRawBlock(&quot;&lt;?php{$matches[1]}?&gt;&quot;);
+        }, $value);
+    }
+
+    /**
+     * Store a raw block and return a unique raw placeholder.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function storeRawBlock($value)
+    {
+        return $this-&gt;getRawPlaceholder(
+            array_push($this-&gt;rawBlocks, $value) - 1
+        );
+    }
+
+    /**
+     * Compile the component tags.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileComponentTags($value)
+    {
+        <span style="background-color: red">i</span>f (! $this-&gt;compilesComponentTags) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        return (new ComponentTagCompiler(
+            $this-&gt;classComponentAliases, $this-&gt;classComponentNamespaces, $this
+        ))-&gt;compile($value);
+    }
+
+    /**
+     * Replace the raw placeholders with the original code stored in the raw blocks.
+     *
+     * @param  string  $result
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function restoreRawContent($result)
+    {
+        $result = preg_replace_callback(&#039;/&#039;.$this-&gt;getRawPlaceholder(&#039;(\d+)&#039;).&#039;/&#039;, <span style="background-color: red">f</span>unction ($matches) {
+            return $this-&gt;rawBlocks[$matches[1]];
+        }, $result);
+
+        $this-&gt;rawBlocks = [];
+
+        return $result;
+    }
+
+    /**
+     * Get a placeholder to temporarily mark the position of raw blocks.
+     *
+     * @param  int|string  $replace
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function getRawPlaceholder($replace)
+    {
+        return str_replace(&#039;#&#039;, $replace, &#039;@__raw_block_#__@&#039;);
+    }
+
+    /**
+     * Add the stored footers onto the given content.
+     *
+     * @param  string  $result
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function addFooters($result)
+    {
+        return ltrim($result, &quot;\n&quot;)
+                .&quot;\n&quot;.implode(&quot;\n&quot;, array_reverse($this-&gt;footer));
+    }
+
+    /**
+     * Parse the tokens from the template.
+     *
+     * @param  array  $token
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function parseToken($token)
+    {
+        [$id, $content] = $token;
+
+        <span style="background-color: red">i</span>f ($id == T_INLINE_HTML) {
+            <span style="background-color: red">f</span>oreach ($this-&gt;compilers as $type) {
+                $content = $this-&gt;{&quot;compile{$type}&quot;}($content);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $content;
+    }
+
+    /**
+     * Execute the user defined extensions.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileExtensions($value)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;extensions as $compiler) {
+            $value = $compiler($value, $this);
+        <span style="background-color: red">}</span>
+
+        return $value;
+    }
+
+    /**
+     * Compile Blade statements that start with &quot;@&quot;.
+     *
+     * @param  string  $template
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileStatements($template)
+    {
+        preg_match_all(&#039;/\B@(@?\w+(?:::\w+)?)([ \t]*)(\( ( [\S\s]*? ) \))?/x&#039;, $template, $matches);
+
+        $offset = 0;
+
+        <span style="background-color: red">f</span>or ($i = 0; isset($matches[0][$i]); $i++) {
+            $match = [
+                $matches[0][$i],
+                $matches[1][$i],
+                $matches[2][$i],
+                $matches[3][$i] ?: <span style="background-color: red">n</span>ull,
+                $matches[4][$i] ?: <span style="background-color: red">n</span>ull,
+            ];
+
+            // Here we check to see if we have properly found the closing parenthesis by
+            // regex pattern or not, and will recursively continue on to the next &quot;)&quot;
+            // then check again until the tokenizer confirms we find the right one.
+            <span style="background-color: red">w</span>hile (isset($match[4]) &amp;&amp;
+                   <span style="background-color: red">S</span>tr::endsWith($match[0], &#039;)&#039;) &amp;&amp;
+                   <span style="background-color: red">!</span> $this-&gt;hasEvenNumberOfParentheses($match[0])) {
+                <span style="background-color: red">i</span>f (($after = Str::after($template, $match[0])) === $template) {
+                    break;
+                <span style="background-color: red">}</span>
+
+                $rest = Str::before($after, &#039;)&#039;);
+
+                <span style="background-color: red">i</span>f (isset($matches[0][$i + 1]) &amp;&amp; <span style="background-color: red">S</span>tr::contains($rest.&#039;)&#039;, $matches[0][$i + 1])) {
+                    unset($matches[0][$i + 1]);
+                    $i++;
+                <span style="background-color: red">}</span>
+
+                $match[0] = $match[0].$rest.&#039;)&#039;;
+                $match[3] = $match[3].$rest.&#039;)&#039;;
+                $match[4] = $match[4].$rest;
+            <span style="background-color: red">}</span>
+
+            [$template, $offset] = $this-&gt;replaceFirstStatement(
+                $match[0],
+                $this-&gt;compileStatement($match),
+                $template,
+                $offset
+            );
+        <span style="background-color: red">}</span>
+
+        return $template;
+    }
+
+    /**
+     * Replace the first match for a statement compilation operation.
+     *
+     * @param  string  $search
+     * @param  string  $replace
+     * @param  string  $subject
+     * @param  int  $offset
+     * @return array
+     */
+    <span style="background-color: red">p</span>rotected function replaceFirstStatement($search, $replace, $subject, $offset)
+    {
+        $search = (string) $search;
+
+        <span style="background-color: red">i</span>f ($search === &#039;&#039;) {
+            return $subject;
+        <span style="background-color: red">}</span>
+
+        $position = strpos($subject, $search, $offset);
+
+        <span style="background-color: red">i</span>f ($position !== false) {
+            return [
+                substr_replace($subject, $replace, $position, strlen($search)),
+                $position + strlen($replace),
+            ];
+        <span style="background-color: red">}</span>
+
+        return [$subject, 0];
+    }
+
+    /**
+     * Determine if the given expression has the same number of opening and closing parentheses.
+     *
+     * @param  string  $expression
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected function hasEvenNumberOfParentheses(string $expression)
+    {
+        $tokens = token_get_all(&#039;&lt;?php &#039;.$expression);
+
+        <span style="background-color: red">i</span>f (Arr::last($tokens) !== &#039;)&#039;) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $opening = 0;
+        $closing = 0;
+
+        <span style="background-color: red">f</span>oreach ($tokens as $token) {
+            <span style="background-color: red">i</span>f ($token == &#039;)&#039;) {
+                $closing++;
+            } <span style="background-color: red">e</span>lseif ($token == &#039;(&#039;) {
+                $opening++;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $opening === $closing;
+    }
+
+    /**
+     * Compile a single Blade @ statement.
+     *
+     * @param  array  $match
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileStatement($match)
+    {
+        <span style="background-color: red">i</span>f (str_contains($match[1], &#039;@&#039;)) {
+            $match[0] = isset($match[3]) ? $match[1].$match[3] : <span style="background-color: red">$</span>match[1];
+        } <span style="background-color: red">e</span>lseif (isset($this-&gt;customDirectives[$match[1]])) {
+            $match[0] = $this-&gt;callCustomDirective($match[1], Arr::get($match, 3));
+        } <span style="background-color: red">e</span>lseif (method_exists($this, $method = &#039;compile&#039;.ucfirst($match[1]))) {
+            $match[0] = $this-&gt;$method(Arr::get($match, 3));
+        } <span style="background-color: red">e</span>lse {
+            return $match[0];
+        <span style="background-color: red">}</span>
+
+        return isset($match[3]) ? $match[0] : <span style="background-color: red">$</span>match[0].$match[2];
+    }
+
+    /**
+     * Call the given directive with the given value.
+     *
+     * @param  string  $name
+     * @param  string|null  $value
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function callCustomDirective($name, $value)
+    {
+        $value ??= <span style="background-color: red">'</span>&#039;;
+
+        <span style="background-color: red">i</span>f (str_starts_with($value, &#039;(&#039;) &amp;&amp; <span style="background-color: red">s</span>tr_ends_with($value, &#039;)&#039;)) {
+            $value = Str::substr($value, 1, -1);
+        <span style="background-color: red">}</span>
+
+        return call_user_func($this-&gt;customDirectives[$name], trim($value));
+    }
+
+    /**
+     * Strip the parentheses from the given expression.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function stripParentheses($expression)
+    {
+        <span style="background-color: red">i</span>f (Str::startsWith($expression, &#039;(&#039;)) {
+            $expression = substr($expression, 1, -1);
+        <span style="background-color: red">}</span>
+
+        return $expression;
+    }
+
+    /**
+     * Register a custom Blade compiler.
+     *
+     * @param  callable  $compiler
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function extend(callable $compiler)
+    {
+        $this-&gt;extensions[] = $compiler;
+    }
+
+    /**
+     * Get the extensions used by the compiler.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getExtensions()
+    {
+        return $this-&gt;extensions;
+    }
+
+    /**
+     * Register an &quot;if&quot; statement directive.
+     *
+     * @param  string  $name
+     * @param  callable  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function if($name, callable $callback)
+    {
+        $this-&gt;conditions[$name] = $callback;
+
+        $this-&gt;directive($name, <span style="background-color: red">f</span>unction ($expression) use ($name) {
+            return $expression !== &#039;&#039;
+                ? &quot;&lt;?php if (\Illuminate\Support\Facades\Blade::check(&#039;{$name}&#039;, {$expression})): ?&gt;&quot;
+                : <span style="background-color: red">"</span>&lt;?php if (\Illuminate\Support\Facades\Blade::check(&#039;{$name}&#039;)): ?&gt;&quot;;
+        });
+
+        $this-&gt;directive(&#039;unless&#039;.$name, <span style="background-color: red">f</span>unction ($expression) use ($name) {
+            return $expression !== &#039;&#039;
+                ? &quot;&lt;?php if (! \Illuminate\Support\Facades\Blade::check(&#039;{$name}&#039;, {$expression})): ?&gt;&quot;
+                : <span style="background-color: red">"</span>&lt;?php if (! \Illuminate\Support\Facades\Blade::check(&#039;{$name}&#039;)): ?&gt;&quot;;
+        });
+
+        $this-&gt;directive(&#039;else&#039;.$name, <span style="background-color: red">f</span>unction ($expression) use ($name) {
+            return $expression !== &#039;&#039;
+                ? &quot;&lt;?php elseif (\Illuminate\Support\Facades\Blade::check(&#039;{$name}&#039;, {$expression})): ?&gt;&quot;
+                : <span style="background-color: red">"</span>&lt;?php elseif (\Illuminate\Support\Facades\Blade::check(&#039;{$name}&#039;)): ?&gt;&quot;;
+        });
+
+        $this-&gt;directive(&#039;end&#039;.$name, <span style="background-color: red">f</span>unction () {
+            return &#039;&lt;?php endif; ?&gt;&#039;;
+        });
+    }
+
+    /**
+     * Check the result of a condition.
+     *
+     * @param  string  $name
+     * @param  mixed  ...$parameters
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function check($name, ...$parameters)
+    {
+        return call_user_func($this-&gt;conditions[$name], ...$parameters);
+    }
+
+    /**
+     * Register a class-based component alias directive.
+     *
+     * @param  string  $class
+     * @param  string|null  $alias
+     * @param  string  $prefix
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function component($class, $alias = null, $prefix = &#039;&#039;)
+    {
+        <span style="background-color: green">i</span>f (! is_null($alias) &amp;&amp; <span style="background-color: green">s</span>tr_contains($alias, &#039;\\&#039;)) {
+            [$class, $alias] = [$alias, $class];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (is_null($alias)) {
+            $alias = str_contains($class, &#039;\\View\\Components\\&#039;)
+                ? (new Collection(explode(&#039;\\&#039;, Str::after($class, &#039;\\View\\Components\\&#039;))))-&gt;map(<span style="background-color: red">f</span>unction ($segment) {
+                    return Str::kebab($segment);
+                })-&gt;implode(&#039;:&#039;)
+                : <span style="background-color: red">S</span>tr::kebab(class_basename($class));
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (! empty($prefix)) {
+            $alias = $prefix.&#039;-&#039;.$alias;
+        <span style="background-color: green">}</span>
+
+        $this-&gt;classComponentAliases[$alias] = $class;
+    }
+
+    /**
+     * Register an array of class-based components.
+     *
+     * @param  array  $components
+     * @param  string  $prefix
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function components(array $components, $prefix = &#039;&#039;)
+    {
+        <span style="background-color: red">f</span>oreach ($components as $key =&gt; $value) {
+            <span style="background-color: red">i</span>f (is_numeric($key)) {
+                $this-&gt;component($value, null, $prefix);
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;component($key, $value, $prefix);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Get the registered class component aliases.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getClassComponentAliases()
+    {
+        return $this-&gt;classComponentAliases;
+    }
+
+    /**
+     * Register a new anonymous component path.
+     *
+     * @param  string  $path
+     * @param  string|null  $prefix
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function anonymousComponentPath(string $path, ?string $prefix = null)
+    {
+        $prefixHash = hash(&#039;xxh128&#039;, $prefix ?: <span style="background-color: red">$</span>path);
+
+        $this-&gt;anonymousComponentPaths[] = [
+            &#039;path&#039; =&gt; $path,
+            &#039;prefix&#039; =&gt; $prefix,
+            &#039;prefixHash&#039; =&gt; $prefixHash,
+        ];
+
+        Container::getInstance()
+            -&gt;make(ViewFactory::class)
+            -&gt;addNamespace($prefixHash, $path);
+    }
+
+    /**
+     * Register an anonymous component namespace.
+     *
+     * @param  string  $directory
+     * @param  string|null  $prefix
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function anonymousComponentNamespace(string $directory, ?string $prefix = null)
+    {
+        $prefix ??= <span style="background-color: red">$</span>directory;
+
+        $this-&gt;anonymousComponentNamespaces[$prefix] = (new Stringable($directory))
+            -&gt;replace(&#039;/&#039;, &#039;.&#039;)
+            -&gt;trim(&#039;. &#039;)
+            -&gt;toString();
+    }
+
+    /**
+     * Register a class-based component namespace.
+     *
+     * @param  string  $namespace
+     * @param  string  $prefix
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function componentNamespace($namespace, $prefix)
+    {
+        $this-&gt;classComponentNamespaces[$prefix] = $namespace;
+    }
+
+    /**
+     * Get the registered anonymous component paths.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getAnonymousComponentPaths()
+    {
+        return $this-&gt;anonymousComponentPaths;
+    }
+
+    /**
+     * Get the registered anonymous component namespaces.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getAnonymousComponentNamespaces()
+    {
+        return $this-&gt;anonymousComponentNamespaces;
+    }
+
+    /**
+     * Get the registered class component namespaces.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getClassComponentNamespaces()
+    {
+        return $this-&gt;classComponentNamespaces;
+    }
+
+    /**
+     * Register a component alias directive.
+     *
+     * @param  string  $path
+     * @param  string|null  $alias
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function aliasComponent($path, $alias = null)
+    {
+        $alias = $alias ?: <span style="background-color: red">A</span>rr::last(explode(&#039;.&#039;, $path));
+
+        $this-&gt;directive($alias, <span style="background-color: red">f</span>unction ($expression) use ($path) {
+            return $expression
+                ? &quot;&lt;?php \$__env-&gt;startComponent(&#039;{$path}&#039;, {$expression}); ?&gt;&quot;
+                : <span style="background-color: red">"</span>&lt;?php \$__env-&gt;startComponent(&#039;{$path}&#039;); ?&gt;&quot;;
+        });
+
+        $this-&gt;directive(&#039;end&#039;.$alias, <span style="background-color: red">f</span>unction ($expression) {
+            return &#039;&lt;?php echo $__env-&gt;renderComponent(); ?&gt;&#039;;
+        });
+    }
+
+    /**
+     * Register an include alias directive.
+     *
+     * @param  string  $path
+     * @param  string|null  $alias
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function include($path, $alias = null)
+    {
+        $this-&gt;aliasInclude($path, $alias);
+    }
+
+    /**
+     * Register an include alias directive.
+     *
+     * @param  string  $path
+     * @param  string|null  $alias
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function aliasInclude($path, $alias = null)
+    {
+        $alias = $alias ?: <span style="background-color: red">A</span>rr::last(explode(&#039;.&#039;, $path));
+
+        $this-&gt;directive($alias, <span style="background-color: red">f</span>unction ($expression) use ($path) {
+            $expression = $this-&gt;stripParentheses($expression) ?: <span style="background-color: red">'</span>[]&#039;;
+
+            return &quot;&lt;?php echo \$__env-&gt;make(&#039;{$path}&#039;, {$expression}, array_diff_key(get_defined_vars(), [&#039;__data&#039; =&gt; 1, &#039;__path&#039; =&gt; 1]))-&gt;render(); ?&gt;&quot;;
+        });
+    }
+
+    /**
+     * Register a handler for custom directives, binding the handler to the compiler.
+     *
+     * @param  string  $name
+     * @param  callable  $handler
+     * @return void
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function bindDirective($name, callable $handler)
+    {
+        $this-&gt;directive($name, $handler, bind: true);
+    }
+
+    /**
+     * Register a handler for custom directives.
+     *
+     * @param  string  $name
+     * @param  callable  $handler
+     * @param  bool  $bind
+     * @return void
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function directive($name, callable $handler, bool $bind = false)
+    {
+        <span style="background-color: red">i</span>f (! preg_match(&#039;/^\w+(?:::\w+)?$/x&#039;, $name)) {
+            throw new InvalidArgumentException(&quot;The directive name [{$name}] is not valid. Directive names must only contain alphanumeric characters and underscores.&quot;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;customDirectives[$name] = $bind ? $handler-&gt;bindTo($this, BladeCompiler::class) : <span style="background-color: red">$</span>handler;
+    }
+
+    /**
+     * Get the list of custom directives.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getCustomDirectives()
+    {
+        return $this-&gt;customDirectives;
+    }
+
+    /**
+     * Indicate that the following callable should be used to prepare strings for compilation.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function prepareStringsForCompilationUsing(callable $callback)
+    {
+        $this-&gt;prepareStringsForCompilationUsing[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Register a new precompiler.
+     *
+     * @param  callable  $precompiler
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function precompiler(callable $precompiler)
+    {
+        $this-&gt;precompilers[] = $precompiler;
+    }
+
+    /**
+     * Set the echo format to be used by the compiler.
+     *
+     * @param  string  $format
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function setEchoFormat($format)
+    {
+        $this-&gt;echoFormat = $format;
+    }
+
+    /**
+     * Set the &quot;echo&quot; format to double encode entities.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function withDoubleEncoding()
+    {
+        $this-&gt;setEchoFormat(&#039;e(%s, true)&#039;);
+    }
+
+    /**
+     * Set the &quot;echo&quot; format to not double encode entities.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function withoutDoubleEncoding()
+    {
+        $this-&gt;setEchoFormat(&#039;e(%s, false)&#039;);
+    }
+
+    /**
+     * Indicate that component tags should not be compiled.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function withoutComponentTags()
+    {
+        $this-&gt;compilesComponentTags = false;
+    }
+}
+</pre>

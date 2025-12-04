@@ -1,0 +1,33 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Compilers\Concerns;
+
+trait CompilesRawPhp
+{
+    /**
+     * Compile the raw PHP statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compilePhp($expression)
+    {
+        <span style="background-color: red">i</span>f ($expression) {
+            return &quot;&lt;?php {$expression}; ?&gt;&quot;;
+        <span style="background-color: red">}</span>
+
+        return &#039;@php&#039;;
+    }
+
+    /**
+     * Compile the unset statements into valid PHP.
+     *
+     * @param  string  $expression
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function compileUnset($expression)
+    {
+        return &quot;&lt;?php unset{$expression}; ?&gt;&quot;;
+    }
+}
+</pre>

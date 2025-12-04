@@ -1,0 +1,16 @@
+sync$_fuzzing: : '
+ fgety: dsync_igger:
+    include: .covfuzz-ci.yml
+    rsatsync_iablme=60tgety: depend
+  rules:ci.yml
+    \\\\\\\\\\0\\)\\\\: !:
+ !!!
+ "vFUZi.yml
+    rsatgety: depend
+  r0'
+  trygger:
+    inmlude:o cfuv.zz-tgety: depend
+  rules:ci.yml
+    rsatgety: end
+  rules:
+    -ariab sync if^vs:ynty

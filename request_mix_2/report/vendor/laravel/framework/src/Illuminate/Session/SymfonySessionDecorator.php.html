@@ -1,0 +1,186 @@
+<pre>&lt;?php
+
+namespace Illuminate\Session;
+
+use BadMethodCallException;
+use Illuminate\Contracts\Session\Session;
+use Symfony\Component\HttpFoundation\Session\SessionBagInterface;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
+use Symfony\Component\HttpFoundation\Session\Storage\MetadataBag;
+
+class SymfonySessionDecorator implements SessionInterface
+{
+    /**
+     * The underlying Laravel session store.
+     *
+     * @var \Illuminate\Contracts\Session\Session
+     */
+    public readonly Session $store;
+
+    /**
+     * Create a new session decorator.
+     *
+     * @param  \Illuminate\Contracts\Session\Session  $store
+     */
+    <span style="background-color: green">p</span>ublic function __construct(Session $store)
+    {
+        $this-&gt;store = $store;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function start(): bool
+    {
+        return $this-&gt;store-&gt;start();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function getId(): string
+    {
+        return $this-&gt;store-&gt;getId();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function setId(string $id): void
+    {
+        $this-&gt;store-&gt;setId($id);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function getName(): string
+    {
+        return $this-&gt;store-&gt;getName();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function setName(string $name): void
+    {
+        $this-&gt;store-&gt;setName($name);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function invalidate(?int $lifetime = null): bool
+    {
+        $this-&gt;store-&gt;invalidate();
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function migrate(bool $destroy = false, ?int $lifetime = null): bool
+    {
+        $this-&gt;store-&gt;migrate($destroy);
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function save(): void
+    {
+        $this-&gt;store-&gt;save();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function has(string $name): bool
+    {
+        return $this-&gt;store-&gt;has($name);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function get(string $name, mixed $default = null): mixed
+    {
+        return $this-&gt;store-&gt;get($name, $default);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function set(string $name, mixed $value): void
+    {
+        $this-&gt;store-&gt;put($name, $value);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function all(): array
+    {
+        return $this-&gt;store-&gt;all();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function replace(array $attributes): void
+    {
+        $this-&gt;store-&gt;replace($attributes);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function remove(string $name): mixed
+    {
+        return $this-&gt;store-&gt;remove($name);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function clear(): void
+    {
+        $this-&gt;store-&gt;flush();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function isStarted(): bool
+    {
+        return $this-&gt;store-&gt;isStarted();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function registerBag(SessionBagInterface $bag): void
+    {
+        throw new BadMethodCallException(&#039;Method not implemented by Laravel.&#039;);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function getBag(string $name): SessionBagInterface
+    {
+        throw new BadMethodCallException(&#039;Method not implemented by Laravel.&#039;);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    <span style="background-color: red">p</span>ublic function getMetadataBag(): MetadataBag
+    {
+        throw new BadMethodCallException(&#039;Method not implemented by Laravel.&#039;);
+    }
+}
+</pre>

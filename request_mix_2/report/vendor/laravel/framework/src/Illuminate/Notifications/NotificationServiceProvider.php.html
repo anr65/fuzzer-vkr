@@ -1,0 +1,45 @@
+<pre>&lt;?php
+
+namespace Illuminate\Notifications;
+
+use Illuminate\Contracts\Notifications\Dispatcher as DispatcherContract;
+use Illuminate\Contracts\Notifications\Factory as FactoryContract;
+use Illuminate\Support\ServiceProvider;
+
+class NotificationServiceProvider extends ServiceProvider
+{
+    /**
+     * Boot the application services.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function boot()
+    {
+        $this-&gt;loadViewsFrom(__DIR__.&#039;/resources/views&#039;, &#039;notifications&#039;);
+
+        <span style="background-color: green">i</span>f ($this-&gt;app-&gt;runningInConsole()) {
+            $this-&gt;publishes([
+                __DIR__.&#039;/resources/views&#039; =&gt; $this-&gt;app-&gt;resourcePath(&#039;views/vendor/notifications&#039;),
+            ], &#039;laravel-notifications&#039;);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;app-&gt;singleton(ChannelManager::class, fn ($app) =&gt; <span style="background-color: red">n</span>ew ChannelManager($app));
+
+        $this-&gt;app-&gt;alias(
+            ChannelManager::class, DispatcherContract::class
+        );
+
+        $this-&gt;app-&gt;alias(
+            ChannelManager::class, FactoryContract::class
+        );
+    }
+}
+</pre>

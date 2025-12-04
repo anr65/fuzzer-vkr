@@ -1,0 +1,118 @@
+<pre>&lt;?php
+
+namespace Illuminate\Http;
+
+use ArrayObject;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Renderable;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+use JsonSerializable;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+
+class Response extends SymfonyResponse
+{
+    use ResponseTrait, Macroable {
+        Macroable::__call as macroCall;
+    }
+
+    /**
+     * Create a new HTTP response.
+     *
+     * @param  mixed  $content
+     * @param  int  $status
+     * @param  array  $headers
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">p</span>ublic function __construct($content = &#039;&#039;, $status = 200, array $headers = [])
+    {
+        $this-&gt;headers = new ResponseHeaderBag($headers);
+
+        $this-&gt;setContent($content);
+        $this-&gt;setStatusCode($status);
+        $this-&gt;setProtocolVersion(&#039;1.0&#039;);
+    }
+
+    /**
+     * Get the response content.
+     */
+    <span style="background-color: green">#</span>[\Override]
+    public function getContent(): string|false
+    {
+        return transform(parent::getContent(), fn ($content) =&gt; <span style="background-color: green">$</span>content, &#039;&#039;);
+    }
+
+    /**
+     * Set the content on the response.
+     *
+     * @param  mixed  $content
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: green">#</span>[\Override]
+    public function setContent(mixed $content): static
+    {
+        $this-&gt;original = $content;
+
+        // If the content is &quot;JSONable&quot; we will set the appropriate header and convert
+        // the content to JSON. This is useful when returning something like models
+        // from routes that will be automatically transformed to their JSON form.
+        <span style="background-color: red">i</span>f ($this-&gt;shouldBeJson($content)) {
+            $this-&gt;header(&#039;Content-Type&#039;, &#039;application/json&#039;);
+
+            $content = $this-&gt;morphToJson($content);
+
+            <span style="background-color: red">i</span>f ($content === false) {
+                throw new InvalidArgumentException(json_last_error_msg());
+            <span style="background-color: red">}</span>
+        }
+
+        // If this content implements the &quot;Renderable&quot; interface then we will call the
+        // render method on the object so we will avoid any &quot;__toString&quot; exceptions
+        // that might be thrown and have their errors obscured by PHP&#039;s handling.
+        <span style="background-color: green">e</span>lseif ($content instanceof Renderable) {
+            $content = $content-&gt;render();
+        <span style="background-color: green">}</span>
+
+        parent::setContent($content);
+
+        return $this;
+    }
+
+    /**
+     * Determine if the given content should be turned into JSON.
+     *
+     * @param  mixed  $content
+     * @return bool
+     */
+    <span style="background-color: green">p</span>rotected function shouldBeJson($content)
+    {
+        return $content instanceof Arrayable ||
+               <span style="background-color: green">$</span>content instanceof Jsonable ||
+               <span style="background-color: green">$</span>content instanceof ArrayObject ||
+               <span style="background-color: green">$</span>content instanceof JsonSerializable ||
+               <span style="background-color: green">i</span>s_array($content);
+    }
+
+    /**
+     * Morph the given content into JSON.
+     *
+     * @param  mixed  $content
+     * @return string|false
+     */
+    <span style="background-color: red">p</span>rotected function morphToJson($content)
+    {
+        <span style="background-color: red">i</span>f ($content instanceof Jsonable) {
+            return $content-&gt;toJson();
+        } <span style="background-color: red">e</span>lseif ($content instanceof Arrayable) {
+            return json_encode($content-&gt;toArray());
+        <span style="background-color: red">}</span>
+
+        return json_encode($content);
+    }
+}
+</pre>

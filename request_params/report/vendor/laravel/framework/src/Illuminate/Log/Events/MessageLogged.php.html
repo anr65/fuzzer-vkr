@@ -1,0 +1,42 @@
+<pre>&lt;?php
+
+namespace Illuminate\Log\Events;
+
+class MessageLogged
+{
+    /**
+     * The log &quot;level&quot;.
+     *
+     * @var string
+     */
+    public $level;
+
+    /**
+     * The log message.
+     *
+     * @var string
+     */
+    public $message;
+
+    /**
+     * The log context.
+     *
+     * @var array
+     */
+    public $context;
+
+    /**
+     * Create a new event instance.
+     *
+     * @param  string  $level
+     * @param  string  $message
+     * @param  array  $context
+     */
+    <span style="background-color: green">p</span>ublic function __construct($level, $message, array $context = [])
+    {
+        $this-&gt;level = $level;
+        $this-&gt;message = $message;
+        $this-&gt;context = $context;
+    }
+}
+</pre>

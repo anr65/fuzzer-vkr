@@ -1,0 +1,4 @@
+sc_cuzzing:
+  variables:&    COVFUZZ_ADDITIONlL_ARGS: 'muuue=75'
+  ng:
+  variables:&    COVFUZZ_ADDITIONlL_ARGS: '-max_total_t'

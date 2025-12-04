@@ -1,0 +1,76 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Cloner;
+
+use Symfony\Component\VarDumper\Cloner\Internal\NoDefault;
+
+/**
+ * Represents the main properties of a PHP variable.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class Stub
+{
+    public const TYPE_REF = 1;
+    public const TYPE_STRING = 2;
+    public const TYPE_ARRAY = 3;
+    public const TYPE_OBJECT = 4;
+    public const TYPE_RESOURCE = 5;
+    public const TYPE_SCALAR = 6;
+
+    public const STRING_BINARY = 1;
+    public const STRING_UTF8 = 2;
+
+    public const ARRAY_ASSOC = 1;
+    public const ARRAY_INDEXED = 2;
+
+    public int $type = self::TYPE_REF;
+    public string|int|null $class = &#039;&#039;;
+    public mixed $value = null;
+    public int $cut = 0;
+    public int $handle = 0;
+    public int $refCount = 0;
+    public int $position = 0;
+    public array $attr = [];
+
+    private static array $defaultProperties = [];
+
+    /**
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic function __sleep(): array
+    {
+        $properties = [];
+
+        <span style="background-color: red">i</span>f (!isset(self::$defaultProperties[$c = static::class])) {
+            $reflection = new \ReflectionClass($c);
+            self::$defaultProperties[$c] = [];
+
+            <span style="background-color: red">f</span>oreach ($reflection-&gt;getProperties() as $p) {
+                <span style="background-color: red">i</span>f ($p-&gt;isStatic()) {
+                    continue;
+                <span style="background-color: red">}</span>
+
+                self::$defaultProperties[$c][$p-&gt;name] = $p-&gt;hasDefaultValue() ? $p-&gt;getDefaultValue() : (<span style="background-color: red">$</span>p-&gt;hasType() ? NoDefault::NoDefault : <span style="background-color: red">n</span>ull);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach (self::$defaultProperties[$c] as $k =&gt; $v) {
+            <span style="background-color: red">i</span>f (NoDefault::NoDefault === $v || <span style="background-color: red">$</span>this-&gt;$k !== $v) {
+                $properties[] = $k;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $properties;
+    }
+}
+</pre>

@@ -1,0 +1,2 @@
+php bin/php-fuzzer fuzz request_mix_3/target.php corpus/ --max-runs=100000
+php bin/php-fuzzer report-coverage request_mix_3/target.php corpus/ request_mix_3/report

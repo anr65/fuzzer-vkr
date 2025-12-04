@@ -1,0 +1,354 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Concerns;
+
+use Closure;
+use Illuminate\Database\DeadlockException;
+use RuntimeException;
+use Throwable;
+
+trait ManagesTransactions
+{
+    /**
+     * @template TReturn of mixed
+     *
+     * Execute a Closure within a transaction.
+     *
+     * @param  (\Closure(static): TReturn)  $callback
+     * @param  int  $attempts
+     * @return TReturn
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function transaction(Closure $callback, $attempts = 1)
+    {
+        <span style="background-color: red">f</span>or ($currentAttempt = 1; $currentAttempt &lt;= $attempts; $currentAttempt++) {
+            $this-&gt;beginTransaction();
+
+            // We&#039;ll simply execute the given callback within a try / catch block and if we
+            // catch any exception we can rollback this transaction so that none of this
+            // gets actually persisted to a database or stored in a permanent fashion.
+            try {
+                $callbackResult = $callback($this);
+            }
+
+            // If we catch an exception we&#039;ll rollback this transaction and try again if we
+            // are not out of attempts. If we are out of attempts we will just throw the
+            // exception back out, and let the developer handle an uncaught exception.
+            <span style="background-color: red">c</span>atch (Throwable $e) {
+                $this-&gt;handleTransactionException(
+                    $e, $currentAttempt, $attempts
+                );
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            $levelBeingCommitted = $this-&gt;transactions;
+
+            try {
+                <span style="background-color: red">i</span>f ($this-&gt;transactions == 1) {
+                    $this-&gt;fireConnectionEvent(&#039;committing&#039;);
+                    $this-&gt;getPdo()-&gt;commit();
+                <span style="background-color: red">}</span>
+
+                $this-&gt;transactions = max(0, $this-&gt;transactions - 1);
+            } <span style="background-color: red">c</span>atch (Throwable $e) {
+                $this-&gt;handleCommitTransactionException(
+                    $e, $currentAttempt, $attempts
+                );
+
+                continue;
+            <span style="background-color: red">}</span>
+
+            $this-&gt;transactionsManager?-&gt;commit(
+                $this-&gt;getName(),
+                $levelBeingCommitted,
+                $this-&gt;transactions
+            );
+
+            $this-&gt;fireConnectionEvent(&#039;committed&#039;);
+
+            return $callbackResult;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Handle an exception encountered when running a transacted statement.
+     *
+     * @param  \Throwable  $e
+     * @param  int  $currentAttempt
+     * @param  int  $maxAttempts
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function handleTransactionException(Throwable $e, $currentAttempt, $maxAttempts)
+    {
+        // On a deadlock, MySQL rolls back the entire transaction so we can&#039;t just
+        // retry the query. We have to throw this exception all the way out and
+        // let the developer handle it in another way. We will decrement too.
+        <span style="background-color: red">i</span>f ($this-&gt;causedByConcurrencyError($e) &amp;&amp;
+            <span style="background-color: red">$</span>this-&gt;transactions &gt; 1) {
+            $this-&gt;transactions--;
+
+            $this-&gt;transactionsManager?-&gt;rollback(
+                $this-&gt;getName(), $this-&gt;transactions
+            );
+
+            throw new DeadlockException($e-&gt;getMessage(), is_int($e-&gt;getCode()) ? $e-&gt;getCode() : <span style="background-color: red">0</span>, $e);
+        <span style="background-color: red">}</span>
+
+        // If there was an exception we will rollback this transaction and then we
+        // can check if we have exceeded the maximum attempt count for this and
+        // if we haven&#039;t we will return and try this query again in our loop.
+        $this-&gt;rollBack();
+
+        <span style="background-color: red">i</span>f ($this-&gt;causedByConcurrencyError($e) &amp;&amp;
+            <span style="background-color: red">$</span>currentAttempt &lt; $maxAttempts) {
+            return;
+        <span style="background-color: red">}</span>
+
+        throw $e;
+    }
+
+    /**
+     * Start a new database transaction.
+     *
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function beginTransaction()
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;beforeStartingTransaction as $callback) {
+            $callback($this);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;createTransaction();
+
+        $this-&gt;transactions++;
+
+        $this-&gt;transactionsManager?-&gt;begin(
+            $this-&gt;getName(), $this-&gt;transactions
+        );
+
+        $this-&gt;fireConnectionEvent(&#039;beganTransaction&#039;);
+    }
+
+    /**
+     * Create a transaction within the database.
+     *
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function createTransaction()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;transactions == 0) {
+            $this-&gt;reconnectIfMissingConnection();
+
+            try {
+                $this-&gt;getPdo()-&gt;beginTransaction();
+            } <span style="background-color: red">c</span>atch (Throwable $e) {
+                $this-&gt;handleBeginTransactionException($e);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif ($this-&gt;transactions &gt;= 1 &amp;&amp; <span style="background-color: red">$</span>this-&gt;queryGrammar-&gt;supportsSavepoints()) {
+            $this-&gt;createSavepoint();
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Create a save point within the database.
+     *
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function createSavepoint()
+    {
+        $this-&gt;getPdo()-&gt;exec(
+            $this-&gt;queryGrammar-&gt;compileSavepoint(&#039;trans&#039;.($this-&gt;transactions + 1))
+        );
+    }
+
+    /**
+     * Handle an exception from a transaction beginning.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function handleBeginTransactionException(Throwable $e)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;causedByLostConnection($e)) {
+            $this-&gt;reconnect();
+
+            $this-&gt;getPdo()-&gt;beginTransaction();
+        } <span style="background-color: red">e</span>lse {
+            throw $e;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Commit the active database transaction.
+     *
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function commit()
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;transactionLevel() == 1) {
+            $this-&gt;fireConnectionEvent(&#039;committing&#039;);
+            $this-&gt;getPdo()-&gt;commit();
+        <span style="background-color: red">}</span>
+
+        [$levelBeingCommitted, $this-&gt;transactions] = [
+            $this-&gt;transactions,
+            max(0, $this-&gt;transactions - 1),
+        ];
+
+        $this-&gt;transactionsManager?-&gt;commit(
+            $this-&gt;getName(), $levelBeingCommitted, $this-&gt;transactions
+        );
+
+        $this-&gt;fireConnectionEvent(&#039;committed&#039;);
+    }
+
+    /**
+     * Handle an exception encountered when committing a transaction.
+     *
+     * @param  \Throwable  $e
+     * @param  int  $currentAttempt
+     * @param  int  $maxAttempts
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function handleCommitTransactionException(Throwable $e, $currentAttempt, $maxAttempts)
+    {
+        $this-&gt;transactions = max(0, $this-&gt;transactions - 1);
+
+        <span style="background-color: red">i</span>f ($this-&gt;causedByConcurrencyError($e) &amp;&amp; <span style="background-color: red">$</span>currentAttempt &lt; $maxAttempts) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;causedByLostConnection($e)) {
+            $this-&gt;transactions = 0;
+        <span style="background-color: red">}</span>
+
+        throw $e;
+    }
+
+    /**
+     * Rollback the active database transaction.
+     *
+     * @param  int|null  $toLevel
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>ublic function rollBack($toLevel = null)
+    {
+        // We allow developers to rollback to a certain transaction level. We will verify
+        // that this given transaction level is valid before attempting to rollback to
+        // that level. If it&#039;s not we will just return out and not attempt anything.
+        $toLevel = is_null($toLevel)
+            ? $this-&gt;transactions - 1
+            : <span style="background-color: red">$</span>toLevel;
+
+        <span style="background-color: red">i</span>f ($toLevel &lt; 0 || <span style="background-color: red">$</span>toLevel &gt;= $this-&gt;transactions) {
+            return;
+        <span style="background-color: red">}</span>
+
+        // Next, we will actually perform this rollback within this database and fire the
+        // rollback event. We will also set the current transaction level to the given
+        // level that was passed into this method so it will be right from here out.
+        try {
+            $this-&gt;performRollBack($toLevel);
+        } <span style="background-color: red">c</span>atch (Throwable $e) {
+            $this-&gt;handleRollBackException($e);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;transactions = $toLevel;
+
+        $this-&gt;transactionsManager?-&gt;rollback(
+            $this-&gt;getName(), $this-&gt;transactions
+        );
+
+        $this-&gt;fireConnectionEvent(&#039;rollingBack&#039;);
+    }
+
+    /**
+     * Perform a rollback within the database.
+     *
+     * @param  int  $toLevel
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function performRollBack($toLevel)
+    {
+        <span style="background-color: red">i</span>f ($toLevel == 0) {
+            $pdo = $this-&gt;getPdo();
+
+            <span style="background-color: red">i</span>f ($pdo-&gt;inTransaction()) {
+                $pdo-&gt;rollBack();
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">e</span>lseif ($this-&gt;queryGrammar-&gt;supportsSavepoints()) {
+            $this-&gt;getPdo()-&gt;exec(
+                $this-&gt;queryGrammar-&gt;compileSavepointRollBack(&#039;trans&#039;.($toLevel + 1))
+            );
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Handle an exception from a rollback.
+     *
+     * @param  \Throwable  $e
+     * @return void
+     *
+     * @throws \Throwable
+     */
+    <span style="background-color: red">p</span>rotected function handleRollBackException(Throwable $e)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;causedByLostConnection($e)) {
+            $this-&gt;transactions = 0;
+
+            $this-&gt;transactionsManager?-&gt;rollback(
+                $this-&gt;getName(), $this-&gt;transactions
+            );
+        <span style="background-color: red">}</span>
+
+        throw $e;
+    }
+
+    /**
+     * Get the number of active transactions.
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic function transactionLevel()
+    {
+        return $this-&gt;transactions;
+    }
+
+    /**
+     * Execute the callback after a transaction commits.
+     *
+     * @param  callable  $callback
+     * @return void
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>ublic function afterCommit($callback)
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;transactionsManager) {
+            return $this-&gt;transactionsManager-&gt;addCallback($callback);
+        <span style="background-color: red">}</span>
+
+        throw new RuntimeException(&#039;Transactions Manager has not been set.&#039;);
+    }
+}
+</pre>

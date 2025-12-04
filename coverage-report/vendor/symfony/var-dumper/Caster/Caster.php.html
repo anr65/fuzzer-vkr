@@ -1,0 +1,199 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper\Caster;
+
+use Symfony\Component\VarDumper\Cloner\Stub;
+
+/**
+ * Helper for filtering out properties in casters.
+ *
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ *
+ * @final
+ */
+class Caster
+{
+    public const EXCLUDE_VERBOSE = 1;
+    public const EXCLUDE_VIRTUAL = 2;
+    public const EXCLUDE_DYNAMIC = 4;
+    public const EXCLUDE_PUBLIC = 8;
+    public const EXCLUDE_PROTECTED = 16;
+    public const EXCLUDE_PRIVATE = 32;
+    public const EXCLUDE_NULL = 64;
+    public const EXCLUDE_EMPTY = 128;
+    public const EXCLUDE_NOT_IMPORTANT = 256;
+    public const EXCLUDE_STRICT = 512;
+    public const EXCLUDE_UNINITIALIZED = 1024;
+
+    public const PREFIX_VIRTUAL = &quot;\0~\0&quot;;
+    public const PREFIX_DYNAMIC = &quot;\0+\0&quot;;
+    public const PREFIX_PROTECTED = &quot;\0*\0&quot;;
+    // usage: sprintf(Caster::PATTERN_PRIVATE, $class, $property)
+    public const PATTERN_PRIVATE = &quot;\0%s\0%s&quot;;
+
+    private static array $classProperties = [];
+
+    /**
+     * Casts objects to arrays and adds the dynamic property prefix.
+     *
+     * @param bool $hasDebugInfo Whether the __debugInfo method exists on $obj or not
+     */
+    <span style="background-color: green">p</span>ublic static function castObject(object $obj, string $class, bool $hasDebugInfo = false, ?string $debugClass = null): array
+    {
+        <span style="background-color: red">i</span>f ($hasDebugInfo) {
+            try {
+                $debugInfo = $obj-&gt;__debugInfo();
+            } <span style="background-color: red">c</span>atch (\Throwable) {
+                // ignore failing __debugInfo()
+                $hasDebugInfo = false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        $a = $obj instanceof \Closure ? [] : <span style="background-color: green">(</span>array) $obj;
+
+        <span style="background-color: red">i</span>f ($obj instanceof \__PHP_Incomplete_Class) {
+            return $a;
+        <span style="background-color: green">}</span>
+
+        $classProperties = self::$classProperties[$class] ??= <span style="background-color: green">s</span>elf::getClassProperties(new \ReflectionClass($class));
+        $a = array_replace($classProperties, $a);
+
+        <span style="background-color: green">i</span>f ($a) {
+            $debugClass ??= <span style="background-color: red">g</span>et_debug_type($obj);
+
+            $i = 0;
+            $prefixedKeys = [];
+            <span style="background-color: green">f</span>oreach ($a as $k =&gt; $v) {
+                <span style="background-color: red">i</span>f (&quot;\0&quot; !== ($k[0] ?? <span style="background-color: red">'</span>&#039;)) {
+                    <span style="background-color: red">i</span>f (!isset($classProperties[$k])) {
+                        $prefixedKeys[$i] = self::PREFIX_DYNAMIC.$k;
+                    <span style="background-color: red">}</span>
+                } <span style="background-color: red">e</span>lseif ($debugClass !== $class &amp;&amp; <span style="background-color: red">1</span> === strpos($k, $class)) {
+                    $prefixedKeys[$i] = &quot;\0&quot;.$debugClass.strrchr($k, &quot;\0&quot;);
+                <span style="background-color: green">}</span>
+                ++$i;
+            <span style="background-color: green">}</span>
+            <span style="background-color: red">i</span>f ($prefixedKeys) {
+                $keys = array_keys($a);
+                <span style="background-color: red">f</span>oreach ($prefixedKeys as $i =&gt; $k) {
+                    $keys[$i] = $k;
+                <span style="background-color: red">}</span>
+                $a = array_combine($keys, $a);
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f ($hasDebugInfo &amp;&amp; <span style="background-color: red">\</span>is_array($debugInfo)) {
+            <span style="background-color: red">f</span>oreach ($debugInfo as $k =&gt; $v) {
+                <span style="background-color: red">i</span>f (!isset($k[0]) || <span style="background-color: red">"</span>\0&quot; !== $k[0]) {
+                    <span style="background-color: red">i</span>f (\array_key_exists(self::PREFIX_DYNAMIC.$k, $a)) {
+                        continue;
+                    <span style="background-color: red">}</span>
+                    $k = self::PREFIX_VIRTUAL.$k;
+                <span style="background-color: red">}</span>
+
+                unset($a[$k]);
+                $a[$k] = $v;
+            <span style="background-color: red">}</span>
+        <span style="background-color: green">}</span>
+
+        return $a;
+    }
+
+    /**
+     * Filters out the specified properties.
+     *
+     * By default, a single match in the $filter bit field filters properties out, following an &quot;or&quot; logic.
+     * When EXCLUDE_STRICT is set, an &quot;and&quot; logic is applied: all bits must match for a property to be removed.
+     *
+     * @param array    $a                The array containing the properties to filter
+     * @param int      $filter           A bit field of Caster::EXCLUDE_* constants specifying which properties to filter out
+     * @param string[] $listedProperties List of properties to exclude when Caster::EXCLUDE_VERBOSE is set, and to preserve when Caster::EXCLUDE_NOT_IMPORTANT is set
+     * @param int|null &amp;$count           Set to the number of removed properties
+     */
+    <span style="background-color: red">p</span>ublic static function filter(array $a, int $filter, array $listedProperties = [], ?int &amp;$count = 0): array
+    {
+        $count = 0;
+
+        <span style="background-color: red">f</span>oreach ($a as $k =&gt; $v) {
+            $type = self::EXCLUDE_STRICT &amp; $filter;
+
+            <span style="background-color: red">i</span>f (null === $v) {
+                $type |= self::EXCLUDE_NULL &amp; $filter;
+                $type |= self::EXCLUDE_EMPTY &amp; $filter;
+            } <span style="background-color: red">e</span>lseif (false === $v || <span style="background-color: red">'</span>&#039; === $v || <span style="background-color: red">'</span>0&#039; === $v || <span style="background-color: red">0</span> === $v || <span style="background-color: red">0</span>.0 === $v || <span style="background-color: red">[</span>] === $v) {
+                $type |= self::EXCLUDE_EMPTY &amp; $filter;
+            } <span style="background-color: red">e</span>lseif ($v instanceof UninitializedStub) {
+                $type |= self::EXCLUDE_UNINITIALIZED &amp; $filter;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ((self::EXCLUDE_NOT_IMPORTANT &amp; $filter) &amp;&amp; <span style="background-color: red">!</span>\in_array($k, $listedProperties, true)) {
+                $type |= self::EXCLUDE_NOT_IMPORTANT;
+            <span style="background-color: red">}</span>
+            <span style="background-color: red">i</span>f ((self::EXCLUDE_VERBOSE &amp; $filter) &amp;&amp; <span style="background-color: red">\</span>in_array($k, $listedProperties, true)) {
+                $type |= self::EXCLUDE_VERBOSE;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (!isset($k[1]) || <span style="background-color: red">"</span>\0&quot; !== $k[0]) {
+                $type |= self::EXCLUDE_PUBLIC &amp; $filter;
+            } <span style="background-color: red">e</span>lseif (&#039;~&#039; === $k[1]) {
+                $type |= self::EXCLUDE_VIRTUAL &amp; $filter;
+            } <span style="background-color: red">e</span>lseif (&#039;+&#039; === $k[1]) {
+                $type |= self::EXCLUDE_DYNAMIC &amp; $filter;
+            } <span style="background-color: red">e</span>lseif (&#039;*&#039; === $k[1]) {
+                $type |= self::EXCLUDE_PROTECTED &amp; $filter;
+            } <span style="background-color: red">e</span>lse {
+                $type |= self::EXCLUDE_PRIVATE &amp; $filter;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ((self::EXCLUDE_STRICT &amp; $filter) ? $type === $filter : <span style="background-color: red">$</span>type) {
+                unset($a[$k]);
+                ++$count;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: red">p</span>ublic static function castPhpIncompleteClass(\__PHP_Incomplete_Class $c, array $a, Stub $stub, bool $isNested): array
+    {
+        <span style="background-color: red">i</span>f (isset($a[&#039;__PHP_Incomplete_Class_Name&#039;])) {
+            $stub-&gt;class .= &#039;(&#039;.$a[&#039;__PHP_Incomplete_Class_Name&#039;].&#039;)&#039;;
+            unset($a[&#039;__PHP_Incomplete_Class_Name&#039;]);
+        <span style="background-color: red">}</span>
+
+        return $a;
+    }
+
+    <span style="background-color: green">p</span>rivate static function getClassProperties(\ReflectionClass $class): array
+    {
+        $classProperties = [];
+        $className = $class-&gt;name;
+
+        <span style="background-color: green">i</span>f ($parent = $class-&gt;getParentClass()) {
+            $classProperties += self::$classProperties[$parent-&gt;name] ??= <span style="background-color: green">s</span>elf::getClassProperties($parent);
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">f</span>oreach ($class-&gt;getProperties() as $p) {
+            <span style="background-color: red">i</span>f ($p-&gt;isStatic()) {
+                continue;
+            <span style="background-color: green">}</span>
+
+            $classProperties[match (true) {
+                $p-&gt;isPublic() =&gt; <span style="background-color: red">$</span>p-&gt;name,
+                $p-&gt;isProtected() =&gt; <span style="background-color: green">s</span>elf::PREFIX_PROTECTED.$p-&gt;name,
+                default =&gt; <span style="background-color: green">"</span>\0&quot;.$className.&quot;\0&quot;.$p-&gt;name,
+            }] = \PHP_VERSION_ID &gt;= 80400 &amp;&amp; <span style="background-color: red">$</span>p-&gt;isVirtual() ? new VirtualStub($p) : <span style="background-color: green">n</span>ew UninitializedStub($p);
+        <span style="background-color: green">}</span>
+
+        return $classProperties;
+    }
+}
+</pre>

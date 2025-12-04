@@ -1,0 +1,160 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+/**
+ * Represents an Accept-* header item.
+ *
+ * @author Jean-François Simon &lt;contact@jfsimon.fr&gt;
+ */
+class AcceptHeaderItem
+{
+    private float $quality = 1.0;
+    private int $index = 0;
+    private array $attributes = [];
+
+    <span style="background-color: green">p</span>ublic function __construct(
+        private string $value,
+        array $attributes = [],
+    ) {
+        <span style="background-color: green">f</span>oreach ($attributes as $name =&gt; $value) {
+            $this-&gt;setAttribute($name, $value);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Builds an AcceptHeaderInstance instance from a string.
+     */
+    <span style="background-color: red">p</span>ublic static function fromString(?string $itemValue): self
+    {
+        $parts = HeaderUtils::split($itemValue ?? <span style="background-color: red">'</span>&#039;, &#039;;=&#039;);
+
+        $part = array_shift($parts);
+        $attributes = HeaderUtils::combine($parts);
+
+        return new self($part[0], $attributes);
+    }
+
+    /**
+     * Returns header value&#039;s string representation.
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        $string = $this-&gt;value.($this-&gt;quality &lt; 1 ? &#039;;q=&#039;.$this-&gt;quality : <span style="background-color: red">'</span>&#039;);
+        <span style="background-color: red">i</span>f (\count($this-&gt;attributes) &gt; 0) {
+            $string .= &#039;; &#039;.HeaderUtils::toString($this-&gt;attributes, &#039;;&#039;);
+        <span style="background-color: red">}</span>
+
+        return $string;
+    }
+
+    /**
+     * Set the item value.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setValue(string $value): static
+    {
+        $this-&gt;value = $value;
+
+        return $this;
+    }
+
+    /**
+     * Returns the item value.
+     */
+    <span style="background-color: green">p</span>ublic function getValue(): string
+    {
+        return $this-&gt;value;
+    }
+
+    /**
+     * Set the item quality.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setQuality(float $quality): static
+    {
+        $this-&gt;quality = $quality;
+
+        return $this;
+    }
+
+    /**
+     * Returns the item quality.
+     */
+    <span style="background-color: green">p</span>ublic function getQuality(): float
+    {
+        return $this-&gt;quality;
+    }
+
+    /**
+     * Set the item index.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setIndex(int $index): static
+    {
+        $this-&gt;index = $index;
+
+        return $this;
+    }
+
+    /**
+     * Returns the item index.
+     */
+    <span style="background-color: green">p</span>ublic function getIndex(): int
+    {
+        return $this-&gt;index;
+    }
+
+    /**
+     * Tests if an attribute exists.
+     */
+    <span style="background-color: red">p</span>ublic function hasAttribute(string $name): bool
+    {
+        return isset($this-&gt;attributes[$name]);
+    }
+
+    /**
+     * Returns an attribute by its name.
+     */
+    <span style="background-color: red">p</span>ublic function getAttribute(string $name, mixed $default = null): mixed
+    {
+        return $this-&gt;attributes[$name] ?? <span style="background-color: red">$</span>default;
+    }
+
+    /**
+     * Returns all attributes.
+     */
+    <span style="background-color: red">p</span>ublic function getAttributes(): array
+    {
+        return $this-&gt;attributes;
+    }
+
+    /**
+     * Set an attribute.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setAttribute(string $name, string $value): static
+    {
+        <span style="background-color: green">i</span>f (&#039;q&#039; === $name) {
+            $this-&gt;quality = (float) $value;
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;attributes[$name] = $value;
+        <span style="background-color: green">}</span>
+
+        return $this;
+    }
+}
+</pre>

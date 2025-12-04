@@ -1,0 +1,89 @@
+<pre>&lt;?php
+
+namespace Illuminate\View\Concerns;
+
+use InvalidArgumentException;
+
+trait ManagesFragments
+{
+    /**
+     * All of the captured, rendered fragments.
+     *
+     * @var array
+     */
+    protected $fragments = [];
+
+    /**
+     * The stack of in-progress fragment renders.
+     *
+     * @var array
+     */
+    protected $fragmentStack = [];
+
+    /**
+     * Start injecting content into a fragment.
+     *
+     * @param  string  $fragment
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic function startFragment($fragment)
+    {
+        <span style="background-color: red">i</span>f (ob_start()) {
+            $this-&gt;fragmentStack[] = $fragment;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Stop injecting content into a fragment.
+     *
+     * @return string
+     *
+     * @throws \InvalidArgumentException
+     */
+    <span style="background-color: red">p</span>ublic function stopFragment()
+    {
+        <span style="background-color: red">i</span>f (empty($this-&gt;fragmentStack)) {
+            throw new InvalidArgumentException(&#039;Cannot end a fragment without first starting one.&#039;);
+        <span style="background-color: red">}</span>
+
+        $last = array_pop($this-&gt;fragmentStack);
+
+        $this-&gt;fragments[$last] = ob_get_clean();
+
+        return $this-&gt;fragments[$last];
+    }
+
+    /**
+     * Get the contents of a fragment.
+     *
+     * @param  string  $name
+     * @param  string|null  $default
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function getFragment($name, $default = null)
+    {
+        return $this-&gt;getFragments()[$name] ?? <span style="background-color: red">$</span>default;
+    }
+
+    /**
+     * Get the entire array of rendered fragments.
+     *
+     * @return array
+     */
+    <span style="background-color: red">p</span>ublic function getFragments()
+    {
+        return $this-&gt;fragments;
+    }
+
+    /**
+     * Flush all of the fragments.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function flushFragments()
+    {
+        $this-&gt;fragments = [];
+        $this-&gt;fragmentStack = [];
+    }
+}
+</pre>

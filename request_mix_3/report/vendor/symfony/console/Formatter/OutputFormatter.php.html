@@ -1,0 +1,268 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Formatter;
+
+use Symfony\Component\Console\Exception\InvalidArgumentException;
+
+use function Symfony\Component\String\b;
+
+/**
+ * Formatter class for console output.
+ *
+ * @author Konstantin Kudryashov &lt;ever.zet@gmail.com&gt;
+ * @author Roland Franssen &lt;franssen.roland@gmail.com&gt;
+ */
+class OutputFormatter implements WrappableOutputFormatterInterface
+{
+    private array $styles = [];
+    private OutputFormatterStyleStack $styleStack;
+
+    <span style="background-color: red">p</span>ublic function __clone()
+    {
+        $this-&gt;styleStack = clone $this-&gt;styleStack;
+        <span style="background-color: red">f</span>oreach ($this-&gt;styles as $key =&gt; $value) {
+            $this-&gt;styles[$key] = clone $value;
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Escapes &quot;&lt;&quot; and &quot;&gt;&quot; special chars in given text.
+     */
+    <span style="background-color: red">p</span>ublic static function escape(string $text): string
+    {
+        $text = preg_replace(&#039;/([^\\\\]|^)([&lt;&gt;])/&#039;, &#039;$1\\\\$2&#039;, $text);
+
+        return self::escapeTrailingBackslash($text);
+    }
+
+    /**
+     * Escapes trailing &quot;\&quot; in given text.
+     *
+     * @internal
+     */
+    <span style="background-color: red">p</span>ublic static function escapeTrailingBackslash(string $text): string
+    {
+        <span style="background-color: red">i</span>f (str_ends_with($text, &#039;\\&#039;)) {
+            $len = \strlen($text);
+            $text = rtrim($text, &#039;\\&#039;);
+            $text = str_replace(&quot;\0&quot;, &#039;&#039;, $text);
+            $text .= str_repeat(&quot;\0&quot;, $len - \strlen($text));
+        <span style="background-color: red">}</span>
+
+        return $text;
+    }
+
+    /**
+     * Initializes console output formatter.
+     *
+     * @param OutputFormatterStyleInterface[] $styles Array of &quot;name =&gt; FormatterStyle&quot; instances
+     */
+    <span style="background-color: green">p</span>ublic function __construct(
+        private bool $decorated = false,
+        array $styles = [],
+    ) {
+        $this-&gt;setStyle(&#039;error&#039;, new OutputFormatterStyle(&#039;white&#039;, &#039;red&#039;));
+        $this-&gt;setStyle(&#039;info&#039;, new OutputFormatterStyle(&#039;green&#039;));
+        $this-&gt;setStyle(&#039;comment&#039;, new OutputFormatterStyle(&#039;yellow&#039;));
+        $this-&gt;setStyle(&#039;question&#039;, new OutputFormatterStyle(&#039;black&#039;, &#039;cyan&#039;));
+
+        <span style="background-color: red">f</span>oreach ($styles as $name =&gt; $style) {
+            $this-&gt;setStyle($name, $style);
+        <span style="background-color: green">}</span>
+
+        $this-&gt;styleStack = new OutputFormatterStyleStack();
+    }
+
+    <span style="background-color: green">p</span>ublic function setDecorated(bool $decorated): void
+    {
+        $this-&gt;decorated = $decorated;
+    }
+
+    <span style="background-color: green">p</span>ublic function isDecorated(): bool
+    {
+        return $this-&gt;decorated;
+    }
+
+    <span style="background-color: green">p</span>ublic function setStyle(string $name, OutputFormatterStyleInterface $style): void
+    {
+        $this-&gt;styles[strtolower($name)] = $style;
+    }
+
+    <span style="background-color: red">p</span>ublic function hasStyle(string $name): bool
+    {
+        return isset($this-&gt;styles[strtolower($name)]);
+    }
+
+    <span style="background-color: red">p</span>ublic function getStyle(string $name): OutputFormatterStyleInterface
+    {
+        <span style="background-color: red">i</span>f (!$this-&gt;hasStyle($name)) {
+            throw new InvalidArgumentException(\sprintf(&#039;Undefined style: &quot;%s&quot;.&#039;, $name));
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;styles[strtolower($name)];
+    }
+
+    <span style="background-color: red">p</span>ublic function format(?string $message): ?string
+    {
+        return $this-&gt;formatAndWrap($message, 0);
+    }
+
+    <span style="background-color: red">p</span>ublic function formatAndWrap(?string $message, int $width): string
+    {
+        <span style="background-color: red">i</span>f (null === $message) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        $offset = 0;
+        $output = &#039;&#039;;
+        $openTagRegex = &#039;[a-z](?:[^\\\\&lt;&gt;]*+ | \\\\.)*&#039;;
+        $closeTagRegex = &#039;[a-z][^&lt;&gt;]*+&#039;;
+        $currentLineLength = 0;
+        preg_match_all(&quot;#&lt;(($openTagRegex) | /($closeTagRegex)?)&gt;#ix&quot;, $message, $matches, \PREG_OFFSET_CAPTURE);
+        <span style="background-color: red">f</span>oreach ($matches[0] as $i =&gt; $match) {
+            $pos = $match[1];
+            $text = $match[0];
+
+            <span style="background-color: red">i</span>f (0 != $pos &amp;&amp; <span style="background-color: red">'</span>\\&#039; == $message[$pos - 1]) {
+                continue;
+            <span style="background-color: red">}</span>
+
+            // add the text up to the next tag
+            $output .= $this-&gt;applyCurrentStyle(substr($message, $offset, $pos - $offset), $output, $width, $currentLineLength);
+            $offset = $pos + \strlen($text);
+
+            // opening tag?
+            <span style="background-color: red">i</span>f ($open = &#039;/&#039; !== $text[1]) {
+                $tag = $matches[1][$i][0];
+            } <span style="background-color: red">e</span>lse {
+                $tag = $matches[3][$i][0] ?? <span style="background-color: red">'</span>&#039;;
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f (!$open &amp;&amp; <span style="background-color: red">!</span>$tag) {
+                // &lt;/&gt;
+                $this-&gt;styleStack-&gt;pop();
+            } <span style="background-color: red">e</span>lseif (null === $style = $this-&gt;createStyleFromString($tag)) {
+                $output .= $this-&gt;applyCurrentStyle($text, $output, $width, $currentLineLength);
+            } <span style="background-color: red">e</span>lseif ($open) {
+                $this-&gt;styleStack-&gt;push($style);
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;styleStack-&gt;pop($style);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        $output .= $this-&gt;applyCurrentStyle(substr($message, $offset), $output, $width, $currentLineLength);
+
+        return strtr($output, [&quot;\0&quot; =&gt; &#039;\\&#039;, &#039;\\&lt;&#039; =&gt; &#039;&lt;&#039;, &#039;\\&gt;&#039; =&gt; &#039;&gt;&#039;]);
+    }
+
+    <span style="background-color: red">p</span>ublic function getStyleStack(): OutputFormatterStyleStack
+    {
+        return $this-&gt;styleStack;
+    }
+
+    /**
+     * Tries to create new style instance from string.
+     */
+    <span style="background-color: red">p</span>rivate function createStyleFromString(string $string): ?OutputFormatterStyleInterface
+    {
+        <span style="background-color: red">i</span>f (isset($this-&gt;styles[$string])) {
+            return $this-&gt;styles[$string];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!preg_match_all(&#039;/([^=]+)=([^;]+)(;|$)/&#039;, $string, $matches, \PREG_SET_ORDER)) {
+            return null;
+        <span style="background-color: red">}</span>
+
+        $style = new OutputFormatterStyle();
+        <span style="background-color: red">f</span>oreach ($matches as $match) {
+            array_shift($match);
+            $match[0] = strtolower($match[0]);
+
+            <span style="background-color: red">i</span>f (&#039;fg&#039; == $match[0]) {
+                $style-&gt;setForeground(strtolower($match[1]));
+            } <span style="background-color: red">e</span>lseif (&#039;bg&#039; == $match[0]) {
+                $style-&gt;setBackground(strtolower($match[1]));
+            } <span style="background-color: red">e</span>lseif (&#039;href&#039; === $match[0]) {
+                $url = preg_replace(&#039;{\\\\([&lt;&gt;])}&#039;, &#039;$1&#039;, $match[1]);
+                $style-&gt;setHref($url);
+            } <span style="background-color: red">e</span>lseif (&#039;options&#039; === $match[0]) {
+                preg_match_all(&#039;([^,;]+)&#039;, strtolower($match[1]), $options);
+                $options = array_shift($options);
+                <span style="background-color: red">f</span>oreach ($options as $option) {
+                    $style-&gt;setOption($option);
+                <span style="background-color: red">}</span>
+            } <span style="background-color: red">e</span>lse {
+                return null;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $style;
+    }
+
+    /**
+     * Applies current style from stack to text, if must be applied.
+     */
+    <span style="background-color: red">p</span>rivate function applyCurrentStyle(string $text, string $current, int $width, int &amp;$currentLineLength): string
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; === $text) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$width) {
+            return $this-&gt;isDecorated() ? $this-&gt;styleStack-&gt;getCurrent()-&gt;apply($text) : <span style="background-color: red">$</span>text;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$currentLineLength &amp;&amp; <span style="background-color: red">'</span>&#039; !== $current) {
+            $text = ltrim($text);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($currentLineLength) {
+            $prefix = substr($text, 0, $i = $width - $currentLineLength).&quot;\n&quot;;
+            $text = substr($text, $i);
+        } <span style="background-color: red">e</span>lse {
+            $prefix = &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        preg_match(&#039;~(\\n)$~&#039;, $text, $matches);
+        $text = $prefix.$this-&gt;addLineBreaks($text, $width);
+        $text = rtrim($text, &quot;\n&quot;).($matches[1] ?? <span style="background-color: red">'</span>&#039;);
+
+        <span style="background-color: red">i</span>f (!$currentLineLength &amp;&amp; <span style="background-color: red">'</span>&#039; !== $current &amp;&amp; <span style="background-color: red">!</span>str_ends_with($current, &quot;\n&quot;)) {
+            $text = &quot;\n&quot;.$text;
+        <span style="background-color: red">}</span>
+
+        $lines = explode(&quot;\n&quot;, $text);
+
+        <span style="background-color: red">f</span>oreach ($lines as $line) {
+            $currentLineLength += \strlen($line);
+            <span style="background-color: red">i</span>f ($width &lt;= $currentLineLength) {
+                $currentLineLength = 0;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;isDecorated()) {
+            <span style="background-color: red">f</span>oreach ($lines as $i =&gt; $line) {
+                $lines[$i] = $this-&gt;styleStack-&gt;getCurrent()-&gt;apply($line);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return implode(&quot;\n&quot;, $lines);
+    }
+
+    <span style="background-color: red">p</span>rivate function addLineBreaks(string $text, int $width): string
+    {
+        $encoding = mb_detect_encoding($text, null, true) ?: <span style="background-color: red">'</span>UTF-8&#039;;
+
+        return b($text)-&gt;toCodePointString($encoding)-&gt;wordwrap($width, &quot;\n&quot;, true)-&gt;toByteString($encoding);
+    }
+}
+</pre>

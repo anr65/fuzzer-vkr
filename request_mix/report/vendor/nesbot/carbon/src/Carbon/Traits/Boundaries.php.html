@@ -1,0 +1,470 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\Exceptions\UnknownUnitException;
+use Carbon\Unit;
+use Carbon\WeekDay;
+
+/**
+ * Trait Boundaries.
+ *
+ * startOf, endOf and derived method for each unit.
+ *
+ * Depends on the following properties:
+ *
+ * @property int $year
+ * @property int $month
+ * @property int $daysInMonth
+ * @property int $quarter
+ *
+ * Depends on the following methods:
+ *
+ * @method $this setTime(int $hour, int $minute, int $second = 0, int $microseconds = 0)
+ * @method $this setDate(int $year, int $month, int $day)
+ * @method $this addMonths(int $value = 1)
+ */
+trait Boundaries
+{
+    /**
+     * Resets the time to 00:00:00 start of day
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfDay();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfDay()
+    {
+        return $this-&gt;setTime(0, 0, 0, 0);
+    }
+
+    /**
+     * Resets the time to 23:59:59.999999 end of day
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfDay();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfDay()
+    {
+        return $this-&gt;setTime(static::HOURS_PER_DAY - 1, static::MINUTES_PER_HOUR - 1, static::SECONDS_PER_MINUTE - 1, static::MICROSECONDS_PER_SECOND - 1);
+    }
+
+    /**
+     * Resets the date to the first day of the month and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfMonth();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfMonth()
+    {
+        return $this-&gt;setDate($this-&gt;year, $this-&gt;month, 1)-&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of the month and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfMonth();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfMonth()
+    {
+        return $this-&gt;setDate($this-&gt;year, $this-&gt;month, $this-&gt;daysInMonth)-&gt;endOfDay();
+    }
+
+    /**
+     * Resets the date to the first day of the quarter and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfQuarter();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfQuarter()
+    {
+        $month = ($this-&gt;quarter - 1) * static::MONTHS_PER_QUARTER + 1;
+
+        return $this-&gt;setDate($this-&gt;year, $month, 1)-&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of the quarter and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfQuarter();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfQuarter()
+    {
+        return $this-&gt;startOfQuarter()-&gt;addMonths(static::MONTHS_PER_QUARTER - 1)-&gt;endOfMonth();
+    }
+
+    /**
+     * Resets the date to the first day of the year and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfYear();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfYear()
+    {
+        return $this-&gt;setDate($this-&gt;year, 1, 1)-&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of the year and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfYear();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfYear()
+    {
+        return $this-&gt;setDate($this-&gt;year, 12, 31)-&gt;endOfDay();
+    }
+
+    /**
+     * Resets the date to the first day of the decade and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfDecade();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfDecade()
+    {
+        $year = $this-&gt;year - $this-&gt;year % static::YEARS_PER_DECADE;
+
+        return $this-&gt;setDate($year, 1, 1)-&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of the decade and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfDecade();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfDecade()
+    {
+        $year = $this-&gt;year - $this-&gt;year % static::YEARS_PER_DECADE + static::YEARS_PER_DECADE - 1;
+
+        return $this-&gt;setDate($year, 12, 31)-&gt;endOfDay();
+    }
+
+    /**
+     * Resets the date to the first day of the century and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfCentury();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfCentury()
+    {
+        $year = $this-&gt;year - ($this-&gt;year - 1) % static::YEARS_PER_CENTURY;
+
+        return $this-&gt;setDate($year, 1, 1)-&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of the century and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfCentury();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfCentury()
+    {
+        $year = $this-&gt;year - 1 - ($this-&gt;year - 1) % static::YEARS_PER_CENTURY + static::YEARS_PER_CENTURY;
+
+        return $this-&gt;setDate($year, 12, 31)-&gt;endOfDay();
+    }
+
+    /**
+     * Resets the date to the first day of the millennium and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfMillennium();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfMillennium()
+    {
+        $year = $this-&gt;year - ($this-&gt;year - 1) % static::YEARS_PER_MILLENNIUM;
+
+        return $this-&gt;setDate($year, 1, 1)-&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of the millennium and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfMillennium();
+     * ```
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfMillennium()
+    {
+        $year = $this-&gt;year - 1 - ($this-&gt;year - 1) % static::YEARS_PER_MILLENNIUM + static::YEARS_PER_MILLENNIUM;
+
+        return $this-&gt;setDate($year, 12, 31)-&gt;endOfDay();
+    }
+
+    /**
+     * Resets the date to the first day of week (defined in $weekStartsAt) and the time to 00:00:00
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfWeek() . &quot;\n&quot;;
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;locale(&#039;ar&#039;)-&gt;startOfWeek() . &quot;\n&quot;;
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfWeek(Carbon::SUNDAY) . &quot;\n&quot;;
+     * ```
+     *
+     * @param WeekDay|int|null $weekStartsAt optional start allow you to specify the day of week to use to start the week
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function startOfWeek(WeekDay|int|null $weekStartsAt = null): static
+    {
+        return $this
+            -&gt;subDays(
+                (static::DAYS_PER_WEEK + $this-&gt;dayOfWeek - (WeekDay::int($weekStartsAt) ?? <span style="background-color: red">$</span>this-&gt;firstWeekDay)) %
+                static::DAYS_PER_WEEK,
+            )
+            -&gt;startOfDay();
+    }
+
+    /**
+     * Resets the date to end of week (defined in $weekEndsAt) and time to 23:59:59.999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfWeek() . &quot;\n&quot;;
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;locale(&#039;ar&#039;)-&gt;endOfWeek() . &quot;\n&quot;;
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfWeek(Carbon::SATURDAY) . &quot;\n&quot;;
+     * ```
+     *
+     * @param WeekDay|int|null $weekEndsAt optional end allow you to specify the day of week to use to end the week
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function endOfWeek(WeekDay|int|null $weekEndsAt = null): static
+    {
+        return $this
+            -&gt;addDays(
+                (static::DAYS_PER_WEEK - $this-&gt;dayOfWeek + (WeekDay::int($weekEndsAt) ?? <span style="background-color: red">$</span>this-&gt;lastWeekDay)) %
+                static::DAYS_PER_WEEK,
+            )
+            -&gt;endOfDay();
+    }
+
+    /**
+     * Modify to start of current hour, minutes and seconds become 0
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfHour();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function startOfHour(): static
+    {
+        return $this-&gt;setTime($this-&gt;hour, 0, 0, 0);
+    }
+
+    /**
+     * Modify to end of current hour, minutes and seconds become 59
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfHour();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function endOfHour(): static
+    {
+        return $this-&gt;setTime($this-&gt;hour, static::MINUTES_PER_HOUR - 1, static::SECONDS_PER_MINUTE - 1, static::MICROSECONDS_PER_SECOND - 1);
+    }
+
+    /**
+     * Modify to start of current minute, seconds become 0
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;startOfMinute();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function startOfMinute(): static
+    {
+        return $this-&gt;setTime($this-&gt;hour, $this-&gt;minute, 0, 0);
+    }
+
+    /**
+     * Modify to end of current minute, seconds become 59
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;endOfMinute();
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function endOfMinute(): static
+    {
+        return $this-&gt;setTime($this-&gt;hour, $this-&gt;minute, static::SECONDS_PER_MINUTE - 1, static::MICROSECONDS_PER_SECOND - 1);
+    }
+
+    /**
+     * Modify to start of current second, microseconds become 0
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16.334455&#039;)
+     *   -&gt;startOfSecond()
+     *   -&gt;format(&#039;H:i:s.u&#039;);
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function startOfSecond(): static
+    {
+        return $this-&gt;setTime($this-&gt;hour, $this-&gt;minute, $this-&gt;second, 0);
+    }
+
+    /**
+     * Modify to end of current second, microseconds become 999999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16.334455&#039;)
+     *   -&gt;endOfSecond()
+     *   -&gt;format(&#039;H:i:s.u&#039;);
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function endOfSecond(): static
+    {
+        return $this-&gt;setTime($this-&gt;hour, $this-&gt;minute, $this-&gt;second, static::MICROSECONDS_PER_SECOND - 1);
+    }
+
+    /**
+     * Modify to start of current millisecond, microseconds such as 12345 become 123000
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16.334455&#039;)
+     *   -&gt;startOfSecond()
+     *   -&gt;format(&#039;H:i:s.u&#039;);
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function startOfMillisecond(): static
+    {
+        $millisecond = (int) floor($this-&gt;micro / 1000);
+
+        return $this-&gt;setTime($this-&gt;hour, $this-&gt;minute, $this-&gt;second, $millisecond * 1000);
+    }
+
+    /**
+     * Modify to end of current millisecond, microseconds such as 12345 become 123999
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16.334455&#039;)
+     *   -&gt;endOfSecond()
+     *   -&gt;format(&#039;H:i:s.u&#039;);
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function endOfMillisecond(): static
+    {
+        $millisecond = (int) floor($this-&gt;micro / 1000);
+
+        return $this-&gt;setTime($this-&gt;hour, $this-&gt;minute, $this-&gt;second, $millisecond * 1000 + 999);
+    }
+
+    /**
+     * Modify to start of current given unit.
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16.334455&#039;)
+     *   -&gt;startOf(Unit::Month)
+     *   -&gt;endOf(Unit::Week, Carbon::FRIDAY);
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function startOf(Unit|string $unit, mixed ...$params): static
+    {
+        $ucfUnit = ucfirst($unit instanceof Unit ? $unit-&gt;value : <span style="background-color: red">s</span>tatic::singularUnit($unit));
+        $method = &quot;startOf$ucfUnit&quot;;
+        <span style="background-color: red">i</span>f (!method_exists($this, $method)) {
+            throw new UnknownUnitException($unit);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;$method(...$params);
+    }
+
+    /**
+     * Modify to end of current given unit.
+     *
+     * @example
+     * ```
+     * echo Carbon::parse(&#039;2018-07-25 12:45:16.334455&#039;)
+     *   -&gt;startOf(Unit::Month)
+     *   -&gt;endOf(Unit::Week, Carbon::FRIDAY);
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function endOf(Unit|string $unit, mixed ...$params): static
+    {
+        $ucfUnit = ucfirst($unit instanceof Unit ? $unit-&gt;value : <span style="background-color: red">s</span>tatic::singularUnit($unit));
+        $method = &quot;endOf$ucfUnit&quot;;
+        <span style="background-color: red">i</span>f (!method_exists($this, $method)) {
+            throw new UnknownUnitException($unit);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;$method(...$params);
+    }
+}
+</pre>

@@ -1,0 +1,38 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support;
+
+class HigherOrderTapProxy
+{
+    /**
+     * The target being tapped.
+     *
+     * @var mixed
+     */
+    public $target;
+
+    /**
+     * Create a new tap proxy instance.
+     *
+     * @param  mixed  $target
+     */
+    <span style="background-color: green">p</span>ublic function __construct($target)
+    {
+        $this-&gt;target = $target;
+    }
+
+    /**
+     * Dynamically pass method calls to the target.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic function __call($method, $parameters)
+    {
+        $this-&gt;target-&gt;{$method}(...$parameters);
+
+        return $this-&gt;target;
+    }
+}
+</pre>

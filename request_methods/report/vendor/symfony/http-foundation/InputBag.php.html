@@ -1,0 +1,137 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpFoundation\Exception\UnexpectedValueException;
+
+/**
+ * InputBag is a container for user input values such as $_GET, $_POST, $_REQUEST, and $_COOKIE.
+ *
+ * @author Saif Eddin Gmati &lt;azjezz@protonmail.com&gt;
+ */
+final class InputBag extends ParameterBag
+{
+    /**
+     * Returns a scalar input value by name.
+     *
+     * @param string|int|float|bool|null $default The default value if the input key does not exist
+     */
+    <span style="background-color: green">p</span>ublic function get(string $key, mixed $default = null): string|int|float|bool|null
+    {
+        <span style="background-color: red">i</span>f (null !== $default &amp;&amp; <span style="background-color: green">!</span>\is_scalar($default) &amp;&amp; <span style="background-color: red">!</span>$default instanceof \Stringable) {
+            throw new \InvalidArgumentException(\sprintf(&#039;Expected a scalar value as a 2nd argument to &quot;%s()&quot;, &quot;%s&quot; given.&#039;, __METHOD__, get_debug_type($default)));
+        <span style="background-color: green">}</span>
+
+        $value = parent::get($key, $this);
+
+        <span style="background-color: red">i</span>f (null !== $value &amp;&amp; <span style="background-color: green">$</span>this !== $value &amp;&amp; <span style="background-color: red">!</span>\is_scalar($value) &amp;&amp; <span style="background-color: red">!</span>$value instanceof \Stringable) {
+            throw new BadRequestException(\sprintf(&#039;Input value &quot;%s&quot; contains a non-scalar value.&#039;, $key));
+        <span style="background-color: green">}</span>
+
+        return $this === $value ? $default : <span style="background-color: red">$</span>value;
+    }
+
+    /**
+     * Replaces the current input values by a new set.
+     */
+    <span style="background-color: green">p</span>ublic function replace(array $inputs = []): void
+    {
+        $this-&gt;parameters = [];
+        $this-&gt;add($inputs);
+    }
+
+    /**
+     * Adds input values.
+     */
+    <span style="background-color: green">p</span>ublic function add(array $inputs = []): void
+    {
+        <span style="background-color: red">f</span>oreach ($inputs as $input =&gt; $value) {
+            $this-&gt;set($input, $value);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Sets an input by name.
+     *
+     * @param string|int|float|bool|array|null $value
+     */
+    <span style="background-color: red">p</span>ublic function set(string $key, mixed $value): void
+    {
+        <span style="background-color: red">i</span>f (null !== $value &amp;&amp; <span style="background-color: red">!</span>\is_scalar($value) &amp;&amp; <span style="background-color: red">!</span>\is_array($value) &amp;&amp; <span style="background-color: red">!</span>$value instanceof \Stringable) {
+            throw new \InvalidArgumentException(\sprintf(&#039;Expected a scalar, or an array as a 2nd argument to &quot;%s()&quot;, &quot;%s&quot; given.&#039;, __METHOD__, get_debug_type($value)));
+        <span style="background-color: red">}</span>
+
+        $this-&gt;parameters[$key] = $value;
+    }
+
+    /**
+     * Returns the parameter value converted to an enum.
+     *
+     * @template T of \BackedEnum
+     *
+     * @param class-string&lt;T&gt; $class
+     * @param ?T              $default
+     *
+     * @return ?T
+     *
+     * @psalm-return ($default is null ? T|null : T)
+     */
+    <span style="background-color: red">p</span>ublic function getEnum(string $key, string $class, ?\BackedEnum $default = null): ?\BackedEnum
+    {
+        try {
+            return parent::getEnum($key, $class, $default);
+        } <span style="background-color: red">c</span>atch (UnexpectedValueException $e) {
+            throw new BadRequestException($e-&gt;getMessage(), $e-&gt;getCode(), $e);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns the parameter value converted to string.
+     */
+    <span style="background-color: red">p</span>ublic function getString(string $key, string $default = &#039;&#039;): string
+    {
+        // Shortcuts the parent method because the validation on scalar is already done in get().
+        return (string) $this-&gt;get($key, $default);
+    }
+
+    <span style="background-color: red">p</span>ublic function filter(string $key, mixed $default = null, int $filter = \FILTER_DEFAULT, mixed $options = []): mixed
+    {
+        $value = $this-&gt;has($key) ? $this-&gt;all()[$key] : <span style="background-color: red">$</span>default;
+
+        // Always turn $options into an array - this allows filter_var option shortcuts.
+        <span style="background-color: red">i</span>f (!\is_array($options) &amp;&amp; <span style="background-color: red">$</span>options) {
+            $options = [&#039;flags&#039; =&gt; $options];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\is_array($value) &amp;&amp; <span style="background-color: red">!</span>(($options[&#039;flags&#039;] ?? <span style="background-color: red">0</span>) &amp; (\FILTER_REQUIRE_ARRAY | \FILTER_FORCE_ARRAY))) {
+            throw new BadRequestException(\sprintf(&#039;Input value &quot;%s&quot; contains an array, but &quot;FILTER_REQUIRE_ARRAY&quot; or &quot;FILTER_FORCE_ARRAY&quot; flags were not set.&#039;, $key));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ((\FILTER_CALLBACK &amp; $filter) &amp;&amp; <span style="background-color: red">!</span>(($options[&#039;options&#039;] ?? <span style="background-color: red">n</span>ull) instanceof \Closure)) {
+            throw new \InvalidArgumentException(\sprintf(&#039;A Closure must be passed to &quot;%s()&quot; when FILTER_CALLBACK is used, &quot;%s&quot; given.&#039;, __METHOD__, get_debug_type($options[&#039;options&#039;] ?? <span style="background-color: red">n</span>ull)));
+        <span style="background-color: red">}</span>
+
+        $options[&#039;flags&#039;] ??= <span style="background-color: red">0</span>;
+        $nullOnFailure = $options[&#039;flags&#039;] &amp; \FILTER_NULL_ON_FAILURE;
+        $options[&#039;flags&#039;] |= \FILTER_NULL_ON_FAILURE;
+
+        $value = filter_var($value, $filter, $options);
+
+        <span style="background-color: red">i</span>f (null !== $value || <span style="background-color: red">$</span>nullOnFailure) {
+            return $value;
+        <span style="background-color: red">}</span>
+
+        throw new BadRequestException(\sprintf(&#039;Input value &quot;%s&quot; is invalid and flag &quot;FILTER_NULL_ON_FAILURE&quot; was not set.&#039;, $key));
+    }
+}
+</pre>

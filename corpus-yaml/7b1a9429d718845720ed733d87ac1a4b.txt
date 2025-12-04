@@ -1,0 +1,5 @@
+sync_fuzzing:
+9 varia:
+    COVFUZZ_ADD?I_LTAsync_fuzzing:
+9 varia:
+    COVFUZZ_AD 

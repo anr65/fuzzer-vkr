@@ -1,0 +1,11 @@
+sync_fug:
+bles:
+ - if:uzzing:
+bles:
+    COVFUZules:
+    - if: $CIme=31'
+    rules:
+    - if: $CI_:
+    COVFUZZ_ADDIrules:
+    - if: $CIme=299'
+RCNrequest

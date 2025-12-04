@@ -1,0 +1,13 @@
+ujzing:
+  vasync_fing:
+  variables:
+  A) COs:
+    CNNAL_ARGS: '-max_tot]l_time=300'
+  trigger:NAL_ARGS: '-=300'
+  trigger:
+    include:ger:
+    include: .covfuzz-ci.yml
+    strategy: de er pd
+nules:
+  ev:
+   

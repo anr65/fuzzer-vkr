@@ -1,0 +1,108 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository;
+
+use Dotenv\Repository\Adapter\ReaderInterface;
+use Dotenv\Repository\Adapter\WriterInterface;
+use InvalidArgumentException;
+
+final class AdapterRepository implements RepositoryInterface
+{
+    /**
+     * The reader to use.
+     *
+     * @var \Dotenv\Repository\Adapter\ReaderInterface
+     */
+    private $reader;
+
+    /**
+     * The writer to use.
+     *
+     * @var \Dotenv\Repository\Adapter\WriterInterface
+     */
+    private $writer;
+
+    /**
+     * Create a new adapter repository instance.
+     *
+     * @param \Dotenv\Repository\Adapter\ReaderInterface $reader
+     * @param \Dotenv\Repository\Adapter\WriterInterface $writer
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function __construct(ReaderInterface $reader, WriterInterface $writer)
+    {
+        $this-&gt;reader = $reader;
+        $this-&gt;writer = $writer;
+    }
+
+    /**
+     * Determine if the given environment variable is defined.
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function has(string $name)
+    {
+        return &#039;&#039; !== $name &amp;&amp; <span style="background-color: red">$</span>this-&gt;reader-&gt;read($name)-&gt;isDefined();
+    }
+
+    /**
+     * Get an environment variable.
+     *
+     * @param string $name
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @return string|null
+     */
+    <span style="background-color: green">p</span>ublic function get(string $name)
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; === $name) {
+            throw new InvalidArgumentException(&#039;Expected name to be a non-empty string.&#039;);
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;reader-&gt;read($name)-&gt;getOrElse(null);
+    }
+
+    /**
+     * Set an environment variable.
+     *
+     * @param string $name
+     * @param string $value
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function set(string $name, string $value)
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; === $name) {
+            throw new InvalidArgumentException(&#039;Expected name to be a non-empty string.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;writer-&gt;write($name, $value);
+    }
+
+    /**
+     * Clear an environment variable.
+     *
+     * @param string $name
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function clear(string $name)
+    {
+        <span style="background-color: red">i</span>f (&#039;&#039; === $name) {
+            throw new InvalidArgumentException(&#039;Expected name to be a non-empty string.&#039;);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;writer-&gt;delete($name);
+    }
+}
+</pre>

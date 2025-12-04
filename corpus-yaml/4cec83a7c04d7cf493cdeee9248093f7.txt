@@ -1,0 +1,6 @@
+sync_fuzzing:
+  variables:
+    COrisync  varARGS: '0t`l-time==60-ax__ 3uz_riabl $CI_CO-ax__ 3uzin variables:
+  #` COFUZZ_Avariables:
+  # zzing  variabquestles:
+_event'  # 

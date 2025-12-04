@@ -1,0 +1,364 @@
+<pre>&lt;?php
+
+namespace Illuminate\Support\Facades;
+
+use Closure;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Js;
+use Illuminate\Support\Number;
+use Illuminate\Support\Str;
+use Illuminate\Support\Testing\Fakes\Fake;
+use Illuminate\Support\Uri;
+use Mockery;
+use Mockery\LegacyMockInterface;
+use RuntimeException;
+
+abstract class Facade
+{
+    /**
+     * The application instance being facaded.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application|null
+     */
+    protected static $app;
+
+    /**
+     * The resolved object instances.
+     *
+     * @var array
+     */
+    protected static $resolvedInstance;
+
+    /**
+     * Indicates if the resolved instance should be cached.
+     *
+     * @var bool
+     */
+    protected static $cached = true;
+
+    /**
+     * Run a Closure when the facade has been resolved.
+     *
+     * @param  \Closure  $callback
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function resolved(Closure $callback)
+    {
+        $accessor = static::getFacadeAccessor();
+
+        <span style="background-color: red">i</span>f (static::$app-&gt;resolved($accessor) === true) {
+            $callback(static::getFacadeRoot(), static::$app);
+        <span style="background-color: red">}</span>
+
+        static::$app-&gt;afterResolving($accessor, <span style="background-color: red">f</span>unction ($service, $app) use ($callback) {
+            $callback($service, $app);
+        });
+    }
+
+    /**
+     * Convert the facade into a Mockery spy.
+     *
+     * @return \Mockery\MockInterface
+     */
+    <span style="background-color: red">p</span>ublic static function spy()
+    {
+        <span style="background-color: red">i</span>f (! static::isMock()) {
+            $class = static::getMockableClass();
+
+            return tap($class ? Mockery::spy($class) : <span style="background-color: red">M</span>ockery::spy(), <span style="background-color: red">f</span>unction ($spy) {
+                static::swap($spy);
+            });
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Initiate a partial mock on the facade.
+     *
+     * @return \Mockery\MockInterface
+     */
+    <span style="background-color: red">p</span>ublic static function partialMock()
+    {
+        $name = static::getFacadeAccessor();
+
+        $mock = static::isMock()
+            ? static::$resolvedInstance[$name]
+            : <span style="background-color: red">s</span>tatic::createFreshMockInstance();
+
+        return $mock-&gt;makePartial();
+    }
+
+    /**
+     * Initiate a mock expectation on the facade.
+     *
+     * @return \Mockery\Expectation
+     */
+    <span style="background-color: red">p</span>ublic static function shouldReceive()
+    {
+        $name = static::getFacadeAccessor();
+
+        $mock = static::isMock()
+            ? static::$resolvedInstance[$name]
+            : <span style="background-color: red">s</span>tatic::createFreshMockInstance();
+
+        return $mock-&gt;shouldReceive(...func_get_args());
+    }
+
+    /**
+     * Initiate a mock expectation on the facade.
+     *
+     * @return \Mockery\Expectation
+     */
+    <span style="background-color: red">p</span>ublic static function expects()
+    {
+        $name = static::getFacadeAccessor();
+
+        $mock = static::isMock()
+            ? static::$resolvedInstance[$name]
+            : <span style="background-color: red">s</span>tatic::createFreshMockInstance();
+
+        return $mock-&gt;expects(...func_get_args());
+    }
+
+    /**
+     * Create a fresh mock instance for the given class.
+     *
+     * @return \Mockery\MockInterface
+     */
+    <span style="background-color: red">p</span>rotected static function createFreshMockInstance()
+    {
+        return tap(static::createMock(), <span style="background-color: red">f</span>unction ($mock) {
+            static::swap($mock);
+
+            $mock-&gt;shouldAllowMockingProtectedMethods();
+        });
+    }
+
+    /**
+     * Create a fresh mock instance for the given class.
+     *
+     * @return \Mockery\MockInterface
+     */
+    <span style="background-color: red">p</span>rotected static function createMock()
+    {
+        $class = static::getMockableClass();
+
+        return $class ? Mockery::mock($class) : <span style="background-color: red">M</span>ockery::mock();
+    }
+
+    /**
+     * Determines whether a mock is set as the instance of the facade.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>rotected static function isMock()
+    {
+        $name = static::getFacadeAccessor();
+
+        return isset(static::$resolvedInstance[$name]) &amp;&amp;
+               <span style="background-color: red">s</span>tatic::$resolvedInstance[$name] instanceof LegacyMockInterface;
+    }
+
+    /**
+     * Get the mockable class for the bound instance.
+     *
+     * @return string|null
+     */
+    <span style="background-color: red">p</span>rotected static function getMockableClass()
+    {
+        <span style="background-color: red">i</span>f ($root = static::getFacadeRoot()) {
+            return get_class($root);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Hotswap the underlying instance behind the facade.
+     *
+     * @param  mixed  $instance
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function swap($instance)
+    {
+        static::$resolvedInstance[static::getFacadeAccessor()] = $instance;
+
+        <span style="background-color: red">i</span>f (isset(static::$app)) {
+            static::$app-&gt;instance(static::getFacadeAccessor(), $instance);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Determines whether a &quot;fake&quot; has been set as the facade instance.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function isFake()
+    {
+        $name = static::getFacadeAccessor();
+
+        return isset(static::$resolvedInstance[$name]) &amp;&amp;
+               <span style="background-color: red">s</span>tatic::$resolvedInstance[$name] instanceof Fake;
+    }
+
+    /**
+     * Get the root object behind the facade.
+     *
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>ublic static function getFacadeRoot()
+    {
+        return static::resolveFacadeInstance(static::getFacadeAccessor());
+    }
+
+    /**
+     * Get the registered name of the component.
+     *
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: red">p</span>rotected static function getFacadeAccessor()
+    {
+        throw new RuntimeException(&#039;Facade does not implement getFacadeAccessor method.&#039;);
+    }
+
+    /**
+     * Resolve the facade root instance from the container.
+     *
+     * @param  string  $name
+     * @return mixed
+     */
+    <span style="background-color: green">p</span>rotected static function resolveFacadeInstance($name)
+    {
+        <span style="background-color: green">i</span>f (isset(static::$resolvedInstance[$name])) {
+            return static::$resolvedInstance[$name];
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (static::$app) {
+            <span style="background-color: green">i</span>f (static::$cached) {
+                return static::$resolvedInstance[$name] = static::$app[$name];
+            <span style="background-color: red">}</span>
+
+            return static::$app[$name];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Clear a resolved facade instance.
+     *
+     * @param  string  $name
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function clearResolvedInstance($name)
+    {
+        unset(static::$resolvedInstance[$name]);
+    }
+
+    /**
+     * Clear all of the resolved instances.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function clearResolvedInstances()
+    {
+        static::$resolvedInstance = [];
+    }
+
+    /**
+     * Get the application default aliases.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    <span style="background-color: green">p</span>ublic static function defaultAliases()
+    {
+        return new Collection([
+            &#039;App&#039; =&gt; App::class,
+            &#039;Arr&#039; =&gt; Arr::class,
+            &#039;Artisan&#039; =&gt; Artisan::class,
+            &#039;Auth&#039; =&gt; Auth::class,
+            &#039;Blade&#039; =&gt; Blade::class,
+            &#039;Broadcast&#039; =&gt; Broadcast::class,
+            &#039;Bus&#039; =&gt; Bus::class,
+            &#039;Cache&#039; =&gt; Cache::class,
+            &#039;Concurrency&#039; =&gt; Concurrency::class,
+            &#039;Config&#039; =&gt; Config::class,
+            &#039;Context&#039; =&gt; Context::class,
+            &#039;Cookie&#039; =&gt; Cookie::class,
+            &#039;Crypt&#039; =&gt; Crypt::class,
+            &#039;Date&#039; =&gt; Date::class,
+            &#039;DB&#039; =&gt; DB::class,
+            &#039;Eloquent&#039; =&gt; Model::class,
+            &#039;Event&#039; =&gt; Event::class,
+            &#039;File&#039; =&gt; File::class,
+            &#039;Gate&#039; =&gt; Gate::class,
+            &#039;Hash&#039; =&gt; Hash::class,
+            &#039;Http&#039; =&gt; Http::class,
+            &#039;Js&#039; =&gt; Js::class,
+            &#039;Lang&#039; =&gt; Lang::class,
+            &#039;Log&#039; =&gt; Log::class,
+            &#039;Mail&#039; =&gt; Mail::class,
+            &#039;Notification&#039; =&gt; Notification::class,
+            &#039;Number&#039; =&gt; Number::class,
+            &#039;Password&#039; =&gt; Password::class,
+            &#039;Process&#039; =&gt; Process::class,
+            &#039;Queue&#039; =&gt; Queue::class,
+            &#039;RateLimiter&#039; =&gt; RateLimiter::class,
+            &#039;Redirect&#039; =&gt; Redirect::class,
+            &#039;Request&#039; =&gt; Request::class,
+            &#039;Response&#039; =&gt; Response::class,
+            &#039;Route&#039; =&gt; Route::class,
+            &#039;Schedule&#039; =&gt; Schedule::class,
+            &#039;Schema&#039; =&gt; Schema::class,
+            &#039;Session&#039; =&gt; Session::class,
+            &#039;Storage&#039; =&gt; Storage::class,
+            &#039;Str&#039; =&gt; Str::class,
+            &#039;URL&#039; =&gt; URL::class,
+            &#039;Uri&#039; =&gt; Uri::class,
+            &#039;Validator&#039; =&gt; Validator::class,
+            &#039;View&#039; =&gt; View::class,
+            &#039;Vite&#039; =&gt; Vite::class,
+        ]);
+    }
+
+    /**
+     * Get the application instance behind the facade.
+     *
+     * @return \Illuminate\Contracts\Foundation\Application|null
+     */
+    <span style="background-color: red">p</span>ublic static function getFacadeApplication()
+    {
+        return static::$app;
+    }
+
+    /**
+     * Set the application instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application|null  $app
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic static function setFacadeApplication($app)
+    {
+        static::$app = $app;
+    }
+
+    /**
+     * Handle dynamic, static calls to the object.
+     *
+     * @param  string  $method
+     * @param  array  $args
+     * @return mixed
+     *
+     * @throws \RuntimeException
+     */
+    <span style="background-color: green">p</span>ublic static function __callStatic($method, $args)
+    {
+        $instance = static::getFacadeRoot();
+
+        <span style="background-color: red">i</span>f (! $instance) {
+            throw new RuntimeException(&#039;A facade root has not been set.&#039;);
+        <span style="background-color: green">}</span>
+
+        return $instance-&gt;$method(...$args);
+    }
+}
+</pre>

@@ -1,0 +1,1364 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use BackedEnum;
+use BadMethodCallException;
+use Carbon\CarbonConverterInterface;
+use Carbon\CarbonInterface;
+use Carbon\Exceptions\BadComparisonUnitException;
+use Carbon\FactoryImmutable;
+use Carbon\Month;
+use Carbon\Unit;
+use Carbon\WeekDay;
+use Closure;
+use DateInterval;
+use DateTimeInterface;
+use InvalidArgumentException;
+
+/**
+ * Trait Comparison.
+ *
+ * Comparison utils and testers. All the following methods return booleans.
+ * nowWithSameTz
+ *
+ * Depends on the following methods:
+ *
+ * @method static        resolveCarbon($date)
+ * @method static        copy()
+ * @method static        nowWithSameTz()
+ * @method static static yesterday($timezone = null)
+ * @method static static tomorrow($timezone = null)
+ */
+trait Comparison
+{
+    protected bool $endOfTime = false;
+
+    protected bool $startOfTime = false;
+
+    /**
+     * Determines if the instance is equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;eq(&#039;2018-07-25 12:45:16&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;eq(Carbon::parse(&#039;2018-07-25 12:45:16&#039;)); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;eq(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     *
+     * @see equalTo()
+     */
+    <span style="background-color: red">p</span>ublic function eq(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;equalTo($date);
+    }
+
+    /**
+     * Determines if the instance is equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;equalTo(&#039;2018-07-25 12:45:16&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;equalTo(Carbon::parse(&#039;2018-07-25 12:45:16&#039;)); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;equalTo(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function equalTo(DateTimeInterface|string $date): bool
+    {
+        return $this == $this-&gt;resolveCarbon($date);
+    }
+
+    /**
+     * Determines if the instance is not equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;ne(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;ne(Carbon::parse(&#039;2018-07-25 12:45:16&#039;)); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;ne(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     *
+     * @see notEqualTo()
+     */
+    <span style="background-color: red">p</span>ublic function ne(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;notEqualTo($date);
+    }
+
+    /**
+     * Determines if the instance is not equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;notEqualTo(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;notEqualTo(Carbon::parse(&#039;2018-07-25 12:45:16&#039;)); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;notEqualTo(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function notEqualTo(DateTimeInterface|string $date): bool
+    {
+        return !$this-&gt;equalTo($date);
+    }
+
+    /**
+     * Determines if the instance is greater (after) than another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;gt(&#039;2018-07-25 12:45:15&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;gt(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;gt(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     *
+     * @see greaterThan()
+     */
+    <span style="background-color: red">p</span>ublic function gt(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;greaterThan($date);
+    }
+
+    /**
+     * Determines if the instance is greater (after) than another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;greaterThan(&#039;2018-07-25 12:45:15&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;greaterThan(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;greaterThan(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function greaterThan(DateTimeInterface|string $date): bool
+    {
+        return $this &gt; $this-&gt;resolveCarbon($date);
+    }
+
+    /**
+     * Determines if the instance is greater (after) than another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;isAfter(&#039;2018-07-25 12:45:15&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;isAfter(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;isAfter(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     *
+     * @see greaterThan()
+     */
+    <span style="background-color: red">p</span>ublic function isAfter(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;greaterThan($date);
+    }
+
+    /**
+     * Determines if the instance is greater (after) than or equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;gte(&#039;2018-07-25 12:45:15&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;gte(&#039;2018-07-25 12:45:16&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;gte(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     *
+     * @see greaterThanOrEqualTo()
+     */
+    <span style="background-color: red">p</span>ublic function gte(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;greaterThanOrEqualTo($date);
+    }
+
+    /**
+     * Determines if the instance is greater (after) than or equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;greaterThanOrEqualTo(&#039;2018-07-25 12:45:15&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;greaterThanOrEqualTo(&#039;2018-07-25 12:45:16&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;greaterThanOrEqualTo(&#039;2018-07-25 12:45:17&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function greaterThanOrEqualTo(DateTimeInterface|string $date): bool
+    {
+        return $this &gt;= $this-&gt;resolveCarbon($date);
+    }
+
+    /**
+     * Determines if the instance is less (before) than another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lt(&#039;2018-07-25 12:45:15&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lt(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lt(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     *
+     * @see lessThan()
+     */
+    <span style="background-color: red">p</span>ublic function lt(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;lessThan($date);
+    }
+
+    /**
+     * Determines if the instance is less (before) than another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lessThan(&#039;2018-07-25 12:45:15&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lessThan(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lessThan(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function lessThan(DateTimeInterface|string $date): bool
+    {
+        return $this &lt; $this-&gt;resolveCarbon($date);
+    }
+
+    /**
+     * Determines if the instance is less (before) than another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;isBefore(&#039;2018-07-25 12:45:15&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;isBefore(&#039;2018-07-25 12:45:16&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;isBefore(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     *
+     * @see lessThan()
+     */
+    <span style="background-color: red">p</span>ublic function isBefore(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;lessThan($date);
+    }
+
+    /**
+     * Determines if the instance is less (before) or equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lte(&#039;2018-07-25 12:45:15&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lte(&#039;2018-07-25 12:45:16&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lte(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     *
+     * @see lessThanOrEqualTo()
+     */
+    <span style="background-color: red">p</span>ublic function lte(DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;lessThanOrEqualTo($date);
+    }
+
+    /**
+     * Determines if the instance is less (before) or equal to another
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lessThanOrEqualTo(&#039;2018-07-25 12:45:15&#039;); // false
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lessThanOrEqualTo(&#039;2018-07-25 12:45:16&#039;); // true
+     * Carbon::parse(&#039;2018-07-25 12:45:16&#039;)-&gt;lessThanOrEqualTo(&#039;2018-07-25 12:45:17&#039;); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function lessThanOrEqualTo(DateTimeInterface|string $date): bool
+    {
+        return $this &lt;= $this-&gt;resolveCarbon($date);
+    }
+
+    /**
+     * Determines if the instance is between two others.
+     *
+     * The third argument allow you to specify if bounds are included or not (true by default)
+     * but for when you including/excluding bounds may produce different results in your application,
+     * we recommend to use the explicit methods -&gt;betweenIncluded() or -&gt;betweenExcluded() instead.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;between(&#039;2018-07-14&#039;, &#039;2018-08-01&#039;); // true
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;between(&#039;2018-08-01&#039;, &#039;2018-08-20&#039;); // false
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;between(&#039;2018-07-25&#039;, &#039;2018-08-01&#039;); // true
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;between(&#039;2018-07-25&#039;, &#039;2018-08-01&#039;, false); // false
+     * ```
+     *
+     * @param bool $equal Indicates if an equal to comparison should be done
+     */
+    <span style="background-color: red">p</span>ublic function between(DateTimeInterface|string $date1, DateTimeInterface|string $date2, bool $equal = true): bool
+    {
+        $date1 = $this-&gt;resolveCarbon($date1);
+        $date2 = $this-&gt;resolveCarbon($date2);
+
+        <span style="background-color: red">i</span>f ($date1-&gt;greaterThan($date2)) {
+            [$date1, $date2] = [$date2, $date1];
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($equal) {
+            return $this &gt;= $date1 &amp;&amp; <span style="background-color: red">$</span>this &lt;= $date2;
+        <span style="background-color: red">}</span>
+
+        return $this &gt; $date1 &amp;&amp; <span style="background-color: red">$</span>this &lt; $date2;
+    }
+
+    /**
+     * Determines if the instance is between two others, bounds included.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;betweenIncluded(&#039;2018-07-14&#039;, &#039;2018-08-01&#039;); // true
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;betweenIncluded(&#039;2018-08-01&#039;, &#039;2018-08-20&#039;); // false
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;betweenIncluded(&#039;2018-07-25&#039;, &#039;2018-08-01&#039;); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function betweenIncluded(DateTimeInterface|string $date1, DateTimeInterface|string $date2): bool
+    {
+        return $this-&gt;between($date1, $date2, true);
+    }
+
+    /**
+     * Determines if the instance is between two others, bounds excluded.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;betweenExcluded(&#039;2018-07-14&#039;, &#039;2018-08-01&#039;); // true
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;betweenExcluded(&#039;2018-08-01&#039;, &#039;2018-08-20&#039;); // false
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;betweenExcluded(&#039;2018-07-25&#039;, &#039;2018-08-01&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function betweenExcluded(DateTimeInterface|string $date1, DateTimeInterface|string $date2): bool
+    {
+        return $this-&gt;between($date1, $date2, false);
+    }
+
+    /**
+     * Determines if the instance is between two others
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;isBetween(&#039;2018-07-14&#039;, &#039;2018-08-01&#039;); // true
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;isBetween(&#039;2018-08-01&#039;, &#039;2018-08-20&#039;); // false
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;isBetween(&#039;2018-07-25&#039;, &#039;2018-08-01&#039;); // true
+     * Carbon::parse(&#039;2018-07-25&#039;)-&gt;isBetween(&#039;2018-07-25&#039;, &#039;2018-08-01&#039;, false); // false
+     * ```
+     *
+     * @param bool $equal Indicates if an equal to comparison should be done
+     */
+    <span style="background-color: red">p</span>ublic function isBetween(DateTimeInterface|string $date1, DateTimeInterface|string $date2, bool $equal = true): bool
+    {
+        return $this-&gt;between($date1, $date2, $equal);
+    }
+
+    /**
+     * Determines if the instance is a weekday.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-07-14&#039;)-&gt;isWeekday(); // false
+     * Carbon::parse(&#039;2019-07-15&#039;)-&gt;isWeekday(); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isWeekday(): bool
+    {
+        return !$this-&gt;isWeekend();
+    }
+
+    /**
+     * Determines if the instance is a weekend day.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-07-14&#039;)-&gt;isWeekend(); // true
+     * Carbon::parse(&#039;2019-07-15&#039;)-&gt;isWeekend(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isWeekend(): bool
+    {
+        return \in_array(
+            $this-&gt;dayOfWeek,
+            $this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::getWeekendDays()),
+            true,
+        );
+    }
+
+    /**
+     * Determines if the instance is yesterday.
+     *
+     * @example
+     * ```
+     * Carbon::yesterday()-&gt;isYesterday(); // true
+     * Carbon::tomorrow()-&gt;isYesterday(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isYesterday(): bool
+    {
+        return $this-&gt;toDateString() === $this-&gt;transmitFactory(
+            fn () =&gt; <span style="background-color: red">s</span>tatic::yesterday($this-&gt;getTimezone())-&gt;toDateString(),
+        );
+    }
+
+    /**
+     * Determines if the instance is today.
+     *
+     * @example
+     * ```
+     * Carbon::today()-&gt;isToday(); // true
+     * Carbon::tomorrow()-&gt;isToday(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isToday(): bool
+    {
+        return $this-&gt;toDateString() === $this-&gt;nowWithSameTz()-&gt;toDateString();
+    }
+
+    /**
+     * Determines if the instance is tomorrow.
+     *
+     * @example
+     * ```
+     * Carbon::tomorrow()-&gt;isTomorrow(); // true
+     * Carbon::yesterday()-&gt;isTomorrow(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isTomorrow(): bool
+    {
+        return $this-&gt;toDateString() === $this-&gt;transmitFactory(
+            fn () =&gt; <span style="background-color: red">s</span>tatic::tomorrow($this-&gt;getTimezone())-&gt;toDateString(),
+        );
+    }
+
+    /**
+     * Determines if the instance is in the future, ie. greater (after) than now.
+     *
+     * @example
+     * ```
+     * Carbon::now()-&gt;addHours(5)-&gt;isFuture(); // true
+     * Carbon::now()-&gt;subHours(5)-&gt;isFuture(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isFuture(): bool
+    {
+        return $this-&gt;greaterThan($this-&gt;nowWithSameTz());
+    }
+
+    /**
+     * Determines if the instance is in the past, ie. less (before) than now.
+     *
+     * @example
+     * ```
+     * Carbon::now()-&gt;subHours(5)-&gt;isPast(); // true
+     * Carbon::now()-&gt;addHours(5)-&gt;isPast(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isPast(): bool
+    {
+        return $this-&gt;lessThan($this-&gt;nowWithSameTz());
+    }
+
+    /**
+     * Determines if the instance is now or in the future, ie. greater (after) than or equal to now.
+     *
+     * @example
+     * ```
+     * Carbon::now()-&gt;isNowOrFuture(); // true
+     * Carbon::now()-&gt;addHours(5)-&gt;isNowOrFuture(); // true
+     * Carbon::now()-&gt;subHours(5)-&gt;isNowOrFuture(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isNowOrFuture(): bool
+    {
+        return $this-&gt;greaterThanOrEqualTo($this-&gt;nowWithSameTz());
+    }
+
+    /**
+     * Determines if the instance is now or in the past, ie. less (before) than or equal to now.
+     *
+     * @example
+     * ```
+     * Carbon::now()-&gt;isNowOrPast(); // true
+     * Carbon::now()-&gt;subHours(5)-&gt;isNowOrPast(); // true
+     * Carbon::now()-&gt;addHours(5)-&gt;isNowOrPast(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isNowOrPast(): bool
+    {
+        return $this-&gt;lessThanOrEqualTo($this-&gt;nowWithSameTz());
+    }
+
+    /**
+     * Determines if the instance is a leap year.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2020-01-01&#039;)-&gt;isLeapYear(); // true
+     * Carbon::parse(&#039;2019-01-01&#039;)-&gt;isLeapYear(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isLeapYear(): bool
+    {
+        return $this-&gt;rawFormat(&#039;L&#039;) === &#039;1&#039;;
+    }
+
+    /**
+     * Determines if the instance is a long year (using calendar year).
+     *
+     * ⚠️ This method completely ignores month and day to use the numeric year number,
+     * it&#039;s not correct if the exact date matters. For instance as `2019-12-30` is already
+     * in the first week of the 2020 year, if you want to know from this date if ISO week
+     * year 2020 is a long year, use `isLongIsoYear` instead.
+     *
+     * @example
+     * ```
+     * Carbon::create(2015)-&gt;isLongYear(); // true
+     * Carbon::create(2016)-&gt;isLongYear(); // false
+     * ```
+     *
+     * @see https://en.wikipedia.org/wiki/ISO_8601#Week_dates
+     */
+    <span style="background-color: red">p</span>ublic function isLongYear(): bool
+    {
+        return static::create($this-&gt;year, 12, 28, 0, 0, 0, $this-&gt;tz)-&gt;weekOfYear === static::WEEKS_PER_YEAR + 1;
+    }
+
+    /**
+     * Determines if the instance is a long year (using ISO 8601 year).
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2015-01-01&#039;)-&gt;isLongIsoYear(); // true
+     * Carbon::parse(&#039;2016-01-01&#039;)-&gt;isLongIsoYear(); // true
+     * Carbon::parse(&#039;2016-01-03&#039;)-&gt;isLongIsoYear(); // false
+     * Carbon::parse(&#039;2019-12-29&#039;)-&gt;isLongIsoYear(); // false
+     * Carbon::parse(&#039;2019-12-30&#039;)-&gt;isLongIsoYear(); // true
+     * ```
+     *
+     * @see https://en.wikipedia.org/wiki/ISO_8601#Week_dates
+     */
+    <span style="background-color: red">p</span>ublic function isLongIsoYear(): bool
+    {
+        return static::create($this-&gt;isoWeekYear, 12, 28, 0, 0, 0, $this-&gt;tz)-&gt;weekOfYear === 53;
+    }
+
+    /**
+     * Compares the formatted values of the two dates.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-06-13&#039;)-&gt;isSameAs(&#039;Y-d&#039;, Carbon::parse(&#039;2019-12-13&#039;)); // true
+     * Carbon::parse(&#039;2019-06-13&#039;)-&gt;isSameAs(&#039;Y-d&#039;, Carbon::parse(&#039;2019-06-14&#039;)); // false
+     * ```
+     *
+     * @param string                   $format date formats to compare.
+     * @param DateTimeInterface|string $date   instance to compare with or null to use current day.
+     */
+    <span style="background-color: red">p</span>ublic function isSameAs(string $format, DateTimeInterface|string $date): bool
+    {
+        return $this-&gt;rawFormat($format) === $this-&gt;resolveCarbon($date)-&gt;rawFormat($format);
+    }
+
+    /**
+     * Determines if the instance is in the current unit given.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-01-13&#039;)-&gt;isSameUnit(&#039;year&#039;, Carbon::parse(&#039;2019-12-25&#039;)); // true
+     * Carbon::parse(&#039;2018-12-13&#039;)-&gt;isSameUnit(&#039;year&#039;, Carbon::parse(&#039;2019-12-25&#039;)); // false
+     * ```
+     *
+     * @param string                   $unit singular unit string
+     * @param DateTimeInterface|string $date instance to compare with or null to use current day.
+     *
+     * @throws BadComparisonUnitException
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isSameUnit(string $unit, DateTimeInterface|string $date): bool
+    {
+        <span style="background-color: red">i</span>f ($unit === /* @call isSameUnit */ &#039;quarter&#039;) {
+            $other = $this-&gt;resolveCarbon($date);
+
+            return $other-&gt;year === $this-&gt;year &amp;&amp; <span style="background-color: red">$</span>other-&gt;quarter === $this-&gt;quarter;
+        <span style="background-color: red">}</span>
+
+        $units = [
+            // @call isSameUnit
+            &#039;year&#039; =&gt; &#039;Y&#039;,
+            // @call isSameUnit
+            &#039;month&#039; =&gt; &#039;Y-n&#039;,
+            // @call isSameUnit
+            &#039;week&#039; =&gt; &#039;o-W&#039;,
+            // @call isSameUnit
+            &#039;day&#039; =&gt; &#039;Y-m-d&#039;,
+            // @call isSameUnit
+            &#039;hour&#039; =&gt; &#039;Y-m-d H&#039;,
+            // @call isSameUnit
+            &#039;minute&#039; =&gt; &#039;Y-m-d H:i&#039;,
+            // @call isSameUnit
+            &#039;second&#039; =&gt; &#039;Y-m-d H:i:s&#039;,
+            // @call isSameUnit
+            &#039;milli&#039; =&gt; &#039;Y-m-d H:i:s.v&#039;,
+            // @call isSameUnit
+            &#039;millisecond&#039; =&gt; &#039;Y-m-d H:i:s.v&#039;,
+            // @call isSameUnit
+            &#039;micro&#039; =&gt; &#039;Y-m-d H:i:s.u&#039;,
+            // @call isSameUnit
+            &#039;microsecond&#039; =&gt; &#039;Y-m-d H:i:s.u&#039;,
+        ];
+
+        <span style="background-color: red">i</span>f (isset($units[$unit])) {
+            return $this-&gt;isSameAs($units[$unit], $date);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($this-&gt;$unit)) {
+            return $this-&gt;resolveCarbon($date)-&gt;$unit === $this-&gt;$unit;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;isLocalStrictModeEnabled()) {
+            throw new BadComparisonUnitException($unit);
+        <span style="background-color: red">}</span>
+
+        return false;
+    }
+
+    /**
+     * Determines if the instance is in the current unit given.
+     *
+     * @example
+     * ```
+     * Carbon::now()-&gt;isCurrentUnit(&#039;hour&#039;); // true
+     * Carbon::now()-&gt;subHours(2)-&gt;isCurrentUnit(&#039;hour&#039;); // false
+     * ```
+     *
+     * @param string $unit The unit to test.
+     *
+     * @throws BadMethodCallException
+     */
+    <span style="background-color: red">p</span>ublic function isCurrentUnit(string $unit): bool
+    {
+        return $this-&gt;{&#039;isSame&#039;.ucfirst($unit)}(&#039;now&#039;);
+    }
+
+    /**
+     * Checks if the passed in date is in the same quarter as the instance quarter (and year if needed).
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameQuarter(Carbon::parse(&#039;2019-03-01&#039;)); // true
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameQuarter(Carbon::parse(&#039;2019-04-01&#039;)); // false
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameQuarter(Carbon::parse(&#039;2018-03-01&#039;)); // false
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameQuarter(Carbon::parse(&#039;2018-03-01&#039;), false); // true
+     * ```
+     *
+     * @param DateTimeInterface|string $date       The instance to compare with or null to use current day.
+     * @param bool                     $ofSameYear Check if it is the same month in the same year.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isSameQuarter(DateTimeInterface|string $date, bool $ofSameYear = true): bool
+    {
+        $date = $this-&gt;resolveCarbon($date);
+
+        return $this-&gt;quarter === $date-&gt;quarter &amp;&amp; (<span style="background-color: red">!</span>$ofSameYear || <span style="background-color: red">$</span>this-&gt;isSameYear($date));
+    }
+
+    /**
+     * Checks if the passed in date is in the same month as the instance´s month.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameMonth(Carbon::parse(&#039;2019-01-01&#039;)); // true
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameMonth(Carbon::parse(&#039;2019-02-01&#039;)); // false
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameMonth(Carbon::parse(&#039;2018-01-01&#039;)); // false
+     * Carbon::parse(&#039;2019-01-12&#039;)-&gt;isSameMonth(Carbon::parse(&#039;2018-01-01&#039;), false); // true
+     * ```
+     *
+     * @param DateTimeInterface|string $date       The instance to compare with or null to use the current date.
+     * @param bool                     $ofSameYear Check if it is the same month in the same year.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isSameMonth(DateTimeInterface|string $date, bool $ofSameYear = true): bool
+    {
+        return $this-&gt;isSameAs($ofSameYear ? &#039;Y-m&#039; : <span style="background-color: red">'</span>m&#039;, $date);
+    }
+
+    /**
+     * Checks if this day is a specific day of the week.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-07-17&#039;)-&gt;isDayOfWeek(Carbon::WEDNESDAY); // true
+     * Carbon::parse(&#039;2019-07-17&#039;)-&gt;isDayOfWeek(Carbon::FRIDAY); // false
+     * Carbon::parse(&#039;2019-07-17&#039;)-&gt;isDayOfWeek(&#039;Wednesday&#039;); // true
+     * Carbon::parse(&#039;2019-07-17&#039;)-&gt;isDayOfWeek(&#039;Friday&#039;); // false
+     * ```
+     *
+     * @param int|string $dayOfWeek
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isDayOfWeek($dayOfWeek): bool
+    {
+        <span style="background-color: red">i</span>f (\is_string($dayOfWeek) &amp;&amp; <span style="background-color: red">\</span>defined($constant = static::class.&#039;::&#039;.strtoupper($dayOfWeek))) {
+            $dayOfWeek = \constant($constant);
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;dayOfWeek === $dayOfWeek;
+    }
+
+    /**
+     * Check if its the birthday. Compares the date/month values of the two dates.
+     *
+     * @example
+     * ```
+     * Carbon::now()-&gt;subYears(5)-&gt;isBirthday(); // true
+     * Carbon::now()-&gt;subYears(5)-&gt;subDay()-&gt;isBirthday(); // false
+     * Carbon::parse(&#039;2019-06-05&#039;)-&gt;isBirthday(Carbon::parse(&#039;2001-06-05&#039;)); // true
+     * Carbon::parse(&#039;2019-06-05&#039;)-&gt;isBirthday(Carbon::parse(&#039;2001-06-06&#039;)); // false
+     * ```
+     *
+     * @param DateTimeInterface|string|null $date The instance to compare with or null to use current day.
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isBirthday(DateTimeInterface|string|null $date = null): bool
+    {
+        return $this-&gt;isSameAs(&#039;md&#039;, $date ?? <span style="background-color: red">'</span>now&#039;);
+    }
+
+    /**
+     * Check if today is the last day of the Month
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-02-28&#039;)-&gt;isLastOfMonth(); // true
+     * Carbon::parse(&#039;2019-03-28&#039;)-&gt;isLastOfMonth(); // false
+     * Carbon::parse(&#039;2019-03-30&#039;)-&gt;isLastOfMonth(); // false
+     * Carbon::parse(&#039;2019-03-31&#039;)-&gt;isLastOfMonth(); // true
+     * Carbon::parse(&#039;2019-04-30&#039;)-&gt;isLastOfMonth(); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isLastOfMonth(): bool
+    {
+        return $this-&gt;day === $this-&gt;daysInMonth;
+    }
+
+    /**
+     * Check if the instance is start of a given unit (tolerating a given interval).
+     *
+     * @example
+     * ```
+     * // Check if a date-time is the first 15 minutes of the hour it&#039;s in
+     * Carbon::parse(&#039;2019-02-28 20:13:00&#039;)-&gt;isStartOfUnit(Unit::Hour, &#039;15 minutes&#039;); // true
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfUnit(
+        Unit $unit,
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+        mixed ...$params,
+    ): bool {
+        $interval ??= <span style="background-color: red">m</span>atch ($unit) {
+            Unit::Day, Unit::Hour, Unit::Minute, Unit::Second, Unit::Millisecond, Unit::Microsecond =&gt; <span style="background-color: red">U</span>nit::Microsecond,
+            default =&gt; <span style="background-color: red">U</span>nit::Day,
+        };
+
+        $startOfUnit = $this-&gt;avoidMutation()-&gt;startOf($unit, ...$params);
+        $startOfUnitDateTime = $startOfUnit-&gt;rawFormat(&#039;Y-m-d H:i:s.u&#039;);
+        $maximumDateTime = $startOfUnit
+            -&gt;add($interval instanceof Unit ? &#039;1  &#039;.$interval-&gt;value : <span style="background-color: red">$</span>interval)
+            -&gt;rawFormat(&#039;Y-m-d H:i:s.u&#039;);
+
+        <span style="background-color: red">i</span>f ($maximumDateTime &lt; $startOfUnitDateTime) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;rawFormat(&#039;Y-m-d H:i:s.u&#039;) &lt; $maximumDateTime;
+    }
+
+    /**
+     * Check if the instance is end of a given unit (tolerating a given interval).
+     *
+     * @example
+     * ```
+     * // Check if a date-time is the last 15 minutes of the hour it&#039;s in
+     * Carbon::parse(&#039;2019-02-28 20:13:00&#039;)-&gt;isEndOfUnit(Unit::Hour, &#039;15 minutes&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfUnit(
+        Unit $unit,
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+        mixed ...$params,
+    ): bool {
+        $interval ??= <span style="background-color: red">m</span>atch ($unit) {
+            Unit::Day, Unit::Hour, Unit::Minute, Unit::Second, Unit::Millisecond, Unit::Microsecond =&gt; <span style="background-color: red">U</span>nit::Microsecond,
+            default =&gt; <span style="background-color: red">U</span>nit::Day,
+        };
+
+        $endOfUnit = $this-&gt;avoidMutation()-&gt;endOf($unit, ...$params);
+        $endOfUnitDateTime = $endOfUnit-&gt;rawFormat(&#039;Y-m-d H:i:s.u&#039;);
+        $minimumDateTime = $endOfUnit
+            -&gt;sub($interval instanceof Unit ? &#039;1  &#039;.$interval-&gt;value : <span style="background-color: red">$</span>interval)
+            -&gt;rawFormat(&#039;Y-m-d H:i:s.u&#039;);
+
+        <span style="background-color: red">i</span>f ($minimumDateTime &gt; $endOfUnitDateTime) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;rawFormat(&#039;Y-m-d H:i:s.u&#039;) &gt; $minimumDateTime;
+    }
+
+    /**
+     * Determines if the instance is start of millisecond (first microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfMillisecond(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Millisecond, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of millisecond (last microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfMillisecond(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Millisecond, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of second (first microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfSecond(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Second, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of second (last microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfSecond(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Second, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of minute (first microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfMinute(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Minute, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of minute (last microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfMinute(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Minute, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of hour (first microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfHour(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Hour, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of hour (last microsecond by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfHour(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Hour, $interval);
+    }
+
+    /**
+     * Check if the instance is start of day / midnight.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-02-28 00:00:00&#039;)-&gt;isStartOfDay(); // true
+     * Carbon::parse(&#039;2019-02-28 00:00:00.999999&#039;)-&gt;isStartOfDay(); // true
+     * Carbon::parse(&#039;2019-02-28 00:00:01&#039;)-&gt;isStartOfDay(); // false
+     * Carbon::parse(&#039;2019-02-28 00:00:00.000000&#039;)-&gt;isStartOfDay(true); // true
+     * Carbon::parse(&#039;2019-02-28 00:00:00.000012&#039;)-&gt;isStartOfDay(true); // false
+     * ```
+     *
+     * @param bool                                                           $checkMicroseconds check time at microseconds precision
+     * @param Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval          if an interval is specified it will be used as precision
+     *                                                                                          for instance with &quot;15 minutes&quot;, it checks if current date-time
+     *                                                                                          is in the last 15 minutes of the day, with Unit::Hour, it
+     *                                                                                          checks if it&#039;s in the last hour of the day.
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfDay(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|bool $checkMicroseconds = false,
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        <span style="background-color: red">i</span>f ($checkMicroseconds === true) {
+            @trigger_error(
+                &quot;Since 3.8.0, it&#039;s deprecated to use \$checkMicroseconds.\n&quot;.
+                &quot;It will be removed in 4.0.0.\n&quot;.
+                &quot;Instead, you should use either isStartOfDay(interval: Unit::Microsecond) or isStartOfDay(interval: Unit::Second)\n&quot;.
+                &#039;And you can now use any custom interval as precision, such as isStartOfDay(interval: &quot;15 minutes&quot;)&#039;,
+                \E_USER_DEPRECATED,
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval === null &amp;&amp; <span style="background-color: red">!</span>\is_bool($checkMicroseconds)) {
+            $interval = $checkMicroseconds;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval !== null) {
+            <span style="background-color: red">i</span>f ($interval instanceof Unit) {
+                $interval = &#039;1  &#039;.$interval-&gt;value;
+            <span style="background-color: red">}</span>
+
+            $date = $this-&gt;rawFormat(&#039;Y-m-d&#039;);
+            $time = $this-&gt;rawFormat(&#039;H:i:s.u&#039;);
+            $maximum = $this-&gt;avoidMutation()-&gt;startOfDay()-&gt;add($interval);
+            $maximumDate = $maximum-&gt;rawFormat(&#039;Y-m-d&#039;);
+
+            <span style="background-color: red">i</span>f ($date === $maximumDate) {
+                return $time &lt; $maximum-&gt;rawFormat(&#039;H:i:s.u&#039;);
+            <span style="background-color: red">}</span>
+
+            return $maximumDate &gt; $date;
+        <span style="background-color: red">}</span>
+
+        /* @var CarbonInterface $this */
+        return $checkMicroseconds
+            ? $this-&gt;rawFormat(&#039;H:i:s.u&#039;) === &#039;00:00:00.000000&#039;
+            : <span style="background-color: red">$</span>this-&gt;rawFormat(&#039;H:i:s&#039;) === &#039;00:00:00&#039;;
+    }
+
+    /**
+     * Check if the instance is end of day.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-02-28 23:59:59.999999&#039;)-&gt;isEndOfDay(); // true
+     * Carbon::parse(&#039;2019-02-28 23:59:59.123456&#039;)-&gt;isEndOfDay(); // true
+     * Carbon::parse(&#039;2019-02-28 23:59:59&#039;)-&gt;isEndOfDay(); // true
+     * Carbon::parse(&#039;2019-02-28 23:59:58.999999&#039;)-&gt;isEndOfDay(); // false
+     * Carbon::parse(&#039;2019-02-28 23:59:59.999999&#039;)-&gt;isEndOfDay(true); // true
+     * Carbon::parse(&#039;2019-02-28 23:59:59.123456&#039;)-&gt;isEndOfDay(true); // false
+     * Carbon::parse(&#039;2019-02-28 23:59:59&#039;)-&gt;isEndOfDay(true); // false
+     * ```
+     *
+     * @param bool                                                           $checkMicroseconds check time at microseconds precision
+     * @param Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval          if an interval is specified it will be used as precision
+     *                                                                                          for instance with &quot;15 minutes&quot;, it checks if current date-time
+     *                                                                                          is in the last 15 minutes of the day, with Unit::Hour, it
+     *                                                                                          checks if it&#039;s in the last hour of the day.
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfDay(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|bool $checkMicroseconds = false,
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        <span style="background-color: red">i</span>f ($checkMicroseconds === true) {
+            @trigger_error(
+                &quot;Since 3.8.0, it&#039;s deprecated to use \$checkMicroseconds.\n&quot;.
+                &quot;It will be removed in 4.0.0.\n&quot;.
+                &quot;Instead, you should use either isEndOfDay(interval: Unit::Microsecond) or isEndOfDay(interval: Unit::Second)\n&quot;.
+                &#039;And you can now use any custom interval as precision, such as isEndOfDay(interval: &quot;15 minutes&quot;)&#039;,
+                \E_USER_DEPRECATED,
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval === null &amp;&amp; <span style="background-color: red">!</span>\is_bool($checkMicroseconds)) {
+            $interval = $checkMicroseconds;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($interval !== null) {
+            $date = $this-&gt;rawFormat(&#039;Y-m-d&#039;);
+            $time = $this-&gt;rawFormat(&#039;H:i:s.u&#039;);
+            $minimum = $this-&gt;avoidMutation()
+                -&gt;endOfDay()
+                -&gt;sub($interval instanceof Unit ? &#039;1  &#039;.$interval-&gt;value : <span style="background-color: red">$</span>interval);
+            $minimumDate = $minimum-&gt;rawFormat(&#039;Y-m-d&#039;);
+
+            <span style="background-color: red">i</span>f ($date === $minimumDate) {
+                return $time &gt; $minimum-&gt;rawFormat(&#039;H:i:s.u&#039;);
+            <span style="background-color: red">}</span>
+
+            return $minimumDate &lt; $date;
+        <span style="background-color: red">}</span>
+
+        /* @var CarbonInterface $this */
+        return $checkMicroseconds
+            ? $this-&gt;rawFormat(&#039;H:i:s.u&#039;) === &#039;23:59:59.999999&#039;
+            : <span style="background-color: red">$</span>this-&gt;rawFormat(&#039;H:i:s&#039;) === &#039;23:59:59&#039;;
+    }
+
+    /**
+     * Determines if the instance is start of week (first day by default but interval can be customized).
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2024-08-31&#039;)-&gt;startOfWeek()-&gt;isStartOfWeek(); // true
+     * Carbon::parse(&#039;2024-08-31&#039;)-&gt;isStartOfWeek(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfWeek(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+        WeekDay|int|null $weekStartsAt = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Week, $interval, $weekStartsAt);
+    }
+
+    /**
+     * Determines if the instance is end of week (last day by default but interval can be customized).
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2024-08-31&#039;)-&gt;endOfWeek()-&gt;isEndOfWeek(); // true
+     * Carbon::parse(&#039;2024-08-31&#039;)-&gt;isEndOfWeek(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfWeek(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+        WeekDay|int|null $weekEndsAt = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Week, $interval, $weekEndsAt);
+    }
+
+    /**
+     * Determines if the instance is start of month (first day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfMonth(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Month, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of month (last day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfMonth(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Month, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of quarter (first day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfQuarter(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Quarter, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of quarter (last day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfQuarter(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Quarter, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of year (first day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfYear(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Year, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of year (last day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfYear(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Year, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of decade (first day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfDecade(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Decade, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of decade (last day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfDecade(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Decade, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of century (first day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfCentury(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Century, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of century (last day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfCentury(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Century, $interval);
+    }
+
+    /**
+     * Determines if the instance is start of millennium (first day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfMillennium(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isStartOfUnit(Unit::Millennium, $interval);
+    }
+
+    /**
+     * Determines if the instance is end of millennium (last day by default but interval can be customized).
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfMillennium(
+        Unit|DateInterval|Closure|CarbonConverterInterface|string|null $interval = null,
+    ): bool {
+        return $this-&gt;isEndOfUnit(Unit::Millennium, $interval);
+    }
+
+    /**
+     * Check if the instance is start of day / midnight.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-02-28 00:00:00&#039;)-&gt;isMidnight(); // true
+     * Carbon::parse(&#039;2019-02-28 00:00:00.999999&#039;)-&gt;isMidnight(); // true
+     * Carbon::parse(&#039;2019-02-28 00:00:01&#039;)-&gt;isMidnight(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isMidnight(): bool
+    {
+        return $this-&gt;isStartOfDay();
+    }
+
+    /**
+     * Check if the instance is midday.
+     *
+     * @example
+     * ```
+     * Carbon::parse(&#039;2019-02-28 11:59:59.999999&#039;)-&gt;isMidday(); // false
+     * Carbon::parse(&#039;2019-02-28 12:00:00&#039;)-&gt;isMidday(); // true
+     * Carbon::parse(&#039;2019-02-28 12:00:00.999999&#039;)-&gt;isMidday(); // true
+     * Carbon::parse(&#039;2019-02-28 12:00:01&#039;)-&gt;isMidday(); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic function isMidday(): bool
+    {
+        /* @var CarbonInterface $this */
+        return $this-&gt;rawFormat(&#039;G:i:s&#039;) === static::$midDayAt.&#039;:00:00&#039;;
+    }
+
+    /**
+     * Checks if the (date)time string is in a given format.
+     *
+     * @example
+     * ```
+     * Carbon::hasFormat(&#039;11:12:45&#039;, &#039;h:i:s&#039;); // true
+     * Carbon::hasFormat(&#039;13:12:45&#039;, &#039;h:i:s&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic static function hasFormat(string $date, string $format): bool
+    {
+        return FactoryImmutable::getInstance()-&gt;hasFormat($date, $format);
+    }
+
+    /**
+     * Checks if the (date)time string is in a given format.
+     *
+     * @example
+     * ```
+     * Carbon::hasFormatWithModifiers(&#039;31/08/2015&#039;, &#039;d#m#Y&#039;); // true
+     * Carbon::hasFormatWithModifiers(&#039;31/08/2015&#039;, &#039;m#d#Y&#039;); // false
+     * ```
+     *
+     * @param string $date
+     * @param string $format
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic static function hasFormatWithModifiers(?string $date, string $format): bool
+    {
+        return FactoryImmutable::getInstance()-&gt;hasFormatWithModifiers($date, $format);
+    }
+
+    /**
+     * Checks if the (date)time string is in a given format and valid to create a
+     * new instance.
+     *
+     * @example
+     * ```
+     * Carbon::canBeCreatedFromFormat(&#039;11:12:45&#039;, &#039;h:i:s&#039;); // true
+     * Carbon::canBeCreatedFromFormat(&#039;13:12:45&#039;, &#039;h:i:s&#039;); // false
+     * ```
+     */
+    <span style="background-color: red">p</span>ublic static function canBeCreatedFromFormat(?string $date, string $format): bool
+    {
+        <span style="background-color: red">i</span>f ($date === null) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        try {
+            // Try to create a DateTime object. Throws an InvalidArgumentException if the provided time string
+            // doesn&#039;t match the format in any way.
+            <span style="background-color: red">i</span>f (!static::rawCreateFromFormat($format, $date)) {
+                return false;
+            <span style="background-color: red">}</span>
+        } <span style="background-color: red">c</span>atch (InvalidArgumentException) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return static::hasFormatWithModifiers($date, $format);
+    }
+
+    /**
+     * Returns true if the current date matches the given string.
+     *
+     * @example
+     * ```
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;2019&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;2018&#039;)); // false
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;2019-06&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;06-02&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;2019-06-02&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;Sunday&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;June&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;12:23&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;12:23:45&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;12:23:00&#039;)); // false
+     * var_dump(Carbon::parse(&#039;2019-06-02 12:23:45&#039;)-&gt;is(&#039;12h&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 15:23:45&#039;)-&gt;is(&#039;3pm&#039;)); // true
+     * var_dump(Carbon::parse(&#039;2019-06-02 15:23:45&#039;)-&gt;is(&#039;3am&#039;)); // false
+     * ```
+     *
+     * @param string $tester day name, month name, hour, date, etc. as string
+     */
+    <span style="background-color: red">p</span>ublic function is(WeekDay|Month|string $tester): bool
+    {
+        <span style="background-color: red">i</span>f ($tester instanceof BackedEnum) {
+            $tester = $tester-&gt;name;
+        <span style="background-color: red">}</span>
+
+        $tester = trim($tester);
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^\d+$/&#039;, $tester)) {
+            return $this-&gt;year === (int) $tester;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)$/i&#039;, $tester)) {
+            return $this-&gt;isSameMonth(
+                $this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::parse($tester)),
+                false,
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^\d{3,}-\d{1,2}$/&#039;, $tester)) {
+            return $this-&gt;isSameMonth(
+                $this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::parse($tester)),
+            );
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/^\d{1,2}-\d{1,2}$/&#039;, $tester)) {
+            return $this-&gt;isSameDay(
+                $this-&gt;transmitFactory(fn () =&gt; <span style="background-color: red">s</span>tatic::parse($this-&gt;year.&#039;-&#039;.$tester)),
+            );
+        <span style="background-color: red">}</span>
+
+        $modifier = preg_replace(&#039;/(\d)h$/i&#039;, &#039;$1:00&#039;, $tester);
+
+        /* @var CarbonInterface $max */
+        $median = $this-&gt;transmitFactory(static fn () =&gt; <span style="background-color: red">s</span>tatic::parse(&#039;5555-06-15 12:30:30.555555&#039;))
+            -&gt;modify($modifier);
+        $current = $this-&gt;avoidMutation();
+        /* @var CarbonInterface $other */
+        $other = $this-&gt;avoidMutation()-&gt;modify($modifier);
+
+        <span style="background-color: red">i</span>f ($current-&gt;eq($other)) {
+            return true;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/\d:\d{1,2}:\d{1,2}$/&#039;, $tester)) {
+            return $current-&gt;startOfSecond()-&gt;eq($other);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/\d:\d{1,2}$/&#039;, $tester)) {
+            return $current-&gt;startOfMinute()-&gt;eq($other);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(&#039;/\d(?:h|am|pm)$/&#039;, $tester)) {
+            return $current-&gt;startOfHour()-&gt;eq($other);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (preg_match(
+            &#039;/^(?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+\d+)?$/i&#039;,
+            $tester,
+        )) {
+            return $current-&gt;startOfMonth()-&gt;eq($other-&gt;startOfMonth());
+        <span style="background-color: red">}</span>
+
+        $units = [
+            &#039;month&#039; =&gt; [1, &#039;year&#039;],
+            &#039;day&#039; =&gt; [1, &#039;month&#039;],
+            &#039;hour&#039; =&gt; [0, &#039;day&#039;],
+            &#039;minute&#039; =&gt; [0, &#039;hour&#039;],
+            &#039;second&#039; =&gt; [0, &#039;minute&#039;],
+            &#039;microsecond&#039; =&gt; [0, &#039;second&#039;],
+        ];
+
+        <span style="background-color: red">f</span>oreach ($units as $unit =&gt; [$minimum, $startUnit]) {
+            <span style="background-color: red">i</span>f ($minimum === $median-&gt;$unit) {
+                $current = $current-&gt;startOf($startUnit);
+
+                break;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $current-&gt;eq($other);
+    }
+
+    /**
+     * Returns true if the date was created using CarbonImmutable::startOfTime()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isStartOfTime(): bool
+    {
+        return $this-&gt;startOfTime ?? <span style="background-color: red">f</span>alse;
+    }
+
+    /**
+     * Returns true if the date was created using CarbonImmutable::endOfTime()
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function isEndOfTime(): bool
+    {
+        return $this-&gt;endOfTime ?? <span style="background-color: red">f</span>alse;
+    }
+}
+</pre>

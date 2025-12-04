@@ -1,0 +1,477 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+/**
+ * This file is part of the Carbon package.
+ *
+ * (c) Brian Nesbitt &lt;brian@nesbot.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Carbon\Traits;
+
+use Carbon\CarbonInterface;
+use Carbon\Exceptions\InvalidFormatException;
+use ReturnTypeWillChange;
+
+/**
+ * Trait Modifiers.
+ *
+ * Returns dates relative to current date using modifier short-hand.
+ */
+trait Modifiers
+{
+    /**
+     * Midday/noon hour.
+     *
+     * @var int
+     */
+    protected static $midDayAt = 12;
+
+    /**
+     * get midday/noon hour
+     *
+     * @return int
+     */
+    <span style="background-color: red">p</span>ublic static function getMidDayAt()
+    {
+        return static::$midDayAt;
+    }
+
+    /**
+     * @deprecated To avoid conflict between different third-party libraries, static setters should not be used.
+     *             You should rather consider mid-day is always 12pm, then if you need to test if it&#039;s an other
+     *             hour, test it explicitly:
+     *                 $date-&gt;format(&#039;G&#039;) == 13
+     *             or to set explicitly to a given hour:
+     *                 $date-&gt;setTime(13, 0, 0, 0)
+     *
+     * Set midday/noon hour
+     *
+     * @param int $hour midday hour
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>ublic static function setMidDayAt($hour)
+    {
+        static::$midDayAt = $hour;
+    }
+
+    /**
+     * Modify to midday, default to self::$midDayAt
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function midDay()
+    {
+        return $this-&gt;setTime(static::$midDayAt, 0, 0, 0);
+    }
+
+    /**
+     * Modify to the next occurrence of a given modifier such as a day of
+     * the week. If no modifier is provided, modify to the next occurrence
+     * of the current day of the week. Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param string|int|null $modifier
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function next($modifier = null)
+    {
+        <span style="background-color: red">i</span>f ($modifier === null) {
+            $modifier = $this-&gt;dayOfWeek;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;change(
+            &#039;next &#039;.(\is_string($modifier) ? $modifier : <span style="background-color: red">s</span>tatic::$days[$modifier]),
+        );
+    }
+
+    /**
+     * Go forward or backward to the next week- or weekend-day.
+     *
+     * @param bool $weekday
+     * @param bool $forward
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>rivate function nextOrPreviousDay($weekday = true, $forward = true)
+    {
+        /** @var CarbonInterface $date */
+        $date = $this;
+        $step = $forward ? 1 : <span style="background-color: red">-</span>1;
+
+        <span style="background-color: red">d</span>o {
+            $date = $date-&gt;addDays($step);
+        } while ($weekday ? $date-&gt;isWeekend() : <span style="background-color: red">$</span>date-&gt;isWeekday())<span style="background-color: red">;</span>
+
+        return $date;
+    }
+
+    /**
+     * Go forward to the next weekday.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function nextWeekday()
+    {
+        return $this-&gt;nextOrPreviousDay();
+    }
+
+    /**
+     * Go backward to the previous weekday.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function previousWeekday()
+    {
+        return $this-&gt;nextOrPreviousDay(true, false);
+    }
+
+    /**
+     * Go forward to the next weekend day.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function nextWeekendDay()
+    {
+        return $this-&gt;nextOrPreviousDay(false);
+    }
+
+    /**
+     * Go backward to the previous weekend day.
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function previousWeekendDay()
+    {
+        return $this-&gt;nextOrPreviousDay(false, false);
+    }
+
+    /**
+     * Modify to the previous occurrence of a given modifier such as a day of
+     * the week. If no dayOfWeek is provided, modify to the previous occurrence
+     * of the current day of the week. Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param string|int|null $modifier
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function previous($modifier = null)
+    {
+        <span style="background-color: red">i</span>f ($modifier === null) {
+            $modifier = $this-&gt;dayOfWeek;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;change(
+            &#039;last &#039;.(\is_string($modifier) ? $modifier : <span style="background-color: red">s</span>tatic::$days[$modifier]),
+        );
+    }
+
+    /**
+     * Modify to the first occurrence of a given day of the week
+     * in the current month. If no dayOfWeek is provided, modify to the
+     * first day of the current month.  Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int|null $dayOfWeek
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function firstOfMonth($dayOfWeek = null)
+    {
+        $date = $this-&gt;startOfDay();
+
+        <span style="background-color: red">i</span>f ($dayOfWeek === null) {
+            return $date-&gt;day(1);
+        <span style="background-color: red">}</span>
+
+        return $date-&gt;modify(&#039;first &#039;.static::$days[$dayOfWeek].&#039; of &#039;.$date-&gt;rawFormat(&#039;F&#039;).&#039; &#039;.$date-&gt;year);
+    }
+
+    /**
+     * Modify to the last occurrence of a given day of the week
+     * in the current month. If no dayOfWeek is provided, modify to the
+     * last day of the current month.  Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int|null $dayOfWeek
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function lastOfMonth($dayOfWeek = null)
+    {
+        $date = $this-&gt;startOfDay();
+
+        <span style="background-color: red">i</span>f ($dayOfWeek === null) {
+            return $date-&gt;day($date-&gt;daysInMonth);
+        <span style="background-color: red">}</span>
+
+        return $date-&gt;modify(&#039;last &#039;.static::$days[$dayOfWeek].&#039; of &#039;.$date-&gt;rawFormat(&#039;F&#039;).&#039; &#039;.$date-&gt;year);
+    }
+
+    /**
+     * Modify to the given occurrence of a given day of the week
+     * in the current month. If the calculated occurrence is outside the scope
+     * of the current month, then return false and no modifications are made.
+     * Use the supplied constants to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int $nth
+     * @param int $dayOfWeek
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function nthOfMonth($nth, $dayOfWeek)
+    {
+        $date = $this-&gt;avoidMutation()-&gt;firstOfMonth();
+        $check = $date-&gt;rawFormat(&#039;Y-m&#039;);
+        $date = $date-&gt;modify(&#039;+&#039;.$nth.&#039; &#039;.static::$days[$dayOfWeek]);
+
+        return $date-&gt;rawFormat(&#039;Y-m&#039;) === $check ? $this-&gt;modify((string) $date) : <span style="background-color: red">f</span>alse;
+    }
+
+    /**
+     * Modify to the first occurrence of a given day of the week
+     * in the current quarter. If no dayOfWeek is provided, modify to the
+     * first day of the current quarter.  Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int|null $dayOfWeek day of the week default null
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function firstOfQuarter($dayOfWeek = null)
+    {
+        return $this-&gt;setDate($this-&gt;year, $this-&gt;quarter * static::MONTHS_PER_QUARTER - 2, 1)-&gt;firstOfMonth($dayOfWeek);
+    }
+
+    /**
+     * Modify to the last occurrence of a given day of the week
+     * in the current quarter. If no dayOfWeek is provided, modify to the
+     * last day of the current quarter.  Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int|null $dayOfWeek day of the week default null
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function lastOfQuarter($dayOfWeek = null)
+    {
+        return $this-&gt;setDate($this-&gt;year, $this-&gt;quarter * static::MONTHS_PER_QUARTER, 1)-&gt;lastOfMonth($dayOfWeek);
+    }
+
+    /**
+     * Modify to the given occurrence of a given day of the week
+     * in the current quarter. If the calculated occurrence is outside the scope
+     * of the current quarter, then return false and no modifications are made.
+     * Use the supplied constants to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int $nth
+     * @param int $dayOfWeek
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function nthOfQuarter($nth, $dayOfWeek)
+    {
+        $date = $this-&gt;avoidMutation()-&gt;day(1)-&gt;month($this-&gt;quarter * static::MONTHS_PER_QUARTER);
+        $lastMonth = $date-&gt;month;
+        $year = $date-&gt;year;
+        $date = $date-&gt;firstOfQuarter()-&gt;modify(&#039;+&#039;.$nth.&#039; &#039;.static::$days[$dayOfWeek]);
+
+        return ($lastMonth &lt; $date-&gt;month || <span style="background-color: red">$</span>year !== $date-&gt;year) ? false : <span style="background-color: red">$</span>this-&gt;modify((string) $date);
+    }
+
+    /**
+     * Modify to the first occurrence of a given day of the week
+     * in the current year. If no dayOfWeek is provided, modify to the
+     * first day of the current year.  Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int|null $dayOfWeek day of the week default null
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function firstOfYear($dayOfWeek = null)
+    {
+        return $this-&gt;month(1)-&gt;firstOfMonth($dayOfWeek);
+    }
+
+    /**
+     * Modify to the last occurrence of a given day of the week
+     * in the current year. If no dayOfWeek is provided, modify to the
+     * last day of the current year.  Use the supplied constants
+     * to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int|null $dayOfWeek day of the week default null
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function lastOfYear($dayOfWeek = null)
+    {
+        return $this-&gt;month(static::MONTHS_PER_YEAR)-&gt;lastOfMonth($dayOfWeek);
+    }
+
+    /**
+     * Modify to the given occurrence of a given day of the week
+     * in the current year. If the calculated occurrence is outside the scope
+     * of the current year, then return false and no modifications are made.
+     * Use the supplied constants to indicate the desired dayOfWeek, ex. static::MONDAY.
+     *
+     * @param int $nth
+     * @param int $dayOfWeek
+     *
+     * @return mixed
+     */
+    <span style="background-color: red">p</span>ublic function nthOfYear($nth, $dayOfWeek)
+    {
+        $date = $this-&gt;avoidMutation()-&gt;firstOfYear()-&gt;modify(&#039;+&#039;.$nth.&#039; &#039;.static::$days[$dayOfWeek]);
+
+        return $this-&gt;year === $date-&gt;year ? $this-&gt;modify((string) $date) : <span style="background-color: red">f</span>alse;
+    }
+
+    /**
+     * Modify the current instance to the average of a given instance (default now) and the current instance
+     * (second-precision).
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|null $date
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function average($date = null)
+    {
+        return $this-&gt;addRealMicroseconds((int) ($this-&gt;diffInMicroseconds($this-&gt;resolveCarbon($date), false) / 2));
+    }
+
+    /**
+     * Get the closest date from the instance (second-precision).
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date1
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date2
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function closest($date1, $date2)
+    {
+        return $this-&gt;diffInMicroseconds($date1, true) &lt; $this-&gt;diffInMicroseconds($date2, true) ? $date1 : <span style="background-color: red">$</span>date2;
+    }
+
+    /**
+     * Get the farthest date from the instance (second-precision).
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date1
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date2
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function farthest($date1, $date2)
+    {
+        return $this-&gt;diffInMicroseconds($date1, true) &gt; $this-&gt;diffInMicroseconds($date2, true) ? $date1 : <span style="background-color: red">$</span>date2;
+    }
+
+    /**
+     * Get the minimum instance between a given instance (default now) and the current instance.
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function min($date = null)
+    {
+        $date = $this-&gt;resolveCarbon($date);
+
+        return $this-&gt;lt($date) ? $this : <span style="background-color: red">$</span>date;
+    }
+
+    /**
+     * Get the minimum instance between a given instance (default now) and the current instance.
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date
+     *
+     * @see min()
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function minimum($date = null)
+    {
+        return $this-&gt;min($date);
+    }
+
+    /**
+     * Get the maximum instance between a given instance (default now) and the current instance.
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function max($date = null)
+    {
+        $date = $this-&gt;resolveCarbon($date);
+
+        return $this-&gt;gt($date) ? $this : <span style="background-color: red">$</span>date;
+    }
+
+    /**
+     * Get the maximum instance between a given instance (default now) and the current instance.
+     *
+     * @param \Carbon\Carbon|\DateTimeInterface|mixed $date
+     *
+     * @see max()
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function maximum($date = null)
+    {
+        return $this-&gt;max($date);
+    }
+
+    /**
+     * Calls \DateTime::modify if mutable or \DateTimeImmutable::modify else.
+     *
+     * @see https://php.net/manual/en/datetime.modify.php
+     *
+     * @return static
+     */
+    <span style="background-color: red">#</span>[ReturnTypeWillChange]
+    public function modify($modify)
+    {
+        return parent::modify((string) $modify)
+            ?: <span style="background-color: red">t</span>hrow new InvalidFormatException(&#039;Could not modify with: &#039;.var_export($modify, true));
+    }
+
+    /**
+     * Similar to native modify() method of DateTime but can handle more grammars.
+     *
+     * @example
+     * ```
+     * echo Carbon::now()-&gt;change(&#039;next 2pm&#039;);
+     * ```
+     *
+     * @link https://php.net/manual/en/datetime.modify.php
+     *
+     * @param string $modifier
+     *
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic function change($modifier)
+    {
+        return $this-&gt;modify(preg_replace_callback(&#039;/^(next|previous|last)\s+(\d{1,2}(h|am|pm|:\d{1,2}(:\d{1,2})?))$/i&#039;, <span style="background-color: red">f</span>unction ($match) {
+            $match[2] = str_replace(&#039;h&#039;, &#039;:00&#039;, $match[2]);
+            $test = $this-&gt;avoidMutation()-&gt;modify($match[2]);
+            $method = $match[1] === &#039;next&#039; ? &#039;lt&#039; : <span style="background-color: red">'</span>gt&#039;;
+            $match[1] = $test-&gt;$method($this) ? $match[1].&#039; day&#039; : <span style="background-color: red">'</span>today&#039;;
+
+            return $match[1].&#039; &#039;.$match[2];
+        }, strtr(trim($modifier), [
+            &#039; at &#039; =&gt; &#039; &#039;,
+            &#039;just now&#039; =&gt; &#039;now&#039;,
+            &#039;after tomorrow&#039; =&gt; &#039;tomorrow +1 day&#039;,
+            &#039;before yesterday&#039; =&gt; &#039;yesterday -1 day&#039;,
+        ])));
+    }
+}
+</pre>

@@ -1,0 +1,53 @@
+<pre>&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;utf-8&quot;&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+
+    &lt;title&gt;&lt;?php echo e(config(&#039;app.name&#039;, &#039;Laravel&#039;)); ?&gt;&lt;/title&gt;
+
+    &lt;!-- Fonts --&gt;
+    &lt;link rel=&quot;preconnect&quot; href=&quot;https://fonts.bunny.net&quot;&gt;
+    &lt;link href=&quot;https://fonts.bunny.net/css?family=figtree:400,600&amp;display=swap&quot; rel=&quot;stylesheet&quot; /&gt;
+
+    &lt;!-- Styles --&gt;
+    &lt;script src=&quot;https://cdn.tailwindcss.com&quot;&gt;&lt;/script&gt;
+
+    &lt;script&gt;
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: [&#039;Figtree&#039;, &#039;ui-sans-serif&#039;, &#039;system-ui&#039;, &#039;sans-serif&#039;, &quot;Apple Color Emoji&quot;, &quot;Segoe UI Emoji&quot;],
+                    }
+                }
+            }
+        }
+    &lt;/script&gt;
+&lt;/head&gt;
+&lt;body class=&quot;antialiased&quot;&gt;
+&lt;div class=&quot;relative flex justify-center items-center min-h-screen bg-gray-100 selection:bg-red-500 selection:text-white&quot;&gt;
+    &lt;div class=&quot;w-full sm:w-3/4 xl:w-1/2 mx-auto p-6&quot;&gt;
+        &lt;div class=&quot;px-6 py-4 bg-white from-gray-700/50 via-transparent rounded-lg shadow-2xl shadow-gray-500/20 flex items-center focus:outline focus:outline-2 focus:outline-red-500&quot;&gt;
+            &lt;div class=&quot;relative flex h-3 w-3 group &lt;?php echo e($exception ? &#039;status-down&#039; : <span style="background-color: green">n</span>ull); ?&gt;&quot;&gt;
+                &lt;span class=&quot;animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 group-[.status-down]:bg-red-600 opacity-75&quot;&gt;&lt;/span&gt;
+                &lt;span class=&quot;relative inline-flex rounded-full h-3 w-3 bg-green-400 group-[.status-down]:bg-red-600&quot;&gt;&lt;/span&gt;
+            &lt;/div&gt;
+
+            &lt;div class=&quot;ml-6&quot;&gt;
+                &lt;h2 class=&quot;text-xl font-semibold text-gray-900&quot;&gt;Application &lt;?php echo e($exception ? &#039;experiencing problems&#039; : <span style="background-color: green">'</span>up&#039;); ?&gt;&lt;/h2&gt;
+
+                &lt;p class=&quot;mt-2 text-gray-500 dark:text-gray-400 text-sm leading-relaxed&quot;&gt;
+                    HTTP request received.
+
+                    &lt;?php <span style="background-color: red">i</span>f(defined(&#039;LARAVEL_START&#039;)): ?&gt;
+                        Response rendered in &lt;?php echo e(round((microtime(true) - LARAVEL_START) * 1000)); ?&gt;ms.
+                    &lt;?php endif<span style="background-color: green">;</span> ?&gt;
+                &lt;/p&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+&lt;?php /**PATH /Users/anr65/PhpstormProjects/PHP-Fuzzer/vendor/laravel/framework/src/Illuminate/Foundation/Configuration/../resources/health-up.blade.php ENDPATH**/ ?&gt;</pre>

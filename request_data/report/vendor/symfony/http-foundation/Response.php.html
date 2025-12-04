@@ -1,0 +1,1316 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+// Help opcache.preload discover always-needed symbols
+class_exists(ResponseHeaderBag::class);
+
+/**
+ * Response represents an HTTP response.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+class Response
+{
+    public const HTTP_CONTINUE = 100;
+    public const HTTP_SWITCHING_PROTOCOLS = 101;
+    public const HTTP_PROCESSING = 102;            // RFC2518
+    public const HTTP_EARLY_HINTS = 103;           // RFC8297
+    public const HTTP_OK = 200;
+    public const HTTP_CREATED = 201;
+    public const HTTP_ACCEPTED = 202;
+    public const HTTP_NON_AUTHORITATIVE_INFORMATION = 203;
+    public const HTTP_NO_CONTENT = 204;
+    public const HTTP_RESET_CONTENT = 205;
+    public const HTTP_PARTIAL_CONTENT = 206;
+    public const HTTP_MULTI_STATUS = 207;          // RFC4918
+    public const HTTP_ALREADY_REPORTED = 208;      // RFC5842
+    public const HTTP_IM_USED = 226;               // RFC3229
+    public const HTTP_MULTIPLE_CHOICES = 300;
+    public const HTTP_MOVED_PERMANENTLY = 301;
+    public const HTTP_FOUND = 302;
+    public const HTTP_SEE_OTHER = 303;
+    public const HTTP_NOT_MODIFIED = 304;
+    public const HTTP_USE_PROXY = 305;
+    public const HTTP_RESERVED = 306;
+    public const HTTP_TEMPORARY_REDIRECT = 307;
+    public const HTTP_PERMANENTLY_REDIRECT = 308;  // RFC7238
+    public const HTTP_BAD_REQUEST = 400;
+    public const HTTP_UNAUTHORIZED = 401;
+    public const HTTP_PAYMENT_REQUIRED = 402;
+    public const HTTP_FORBIDDEN = 403;
+    public const HTTP_NOT_FOUND = 404;
+    public const HTTP_METHOD_NOT_ALLOWED = 405;
+    public const HTTP_NOT_ACCEPTABLE = 406;
+    public const HTTP_PROXY_AUTHENTICATION_REQUIRED = 407;
+    public const HTTP_REQUEST_TIMEOUT = 408;
+    public const HTTP_CONFLICT = 409;
+    public const HTTP_GONE = 410;
+    public const HTTP_LENGTH_REQUIRED = 411;
+    public const HTTP_PRECONDITION_FAILED = 412;
+    public const HTTP_REQUEST_ENTITY_TOO_LARGE = 413;
+    public const HTTP_REQUEST_URI_TOO_LONG = 414;
+    public const HTTP_UNSUPPORTED_MEDIA_TYPE = 415;
+    public const HTTP_REQUESTED_RANGE_NOT_SATISFIABLE = 416;
+    public const HTTP_EXPECTATION_FAILED = 417;
+    public const HTTP_I_AM_A_TEAPOT = 418;                                               // RFC2324
+    public const HTTP_MISDIRECTED_REQUEST = 421;                                         // RFC7540
+    public const HTTP_UNPROCESSABLE_ENTITY = 422;                                        // RFC4918
+    public const HTTP_LOCKED = 423;                                                      // RFC4918
+    public const HTTP_FAILED_DEPENDENCY = 424;                                           // RFC4918
+    public const HTTP_TOO_EARLY = 425;                                                   // RFC-ietf-httpbis-replay-04
+    public const HTTP_UPGRADE_REQUIRED = 426;                                            // RFC2817
+    public const HTTP_PRECONDITION_REQUIRED = 428;                                       // RFC6585
+    public const HTTP_TOO_MANY_REQUESTS = 429;                                           // RFC6585
+    public const HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE = 431;                             // RFC6585
+    public const HTTP_UNAVAILABLE_FOR_LEGAL_REASONS = 451;                               // RFC7725
+    public const HTTP_INTERNAL_SERVER_ERROR = 500;
+    public const HTTP_NOT_IMPLEMENTED = 501;
+    public const HTTP_BAD_GATEWAY = 502;
+    public const HTTP_SERVICE_UNAVAILABLE = 503;
+    public const HTTP_GATEWAY_TIMEOUT = 504;
+    public const HTTP_VERSION_NOT_SUPPORTED = 505;
+    public const HTTP_VARIANT_ALSO_NEGOTIATES_EXPERIMENTAL = 506;                        // RFC2295
+    public const HTTP_INSUFFICIENT_STORAGE = 507;                                        // RFC4918
+    public const HTTP_LOOP_DETECTED = 508;                                               // RFC5842
+    public const HTTP_NOT_EXTENDED = 510;                                                // RFC2774
+    public const HTTP_NETWORK_AUTHENTICATION_REQUIRED = 511;                             // RFC6585
+
+    /**
+     * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
+     */
+    private const HTTP_RESPONSE_CACHE_CONTROL_DIRECTIVES = [
+        &#039;must_revalidate&#039; =&gt; false,
+        &#039;no_cache&#039; =&gt; false,
+        &#039;no_store&#039; =&gt; false,
+        &#039;no_transform&#039; =&gt; false,
+        &#039;public&#039; =&gt; false,
+        &#039;private&#039; =&gt; false,
+        &#039;proxy_revalidate&#039; =&gt; false,
+        &#039;max_age&#039; =&gt; true,
+        &#039;s_maxage&#039; =&gt; true,
+        &#039;stale_if_error&#039; =&gt; true,         // RFC5861
+        &#039;stale_while_revalidate&#039; =&gt; true, // RFC5861
+        &#039;immutable&#039; =&gt; false,
+        &#039;last_modified&#039; =&gt; true,
+        &#039;etag&#039; =&gt; true,
+    ];
+
+    public ResponseHeaderBag $headers;
+
+    protected string $content;
+    protected string $version;
+    protected int $statusCode;
+    protected string $statusText;
+    protected ?string $charset = null;
+
+    /**
+     * Status codes translation table.
+     *
+     * The list of codes is complete according to the
+     * {@link https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml Hypertext Transfer Protocol (HTTP) Status Code Registry}
+     * (last updated 2021-10-01).
+     *
+     * Unless otherwise noted, the status code is defined in RFC2616.
+     */
+    public static array $statusTexts = [
+        100 =&gt; &#039;Continue&#039;,
+        101 =&gt; &#039;Switching Protocols&#039;,
+        102 =&gt; &#039;Processing&#039;,            // RFC2518
+        103 =&gt; &#039;Early Hints&#039;,
+        200 =&gt; &#039;OK&#039;,
+        201 =&gt; &#039;Created&#039;,
+        202 =&gt; &#039;Accepted&#039;,
+        203 =&gt; &#039;Non-Authoritative Information&#039;,
+        204 =&gt; &#039;No Content&#039;,
+        205 =&gt; &#039;Reset Content&#039;,
+        206 =&gt; &#039;Partial Content&#039;,
+        207 =&gt; &#039;Multi-Status&#039;,          // RFC4918
+        208 =&gt; &#039;Already Reported&#039;,      // RFC5842
+        226 =&gt; &#039;IM Used&#039;,               // RFC3229
+        300 =&gt; &#039;Multiple Choices&#039;,
+        301 =&gt; &#039;Moved Permanently&#039;,
+        302 =&gt; &#039;Found&#039;,
+        303 =&gt; &#039;See Other&#039;,
+        304 =&gt; &#039;Not Modified&#039;,
+        305 =&gt; &#039;Use Proxy&#039;,
+        307 =&gt; &#039;Temporary Redirect&#039;,
+        308 =&gt; &#039;Permanent Redirect&#039;,    // RFC7238
+        400 =&gt; &#039;Bad Request&#039;,
+        401 =&gt; &#039;Unauthorized&#039;,
+        402 =&gt; &#039;Payment Required&#039;,
+        403 =&gt; &#039;Forbidden&#039;,
+        404 =&gt; &#039;Not Found&#039;,
+        405 =&gt; &#039;Method Not Allowed&#039;,
+        406 =&gt; &#039;Not Acceptable&#039;,
+        407 =&gt; &#039;Proxy Authentication Required&#039;,
+        408 =&gt; &#039;Request Timeout&#039;,
+        409 =&gt; &#039;Conflict&#039;,
+        410 =&gt; &#039;Gone&#039;,
+        411 =&gt; &#039;Length Required&#039;,
+        412 =&gt; &#039;Precondition Failed&#039;,
+        413 =&gt; &#039;Content Too Large&#039;,                                           // RFC-ietf-httpbis-semantics
+        414 =&gt; &#039;URI Too Long&#039;,
+        415 =&gt; &#039;Unsupported Media Type&#039;,
+        416 =&gt; &#039;Range Not Satisfiable&#039;,
+        417 =&gt; &#039;Expectation Failed&#039;,
+        418 =&gt; &#039;I\&#039;m a teapot&#039;,                                               // RFC2324
+        421 =&gt; &#039;Misdirected Request&#039;,                                         // RFC7540
+        422 =&gt; &#039;Unprocessable Content&#039;,                                       // RFC-ietf-httpbis-semantics
+        423 =&gt; &#039;Locked&#039;,                                                      // RFC4918
+        424 =&gt; &#039;Failed Dependency&#039;,                                           // RFC4918
+        425 =&gt; &#039;Too Early&#039;,                                                   // RFC-ietf-httpbis-replay-04
+        426 =&gt; &#039;Upgrade Required&#039;,                                            // RFC2817
+        428 =&gt; &#039;Precondition Required&#039;,                                       // RFC6585
+        429 =&gt; &#039;Too Many Requests&#039;,                                           // RFC6585
+        431 =&gt; &#039;Request Header Fields Too Large&#039;,                             // RFC6585
+        451 =&gt; &#039;Unavailable For Legal Reasons&#039;,                               // RFC7725
+        500 =&gt; &#039;Internal Server Error&#039;,
+        501 =&gt; &#039;Not Implemented&#039;,
+        502 =&gt; &#039;Bad Gateway&#039;,
+        503 =&gt; &#039;Service Unavailable&#039;,
+        504 =&gt; &#039;Gateway Timeout&#039;,
+        505 =&gt; &#039;HTTP Version Not Supported&#039;,
+        506 =&gt; &#039;Variant Also Negotiates&#039;,                                     // RFC2295
+        507 =&gt; &#039;Insufficient Storage&#039;,                                        // RFC4918
+        508 =&gt; &#039;Loop Detected&#039;,                                               // RFC5842
+        510 =&gt; &#039;Not Extended&#039;,                                                // RFC2774
+        511 =&gt; &#039;Network Authentication Required&#039;,                             // RFC6585
+    ];
+
+    /**
+     * Tracks headers already sent in informational responses.
+     */
+    private array $sentHeaders;
+
+    /**
+     * @param int $status The HTTP status code (200 &quot;OK&quot; by default)
+     *
+     * @throws \InvalidArgumentException When the HTTP status code is not valid
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?string $content = &#039;&#039;, int $status = 200, array $headers = [])
+    {
+        $this-&gt;headers = new ResponseHeaderBag($headers);
+        $this-&gt;setContent($content);
+        $this-&gt;setStatusCode($status);
+        $this-&gt;setProtocolVersion(&#039;1.0&#039;);
+    }
+
+    /**
+     * Returns the Response as an HTTP string.
+     *
+     * The string representation of the Response is the same as the
+     * one that will be sent to the client only if the prepare() method
+     * has been called before.
+     *
+     * @see prepare()
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        return
+            \sprintf(&#039;HTTP/%s %s %s&#039;, $this-&gt;version, $this-&gt;statusCode, $this-&gt;statusText).&quot;\r\n&quot;.
+            $this-&gt;headers.&quot;\r\n&quot;.
+            $this-&gt;getContent();
+    }
+
+    /**
+     * Clones the current Response instance.
+     */
+    <span style="background-color: red">p</span>ublic function __clone()
+    {
+        $this-&gt;headers = clone $this-&gt;headers;
+    }
+
+    /**
+     * Prepares the Response before it is sent to the client.
+     *
+     * This method tweaks the Response to ensure that it is
+     * compliant with RFC 2616. Most of the changes are based on
+     * the Request that is &quot;associated&quot; with this Response.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function prepare(Request $request): static
+    {
+        $headers = $this-&gt;headers;
+
+        <span style="background-color: red">i</span>f ($this-&gt;isInformational() || <span style="background-color: red">$</span>this-&gt;isEmpty()) {
+            $this-&gt;setContent(null);
+            $headers-&gt;remove(&#039;Content-Type&#039;);
+            $headers-&gt;remove(&#039;Content-Length&#039;);
+            // prevent PHP from sending the Content-Type header based on default_mimetype
+            ini_set(&#039;default_mimetype&#039;, &#039;&#039;);
+        } <span style="background-color: red">e</span>lse {
+            // Content-type based on the Request
+            <span style="background-color: red">i</span>f (!$headers-&gt;has(&#039;Content-Type&#039;)) {
+                $format = $request-&gt;getRequestFormat(null);
+                <span style="background-color: red">i</span>f (null !== $format &amp;&amp; <span style="background-color: red">$</span>mimeType = $request-&gt;getMimeType($format)) {
+                    $headers-&gt;set(&#039;Content-Type&#039;, $mimeType);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+
+            // Fix Content-Type
+            $charset = $this-&gt;charset ?: <span style="background-color: red">'</span>UTF-8&#039;;
+            <span style="background-color: red">i</span>f (!$headers-&gt;has(&#039;Content-Type&#039;)) {
+                $headers-&gt;set(&#039;Content-Type&#039;, &#039;text/html; charset=&#039;.$charset);
+            } <span style="background-color: red">e</span>lseif (0 === stripos($headers-&gt;get(&#039;Content-Type&#039;) ?? <span style="background-color: red">'</span>&#039;, &#039;text/&#039;) &amp;&amp; <span style="background-color: red">f</span>alse === stripos($headers-&gt;get(&#039;Content-Type&#039;) ?? <span style="background-color: red">'</span>&#039;, &#039;charset&#039;)) {
+                // add the charset
+                $headers-&gt;set(&#039;Content-Type&#039;, $headers-&gt;get(&#039;Content-Type&#039;).&#039;; charset=&#039;.$charset);
+            <span style="background-color: red">}</span>
+
+            // Fix Content-Length
+            <span style="background-color: red">i</span>f ($headers-&gt;has(&#039;Transfer-Encoding&#039;)) {
+                $headers-&gt;remove(&#039;Content-Length&#039;);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($request-&gt;isMethod(&#039;HEAD&#039;)) {
+                // cf. RFC2616 14.13
+                $length = $headers-&gt;get(&#039;Content-Length&#039;);
+                $this-&gt;setContent(null);
+                <span style="background-color: red">i</span>f ($length) {
+                    $headers-&gt;set(&#039;Content-Length&#039;, $length);
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        // Fix protocol
+        <span style="background-color: red">i</span>f (&#039;HTTP/1.0&#039; != $request-&gt;server-&gt;get(&#039;SERVER_PROTOCOL&#039;)) {
+            $this-&gt;setProtocolVersion(&#039;1.1&#039;);
+        <span style="background-color: red">}</span>
+
+        // Check if we need to send extra expire info headers
+        <span style="background-color: red">i</span>f (&#039;1.0&#039; == $this-&gt;getProtocolVersion() &amp;&amp; <span style="background-color: red">s</span>tr_contains($headers-&gt;get(&#039;Cache-Control&#039;, &#039;&#039;), &#039;no-cache&#039;)) {
+            $headers-&gt;set(&#039;pragma&#039;, &#039;no-cache&#039;);
+            $headers-&gt;set(&#039;expires&#039;, -1);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;ensureIEOverSSLCompatibility($request);
+
+        <span style="background-color: red">i</span>f ($request-&gt;isSecure()) {
+            <span style="background-color: red">f</span>oreach ($headers-&gt;getCookies() as $cookie) {
+                $cookie-&gt;setSecureDefault(true);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Sends HTTP headers.
+     *
+     * @param positive-int|null $statusCode The status code to use, override the statusCode property if set and not null
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function sendHeaders(?int $statusCode = null): static
+    {
+        // headers have already been sent by the developer
+        <span style="background-color: red">i</span>f (headers_sent()) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $informationalResponse = $statusCode &gt;= 100 &amp;&amp; <span style="background-color: red">$</span>statusCode &lt; 200;
+        <span style="background-color: red">i</span>f ($informationalResponse &amp;&amp; <span style="background-color: red">!</span>\function_exists(&#039;headers_send&#039;)) {
+            // skip informational responses if not supported by the SAPI
+            return $this;
+        <span style="background-color: red">}</span>
+
+        // headers
+        <span style="background-color: red">f</span>oreach ($this-&gt;headers-&gt;allPreserveCaseWithoutCookies() as $name =&gt; $values) {
+            // As recommended by RFC 8297, PHP automatically copies headers from previous 103 responses, we need to deal with that if headers changed
+            $previousValues = $this-&gt;sentHeaders[$name] ?? <span style="background-color: red">n</span>ull;
+            <span style="background-color: red">i</span>f ($previousValues === $values) {
+                // Header already sent in a previous response, it will be automatically copied in this response by PHP
+                continue;
+            <span style="background-color: red">}</span>
+
+            $replace = 0 === strcasecmp($name, &#039;Content-Type&#039;);
+
+            <span style="background-color: red">i</span>f (null !== $previousValues &amp;&amp; <span style="background-color: red">a</span>rray_diff($previousValues, $values)) {
+                header_remove($name);
+                $previousValues = null;
+            <span style="background-color: red">}</span>
+
+            $newValues = null === $previousValues ? $values : <span style="background-color: red">a</span>rray_diff($values, $previousValues);
+
+            <span style="background-color: red">f</span>oreach ($newValues as $value) {
+                header($name.&#039;: &#039;.$value, $replace, $this-&gt;statusCode);
+            <span style="background-color: red">}</span>
+
+            <span style="background-color: red">i</span>f ($informationalResponse) {
+                $this-&gt;sentHeaders[$name] = $values;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        // cookies
+        <span style="background-color: red">f</span>oreach ($this-&gt;headers-&gt;getCookies() as $cookie) {
+            header(&#039;Set-Cookie: &#039;.$cookie, false, $this-&gt;statusCode);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($informationalResponse) {
+            headers_send($statusCode);
+
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $statusCode ??= <span style="background-color: red">$</span>this-&gt;statusCode;
+
+        // status
+        header(\sprintf(&#039;HTTP/%s %s %s&#039;, $this-&gt;version, $statusCode, $this-&gt;statusText), true, $statusCode);
+
+        return $this;
+    }
+
+    /**
+     * Sends content for the current web response.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function sendContent(): static
+    {
+        echo $this-&gt;content;
+
+        return $this;
+    }
+
+    /**
+     * Sends HTTP headers and content.
+     *
+     * @param bool $flush Whether output buffers should be flushed
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function send(bool $flush = true): static
+    {
+        $this-&gt;sendHeaders();
+        $this-&gt;sendContent();
+
+        <span style="background-color: red">i</span>f (!$flush) {
+            return $this;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (\function_exists(&#039;fastcgi_finish_request&#039;)) {
+            fastcgi_finish_request();
+        } <span style="background-color: red">e</span>lseif (\function_exists(&#039;litespeed_finish_request&#039;)) {
+            litespeed_finish_request();
+        } <span style="background-color: red">e</span>lseif (!\in_array(\PHP_SAPI, [&#039;cli&#039;, &#039;phpdbg&#039;, &#039;embed&#039;], true)) {
+            static::closeOutputBuffers(0, true);
+            flush();
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Sets the response content.
+     *
+     * @return $this
+     */
+    <span style="background-color: green">p</span>ublic function setContent(?string $content): static
+    {
+        $this-&gt;content = $content ?? <span style="background-color: red">'</span>&#039;;
+
+        return $this;
+    }
+
+    /**
+     * Gets the current response content.
+     */
+    <span style="background-color: red">p</span>ublic function getContent(): string|false
+    {
+        return $this-&gt;content;
+    }
+
+    /**
+     * Sets the HTTP protocol version (1.0 or 1.1).
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: green">p</span>ublic function setProtocolVersion(string $version): static
+    {
+        $this-&gt;version = $version;
+
+        return $this;
+    }
+
+    /**
+     * Gets the HTTP protocol version.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getProtocolVersion(): string
+    {
+        return $this-&gt;version;
+    }
+
+    /**
+     * Sets the response status code.
+     *
+     * If the status text is null it will be automatically populated for the known
+     * status codes and left empty otherwise.
+     *
+     * @return $this
+     *
+     * @throws \InvalidArgumentException When the HTTP status code is not valid
+     *
+     * @final
+     */
+    <span style="background-color: green">p</span>ublic function setStatusCode(int $code, ?string $text = null): static
+    {
+        $this-&gt;statusCode = $code;
+        <span style="background-color: red">i</span>f ($this-&gt;isInvalid()) {
+            throw new \InvalidArgumentException(\sprintf(&#039;The HTTP status code &quot;%s&quot; is not valid.&#039;, $code));
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (null === $text) {
+            $this-&gt;statusText = self::$statusTexts[$code] ?? <span style="background-color: red">'</span>unknown status&#039;;
+
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $this-&gt;statusText = $text;
+
+        return $this;
+    }
+
+    /**
+     * Retrieves the status code for the current web response.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getStatusCode(): int
+    {
+        return $this-&gt;statusCode;
+    }
+
+    /**
+     * Sets the response charset.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setCharset(string $charset): static
+    {
+        $this-&gt;charset = $charset;
+
+        return $this;
+    }
+
+    /**
+     * Retrieves the response charset.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getCharset(): ?string
+    {
+        return $this-&gt;charset;
+    }
+
+    /**
+     * Returns true if the response may safely be kept in a shared (surrogate) cache.
+     *
+     * Responses marked &quot;private&quot; with an explicit Cache-Control directive are
+     * considered uncacheable.
+     *
+     * Responses with neither a freshness lifetime (Expires, max-age) nor cache
+     * validator (Last-Modified, ETag) are considered uncacheable because there is
+     * no way to tell when or how to remove them from the cache.
+     *
+     * Note that RFC 7231 and RFC 7234 possibly allow for a more permissive implementation,
+     * for example &quot;status codes that are defined as cacheable by default [...]
+     * can be reused by a cache with heuristic expiration unless otherwise indicated&quot;
+     * (https://tools.ietf.org/html/rfc7231#section-6.1)
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isCacheable(): bool
+    {
+        <span style="background-color: red">i</span>f (!\in_array($this-&gt;statusCode, [200, 203, 300, 301, 302, 404, 410])) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;headers-&gt;hasCacheControlDirective(&#039;no-store&#039;) || <span style="background-color: red">$</span>this-&gt;headers-&gt;getCacheControlDirective(&#039;private&#039;)) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        return $this-&gt;isValidateable() || <span style="background-color: red">$</span>this-&gt;isFresh();
+    }
+
+    /**
+     * Returns true if the response is &quot;fresh&quot;.
+     *
+     * Fresh responses may be served from cache without any interaction with the
+     * origin. A response is considered fresh when it includes a Cache-Control/max-age
+     * indicator or Expires header and the calculated age is less than the freshness lifetime.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isFresh(): bool
+    {
+        return $this-&gt;getTtl() &gt; 0;
+    }
+
+    /**
+     * Returns true if the response includes headers that can be used to validate
+     * the response with the origin server using a conditional GET request.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isValidateable(): bool
+    {
+        return $this-&gt;headers-&gt;has(&#039;Last-Modified&#039;) || <span style="background-color: red">$</span>this-&gt;headers-&gt;has(&#039;ETag&#039;);
+    }
+
+    /**
+     * Marks the response as &quot;private&quot;.
+     *
+     * It makes the response ineligible for serving other clients.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setPrivate(): static
+    {
+        $this-&gt;headers-&gt;removeCacheControlDirective(&#039;public&#039;);
+        $this-&gt;headers-&gt;addCacheControlDirective(&#039;private&#039;);
+
+        return $this;
+    }
+
+    /**
+     * Marks the response as &quot;public&quot;.
+     *
+     * It makes the response eligible for serving other clients.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setPublic(): static
+    {
+        $this-&gt;headers-&gt;addCacheControlDirective(&#039;public&#039;);
+        $this-&gt;headers-&gt;removeCacheControlDirective(&#039;private&#039;);
+
+        return $this;
+    }
+
+    /**
+     * Marks the response as &quot;immutable&quot;.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setImmutable(bool $immutable = true): static
+    {
+        <span style="background-color: red">i</span>f ($immutable) {
+            $this-&gt;headers-&gt;addCacheControlDirective(&#039;immutable&#039;);
+        } <span style="background-color: red">e</span>lse {
+            $this-&gt;headers-&gt;removeCacheControlDirective(&#039;immutable&#039;);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Returns true if the response is marked as &quot;immutable&quot;.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isImmutable(): bool
+    {
+        return $this-&gt;headers-&gt;hasCacheControlDirective(&#039;immutable&#039;);
+    }
+
+    /**
+     * Returns true if the response must be revalidated by shared caches once it has become stale.
+     *
+     * This method indicates that the response must not be served stale by a
+     * cache in any circumstance without first revalidating with the origin.
+     * When present, the TTL of the response should not be overridden to be
+     * greater than the value provided by the origin.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function mustRevalidate(): bool
+    {
+        return $this-&gt;headers-&gt;hasCacheControlDirective(&#039;must-revalidate&#039;) || <span style="background-color: red">$</span>this-&gt;headers-&gt;hasCacheControlDirective(&#039;proxy-revalidate&#039;);
+    }
+
+    /**
+     * Returns the Date header as a DateTime instance.
+     *
+     * @throws \RuntimeException When the header is not parseable
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getDate(): ?\DateTimeImmutable
+    {
+        return $this-&gt;headers-&gt;getDate(&#039;Date&#039;);
+    }
+
+    /**
+     * Sets the Date header.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setDate(\DateTimeInterface $date): static
+    {
+        $date = \DateTimeImmutable::createFromInterface($date);
+        $date = $date-&gt;setTimezone(new \DateTimeZone(&#039;UTC&#039;));
+        $this-&gt;headers-&gt;set(&#039;Date&#039;, $date-&gt;format(&#039;D, d M Y H:i:s&#039;).&#039; GMT&#039;);
+
+        return $this;
+    }
+
+    /**
+     * Returns the age of the response in seconds.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getAge(): int
+    {
+        <span style="background-color: red">i</span>f (null !== $age = $this-&gt;headers-&gt;get(&#039;Age&#039;)) {
+            return (int) $age;
+        <span style="background-color: red">}</span>
+
+        return max(time() - (int) $this-&gt;getDate()-&gt;format(&#039;U&#039;), 0);
+    }
+
+    /**
+     * Marks the response stale by setting the Age header to be equal to the maximum age of the response.
+     *
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function expire(): static
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;isFresh()) {
+            $this-&gt;headers-&gt;set(&#039;Age&#039;, $this-&gt;getMaxAge());
+            $this-&gt;headers-&gt;remove(&#039;Expires&#039;);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Returns the value of the Expires header as a DateTime instance.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getExpires(): ?\DateTimeImmutable
+    {
+        try {
+            return $this-&gt;headers-&gt;getDate(&#039;Expires&#039;);
+        } <span style="background-color: red">c</span>atch (\RuntimeException) {
+            // according to RFC 2616 invalid date formats (e.g. &quot;0&quot; and &quot;-1&quot;) must be treated as in the past
+            return \DateTimeImmutable::createFromFormat(&#039;U&#039;, time() - 172800);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Sets the Expires HTTP header with a DateTime instance.
+     *
+     * Passing null as value will remove the header.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setExpires(?\DateTimeInterface $date): static
+    {
+        <span style="background-color: red">i</span>f (null === $date) {
+            $this-&gt;headers-&gt;remove(&#039;Expires&#039;);
+
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $date = \DateTimeImmutable::createFromInterface($date);
+        $date = $date-&gt;setTimezone(new \DateTimeZone(&#039;UTC&#039;));
+        $this-&gt;headers-&gt;set(&#039;Expires&#039;, $date-&gt;format(&#039;D, d M Y H:i:s&#039;).&#039; GMT&#039;);
+
+        return $this;
+    }
+
+    /**
+     * Returns the number of seconds after the time specified in the response&#039;s Date
+     * header when the response should no longer be considered fresh.
+     *
+     * First, it checks for a s-maxage directive, then a max-age directive, and then it falls
+     * back on an expires header. It returns null when no maximum age can be established.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getMaxAge(): ?int
+    {
+        <span style="background-color: red">i</span>f ($this-&gt;headers-&gt;hasCacheControlDirective(&#039;s-maxage&#039;)) {
+            return (int) $this-&gt;headers-&gt;getCacheControlDirective(&#039;s-maxage&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($this-&gt;headers-&gt;hasCacheControlDirective(&#039;max-age&#039;)) {
+            return (int) $this-&gt;headers-&gt;getCacheControlDirective(&#039;max-age&#039;);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (null !== $expires = $this-&gt;getExpires()) {
+            $maxAge = (int) $expires-&gt;format(&#039;U&#039;) - (int) $this-&gt;getDate()-&gt;format(&#039;U&#039;);
+
+            return max($maxAge, 0);
+        <span style="background-color: red">}</span>
+
+        return null;
+    }
+
+    /**
+     * Sets the number of seconds after which the response should no longer be considered fresh.
+     *
+     * This method sets the Cache-Control max-age directive.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setMaxAge(int $value): static
+    {
+        $this-&gt;headers-&gt;addCacheControlDirective(&#039;max-age&#039;, $value);
+
+        return $this;
+    }
+
+    /**
+     * Sets the number of seconds after which the response should no longer be returned by shared caches when backend is down.
+     *
+     * This method sets the Cache-Control stale-if-error directive.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setStaleIfError(int $value): static
+    {
+        $this-&gt;headers-&gt;addCacheControlDirective(&#039;stale-if-error&#039;, $value);
+
+        return $this;
+    }
+
+    /**
+     * Sets the number of seconds after which the response should no longer return stale content by shared caches.
+     *
+     * This method sets the Cache-Control stale-while-revalidate directive.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setStaleWhileRevalidate(int $value): static
+    {
+        $this-&gt;headers-&gt;addCacheControlDirective(&#039;stale-while-revalidate&#039;, $value);
+
+        return $this;
+    }
+
+    /**
+     * Sets the number of seconds after which the response should no longer be considered fresh by shared caches.
+     *
+     * This method sets the Cache-Control s-maxage directive.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setSharedMaxAge(int $value): static
+    {
+        $this-&gt;setPublic();
+        $this-&gt;headers-&gt;addCacheControlDirective(&#039;s-maxage&#039;, $value);
+
+        return $this;
+    }
+
+    /**
+     * Returns the response&#039;s time-to-live in seconds.
+     *
+     * It returns null when no freshness information is present in the response.
+     *
+     * When the response&#039;s TTL is 0, the response may not be served from cache without first
+     * revalidating with the origin.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getTtl(): ?int
+    {
+        $maxAge = $this-&gt;getMaxAge();
+
+        return null !== $maxAge ? max($maxAge - $this-&gt;getAge(), 0) : <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Sets the response&#039;s time-to-live for shared caches in seconds.
+     *
+     * This method adjusts the Cache-Control/s-maxage directive.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setTtl(int $seconds): static
+    {
+        $this-&gt;setSharedMaxAge($this-&gt;getAge() + $seconds);
+
+        return $this;
+    }
+
+    /**
+     * Sets the response&#039;s time-to-live for private/client caches in seconds.
+     *
+     * This method adjusts the Cache-Control/max-age directive.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setClientTtl(int $seconds): static
+    {
+        $this-&gt;setMaxAge($this-&gt;getAge() + $seconds);
+
+        return $this;
+    }
+
+    /**
+     * Returns the Last-Modified HTTP header as a DateTime instance.
+     *
+     * @throws \RuntimeException When the HTTP header is not parseable
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getLastModified(): ?\DateTimeImmutable
+    {
+        return $this-&gt;headers-&gt;getDate(&#039;Last-Modified&#039;);
+    }
+
+    /**
+     * Sets the Last-Modified HTTP header with a DateTime instance.
+     *
+     * Passing null as value will remove the header.
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setLastModified(?\DateTimeInterface $date): static
+    {
+        <span style="background-color: red">i</span>f (null === $date) {
+            $this-&gt;headers-&gt;remove(&#039;Last-Modified&#039;);
+
+            return $this;
+        <span style="background-color: red">}</span>
+
+        $date = \DateTimeImmutable::createFromInterface($date);
+        $date = $date-&gt;setTimezone(new \DateTimeZone(&#039;UTC&#039;));
+        $this-&gt;headers-&gt;set(&#039;Last-Modified&#039;, $date-&gt;format(&#039;D, d M Y H:i:s&#039;).&#039; GMT&#039;);
+
+        return $this;
+    }
+
+    /**
+     * Returns the literal value of the ETag HTTP header.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getEtag(): ?string
+    {
+        return $this-&gt;headers-&gt;get(&#039;ETag&#039;);
+    }
+
+    /**
+     * Sets the ETag value.
+     *
+     * @param string|null $etag The ETag unique identifier or null to remove the header
+     * @param bool        $weak Whether you want a weak ETag or not
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setEtag(?string $etag, bool $weak = false): static
+    {
+        <span style="background-color: red">i</span>f (null === $etag) {
+            $this-&gt;headers-&gt;remove(&#039;Etag&#039;);
+        } <span style="background-color: red">e</span>lse {
+            <span style="background-color: red">i</span>f (!str_starts_with($etag, &#039;&quot;&#039;)) {
+                $etag = &#039;&quot;&#039;.$etag.&#039;&quot;&#039;;
+            <span style="background-color: red">}</span>
+
+            $this-&gt;headers-&gt;set(&#039;ETag&#039;, (true === $weak ? &#039;W/&#039; : <span style="background-color: red">'</span>&#039;).$etag);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Sets the response&#039;s cache headers (validation and/or expiration).
+     *
+     * Available options are: must_revalidate, no_cache, no_store, no_transform, public, private, proxy_revalidate, max_age, s_maxage, immutable, last_modified and etag.
+     *
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setCache(array $options): static
+    {
+        <span style="background-color: red">i</span>f ($diff = array_diff(array_keys($options), array_keys(self::HTTP_RESPONSE_CACHE_CONTROL_DIRECTIVES))) {
+            throw new \InvalidArgumentException(\sprintf(&#039;Response does not support the following options: &quot;%s&quot;.&#039;, implode(&#039;&quot;, &quot;&#039;, $diff)));
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;etag&#039;])) {
+            $this-&gt;setEtag($options[&#039;etag&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;last_modified&#039;])) {
+            $this-&gt;setLastModified($options[&#039;last_modified&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;max_age&#039;])) {
+            $this-&gt;setMaxAge($options[&#039;max_age&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;s_maxage&#039;])) {
+            $this-&gt;setSharedMaxAge($options[&#039;s_maxage&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;stale_while_revalidate&#039;])) {
+            $this-&gt;setStaleWhileRevalidate($options[&#039;stale_while_revalidate&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;stale_if_error&#039;])) {
+            $this-&gt;setStaleIfError($options[&#039;stale_if_error&#039;]);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach (self::HTTP_RESPONSE_CACHE_CONTROL_DIRECTIVES as $directive =&gt; $hasValue) {
+            <span style="background-color: red">i</span>f (!$hasValue &amp;&amp; <span style="background-color: red">i</span>sset($options[$directive])) {
+                <span style="background-color: red">i</span>f ($options[$directive]) {
+                    $this-&gt;headers-&gt;addCacheControlDirective(str_replace(&#039;_&#039;, &#039;-&#039;, $directive));
+                } <span style="background-color: red">e</span>lse {
+                    $this-&gt;headers-&gt;removeCacheControlDirective(str_replace(&#039;_&#039;, &#039;-&#039;, $directive));
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;public&#039;])) {
+            <span style="background-color: red">i</span>f ($options[&#039;public&#039;]) {
+                $this-&gt;setPublic();
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;setPrivate();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (isset($options[&#039;private&#039;])) {
+            <span style="background-color: red">i</span>f ($options[&#039;private&#039;]) {
+                $this-&gt;setPrivate();
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;setPublic();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Modifies the response so that it conforms to the rules defined for a 304 status code.
+     *
+     * This sets the status, removes the body, and discards any headers
+     * that MUST NOT be included in 304 responses.
+     *
+     * @return $this
+     *
+     * @see https://tools.ietf.org/html/rfc2616#section-10.3.5
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setNotModified(): static
+    {
+        $this-&gt;setStatusCode(304);
+        $this-&gt;setContent(null);
+
+        // remove headers that MUST NOT be included with 304 Not Modified responses
+        <span style="background-color: red">f</span>oreach ([&#039;Allow&#039;, &#039;Content-Encoding&#039;, &#039;Content-Language&#039;, &#039;Content-Length&#039;, &#039;Content-MD5&#039;, &#039;Content-Type&#039;, &#039;Last-Modified&#039;] as $header) {
+            $this-&gt;headers-&gt;remove($header);
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Returns true if the response includes a Vary header.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function hasVary(): bool
+    {
+        return null !== $this-&gt;headers-&gt;get(&#039;Vary&#039;);
+    }
+
+    /**
+     * Returns an array of header names given in the Vary header.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function getVary(): array
+    {
+        <span style="background-color: red">i</span>f (!$vary = $this-&gt;headers-&gt;all(&#039;Vary&#039;)) {
+            return [];
+        <span style="background-color: red">}</span>
+
+        $ret = [];
+        <span style="background-color: red">f</span>oreach ($vary as $item) {
+            $ret[] = preg_split(&#039;/[\s,]+/&#039;, $item);
+        <span style="background-color: red">}</span>
+
+        return array_merge([], ...$ret);
+    }
+
+    /**
+     * Sets the Vary header.
+     *
+     * @param bool $replace Whether to replace the actual value or not (true by default)
+     *
+     * @return $this
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function setVary(string|array $headers, bool $replace = true): static
+    {
+        $this-&gt;headers-&gt;set(&#039;Vary&#039;, $headers, $replace);
+
+        return $this;
+    }
+
+    /**
+     * Determines if the Response validators (ETag, Last-Modified) match
+     * a conditional value specified in the Request.
+     *
+     * If the Response is not modified, it sets the status code to 304 and
+     * removes the actual content by calling the setNotModified() method.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isNotModified(Request $request): bool
+    {
+        <span style="background-color: red">i</span>f (!$request-&gt;isMethodCacheable()) {
+            return false;
+        <span style="background-color: red">}</span>
+
+        $notModified = false;
+        $lastModified = $this-&gt;headers-&gt;get(&#039;Last-Modified&#039;);
+        $modifiedSince = $request-&gt;headers-&gt;get(&#039;If-Modified-Since&#039;);
+
+        <span style="background-color: red">i</span>f (($ifNoneMatchEtags = $request-&gt;getETags()) &amp;&amp; (<span style="background-color: red">n</span>ull !== $etag = $this-&gt;getEtag())) {
+            <span style="background-color: red">i</span>f (0 == strncmp($etag, &#039;W/&#039;, 2)) {
+                $etag = substr($etag, 2);
+            <span style="background-color: red">}</span>
+
+            // Use weak comparison as per https://tools.ietf.org/html/rfc7232#section-3.2.
+            <span style="background-color: red">f</span>oreach ($ifNoneMatchEtags as $ifNoneMatchEtag) {
+                <span style="background-color: red">i</span>f (0 == strncmp($ifNoneMatchEtag, &#039;W/&#039;, 2)) {
+                    $ifNoneMatchEtag = substr($ifNoneMatchEtag, 2);
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($ifNoneMatchEtag === $etag || <span style="background-color: red">'</span>*&#039; === $ifNoneMatchEtag) {
+                    $notModified = true;
+                    break;
+                <span style="background-color: red">}</span>
+            <span style="background-color: red">}</span>
+        }
+        // Only do If-Modified-Since date comparison when If-None-Match is not present as per https://tools.ietf.org/html/rfc7232#section-3.3.
+        <span style="background-color: red">e</span>lseif ($modifiedSince &amp;&amp; <span style="background-color: red">$</span>lastModified) {
+            $notModified = strtotime($modifiedSince) &gt;= strtotime($lastModified);
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f ($notModified) {
+            $this-&gt;setNotModified();
+        <span style="background-color: red">}</span>
+
+        return $notModified;
+    }
+
+    /**
+     * Is response invalid?
+     *
+     * @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+     *
+     * @final
+     */
+    <span style="background-color: green">p</span>ublic function isInvalid(): bool
+    {
+        return $this-&gt;statusCode &lt; 100 || <span style="background-color: green">$</span>this-&gt;statusCode &gt;= 600;
+    }
+
+    /**
+     * Is response informative?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isInformational(): bool
+    {
+        return $this-&gt;statusCode &gt;= 100 &amp;&amp; <span style="background-color: red">$</span>this-&gt;statusCode &lt; 200;
+    }
+
+    /**
+     * Is response successful?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isSuccessful(): bool
+    {
+        return $this-&gt;statusCode &gt;= 200 &amp;&amp; <span style="background-color: red">$</span>this-&gt;statusCode &lt; 300;
+    }
+
+    /**
+     * Is the response a redirect?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isRedirection(): bool
+    {
+        return $this-&gt;statusCode &gt;= 300 &amp;&amp; <span style="background-color: red">$</span>this-&gt;statusCode &lt; 400;
+    }
+
+    /**
+     * Is there a client error?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isClientError(): bool
+    {
+        return $this-&gt;statusCode &gt;= 400 &amp;&amp; <span style="background-color: red">$</span>this-&gt;statusCode &lt; 500;
+    }
+
+    /**
+     * Was there a server side error?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isServerError(): bool
+    {
+        return $this-&gt;statusCode &gt;= 500 &amp;&amp; <span style="background-color: red">$</span>this-&gt;statusCode &lt; 600;
+    }
+
+    /**
+     * Is the response OK?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isOk(): bool
+    {
+        return 200 === $this-&gt;statusCode;
+    }
+
+    /**
+     * Is the response forbidden?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isForbidden(): bool
+    {
+        return 403 === $this-&gt;statusCode;
+    }
+
+    /**
+     * Is the response a not found error?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isNotFound(): bool
+    {
+        return 404 === $this-&gt;statusCode;
+    }
+
+    /**
+     * Is the response a redirect of some form?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isRedirect(?string $location = null): bool
+    {
+        return \in_array($this-&gt;statusCode, [201, 301, 302, 303, 307, 308]) &amp;&amp; (<span style="background-color: red">n</span>ull === $location ?: <span style="background-color: red">$</span>location == $this-&gt;headers-&gt;get(&#039;Location&#039;));
+    }
+
+    /**
+     * Is the response empty?
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic function isEmpty(): bool
+    {
+        return \in_array($this-&gt;statusCode, [204, 304]);
+    }
+
+    /**
+     * Cleans or flushes output buffers up to target level.
+     *
+     * Resulting level can be greater than target level if a non-removable buffer has been encountered.
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>ublic static function closeOutputBuffers(int $targetLevel, bool $flush): void
+    {
+        $status = ob_get_status(true);
+        $level = \count($status);
+        $flags = \PHP_OUTPUT_HANDLER_REMOVABLE | ($flush ? \PHP_OUTPUT_HANDLER_FLUSHABLE : <span style="background-color: red">\</span>PHP_OUTPUT_HANDLER_CLEANABLE);
+
+        <span style="background-color: red">w</span>hile ($level-- &gt; $targetLevel &amp;&amp; (<span style="background-color: red">$</span>s = $status[$level]) &amp;&amp; (<span style="background-color: red">!</span>isset($s[&#039;del&#039;]) ? !isset($s[&#039;flags&#039;]) || <span style="background-color: red">(</span>$s[&#039;flags&#039;] &amp; $flags) === $flags : <span style="background-color: red">$</span>s[&#039;del&#039;])) {
+            <span style="background-color: red">i</span>f ($flush) {
+                ob_end_flush();
+            } <span style="background-color: red">e</span>lse {
+                ob_end_clean();
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Marks a response as safe according to RFC8674.
+     *
+     * @see https://tools.ietf.org/html/rfc8674
+     */
+    <span style="background-color: red">p</span>ublic function setContentSafe(bool $safe = true): void
+    {
+        <span style="background-color: red">i</span>f ($safe) {
+            $this-&gt;headers-&gt;set(&#039;Preference-Applied&#039;, &#039;safe&#039;);
+        } <span style="background-color: red">e</span>lseif (&#039;safe&#039; === $this-&gt;headers-&gt;get(&#039;Preference-Applied&#039;)) {
+            $this-&gt;headers-&gt;remove(&#039;Preference-Applied&#039;);
+        <span style="background-color: red">}</span>
+
+        $this-&gt;setVary(&#039;Prefer&#039;, false);
+    }
+
+    /**
+     * Checks if we need to remove Cache-Control for SSL encrypted downloads when using IE &lt; 9.
+     *
+     * @see http://support.microsoft.com/kb/323308
+     *
+     * @final
+     */
+    <span style="background-color: red">p</span>rotected function ensureIEOverSSLCompatibility(Request $request): void
+    {
+        <span style="background-color: red">i</span>f (false !== stripos($this-&gt;headers-&gt;get(&#039;Content-Disposition&#039;) ?? <span style="background-color: red">'</span>&#039;, &#039;attachment&#039;) &amp;&amp; <span style="background-color: red">1</span> == preg_match(&#039;/MSIE (.*?);/i&#039;, $request-&gt;server-&gt;get(&#039;HTTP_USER_AGENT&#039;) ?? <span style="background-color: red">'</span>&#039;, $match) &amp;&amp; <span style="background-color: red">t</span>rue === $request-&gt;isSecure()) {
+            <span style="background-color: red">i</span>f ((int) preg_replace(&#039;/(MSIE )(.*?);/&#039;, &#039;$2&#039;, $match[0]) &lt; 9) {
+                $this-&gt;headers-&gt;remove(&#039;Cache-Control&#039;);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+    }
+}
+</pre>

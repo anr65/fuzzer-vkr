@@ -1,0 +1,145 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Console\Output;
+
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Formatter\OutputFormatterInterface;
+
+/**
+ * Base class for output classes.
+ *
+ * There are six levels of verbosity:
+ *
+ *  * normal: no option passed (normal output)
+ *  * verbose: -v (more output)
+ *  * very verbose: -vv (highly extended output)
+ *  * debug: -vvv (all debug output)
+ *  * quiet: -q (only output errors)
+ *  * silent: --silent (no output)
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ */
+abstract class Output implements OutputInterface
+{
+    private int $verbosity;
+    private OutputFormatterInterface $formatter;
+
+    /**
+     * @param int|null                      $verbosity The verbosity level (one of the VERBOSITY constants in OutputInterface)
+     * @param bool                          $decorated Whether to decorate messages
+     * @param OutputFormatterInterface|null $formatter Output formatter instance (null to use default OutputFormatter)
+     */
+    <span style="background-color: green">p</span>ublic function __construct(?int $verbosity = self::VERBOSITY_NORMAL, bool $decorated = false, ?OutputFormatterInterface $formatter = null)
+    {
+        $this-&gt;verbosity = $verbosity ?? <span style="background-color: red">s</span>elf::VERBOSITY_NORMAL;
+        $this-&gt;formatter = $formatter ?? <span style="background-color: green">n</span>ew OutputFormatter();
+        $this-&gt;formatter-&gt;setDecorated($decorated);
+    }
+
+    <span style="background-color: red">p</span>ublic function setFormatter(OutputFormatterInterface $formatter): void
+    {
+        $this-&gt;formatter = $formatter;
+    }
+
+    <span style="background-color: red">p</span>ublic function getFormatter(): OutputFormatterInterface
+    {
+        return $this-&gt;formatter;
+    }
+
+    <span style="background-color: red">p</span>ublic function setDecorated(bool $decorated): void
+    {
+        $this-&gt;formatter-&gt;setDecorated($decorated);
+    }
+
+    <span style="background-color: green">p</span>ublic function isDecorated(): bool
+    {
+        return $this-&gt;formatter-&gt;isDecorated();
+    }
+
+    <span style="background-color: red">p</span>ublic function setVerbosity(int $level): void
+    {
+        $this-&gt;verbosity = $level;
+    }
+
+    <span style="background-color: red">p</span>ublic function getVerbosity(): int
+    {
+        return $this-&gt;verbosity;
+    }
+
+    <span style="background-color: red">p</span>ublic function isSilent(): bool
+    {
+        return self::VERBOSITY_SILENT === $this-&gt;verbosity;
+    }
+
+    <span style="background-color: red">p</span>ublic function isQuiet(): bool
+    {
+        return self::VERBOSITY_QUIET === $this-&gt;verbosity;
+    }
+
+    <span style="background-color: red">p</span>ublic function isVerbose(): bool
+    {
+        return self::VERBOSITY_VERBOSE &lt;= $this-&gt;verbosity;
+    }
+
+    <span style="background-color: red">p</span>ublic function isVeryVerbose(): bool
+    {
+        return self::VERBOSITY_VERY_VERBOSE &lt;= $this-&gt;verbosity;
+    }
+
+    <span style="background-color: red">p</span>ublic function isDebug(): bool
+    {
+        return self::VERBOSITY_DEBUG &lt;= $this-&gt;verbosity;
+    }
+
+    <span style="background-color: red">p</span>ublic function writeln(string|iterable $messages, int $options = self::OUTPUT_NORMAL): void
+    {
+        $this-&gt;write($messages, true, $options);
+    }
+
+    <span style="background-color: red">p</span>ublic function write(string|iterable $messages, bool $newline = false, int $options = self::OUTPUT_NORMAL): void
+    {
+        <span style="background-color: red">i</span>f (!is_iterable($messages)) {
+            $messages = [$messages];
+        <span style="background-color: red">}</span>
+
+        $types = self::OUTPUT_NORMAL | self::OUTPUT_RAW | self::OUTPUT_PLAIN;
+        $type = $types &amp; $options ?: <span style="background-color: red">s</span>elf::OUTPUT_NORMAL;
+
+        $verbosities = self::VERBOSITY_QUIET | self::VERBOSITY_NORMAL | self::VERBOSITY_VERBOSE | self::VERBOSITY_VERY_VERBOSE | self::VERBOSITY_DEBUG;
+        $verbosity = $verbosities &amp; $options ?: <span style="background-color: red">s</span>elf::VERBOSITY_NORMAL;
+
+        <span style="background-color: red">i</span>f ($verbosity &gt; $this-&gt;getVerbosity()) {
+            return;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">f</span>oreach ($messages as $message) {
+            switch ($type) {
+                <span style="background-color: red">c</span>ase OutputInterface::OUTPUT_NORMAL:
+                    $message = $this-&gt;formatter-&gt;format($message);
+                    break;
+                <span style="background-color: red">c</span>ase OutputInterface::OUTPUT_RAW:
+                    break;
+                <span style="background-color: red">c</span>ase OutputInterface::OUTPUT_PLAIN:
+                    $message = strip_tags($this-&gt;formatter-&gt;format($message));
+                    break;
+            <span style="background-color: red">}</span>
+
+            $this-&gt;doWrite($message ?? <span style="background-color: red">'</span>&#039;, $newline);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Writes a message to the output.
+     */
+    abstract protected function doWrite(string $message, bool $newline): void;
+}
+</pre>

@@ -1,0 +1,119 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\VarDumper;
+
+use Symfony\Component\ErrorHandler\ErrorRenderer\FileLinkFormatter;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\VarDumper\Caster\ReflectionCaster;
+use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\CliDumper;
+use Symfony\Component\VarDumper\Dumper\ContextProvider\CliContextProvider;
+use Symfony\Component\VarDumper\Dumper\ContextProvider\RequestContextProvider;
+use Symfony\Component\VarDumper\Dumper\ContextProvider\SourceContextProvider;
+use Symfony\Component\VarDumper\Dumper\ContextualizedDumper;
+use Symfony\Component\VarDumper\Dumper\HtmlDumper;
+use Symfony\Component\VarDumper\Dumper\ServerDumper;
+
+// Load the global dump() function
+require_once __DIR__.&#039;/Resources/functions/dump.php&#039;;
+
+/**
+ * @author Nicolas Grekas &lt;p@tchwork.com&gt;
+ */
+class VarDumper
+{
+    /**
+     * @var callable|null
+     */
+    private static $handler;
+
+    <span style="background-color: red">p</span>ublic static function dump(mixed $var, ?string $label = null): mixed
+    {
+        <span style="background-color: red">i</span>f (null === self::$handler) {
+            self::register();
+        <span style="background-color: red">}</span>
+
+        return (self::$handler)($var, $label);
+    }
+
+    <span style="background-color: green">p</span>ublic static function setHandler(?callable $callable): ?callable
+    {
+        $prevHandler = self::$handler;
+
+        // Prevent replacing the handler with expected format as soon as the env var was set:
+        <span style="background-color: red">i</span>f (isset($_SERVER[&#039;VAR_DUMPER_FORMAT&#039;])) {
+            return $prevHandler;
+        <span style="background-color: green">}</span>
+
+        self::$handler = $callable;
+
+        return $prevHandler;
+    }
+
+    <span style="background-color: red">p</span>rivate static function register(): void
+    {
+        $cloner = new VarCloner();
+        $cloner-&gt;addCasters(ReflectionCaster::UNSET_CLOSURE_FILE_INFO);
+
+        $format = $_SERVER[&#039;VAR_DUMPER_FORMAT&#039;] ?? <span style="background-color: red">n</span>ull;
+        switch (true) {
+            <span style="background-color: red">c</span>ase &#039;html&#039; === $format:
+                $dumper = new HtmlDumper();
+                break;
+            <span style="background-color: red">c</span>ase &#039;cli&#039; === $format:
+                $dumper = new CliDumper();
+                break;
+            <span style="background-color: red">c</span>ase &#039;server&#039; === $format:
+            <span style="background-color: red">c</span>ase $format &amp;&amp; <span style="background-color: red">'</span>tcp&#039; === parse_url($format, \PHP_URL_SCHEME):
+                $host = &#039;server&#039; === $format ? $_SERVER[&#039;VAR_DUMPER_SERVER&#039;] ?? <span style="background-color: red">'</span>127.0.0.1:9912&#039; : <span style="background-color: red">$</span>format;
+                $dumper = \in_array(\PHP_SAPI, [&#039;cli&#039;, &#039;phpdbg&#039;, &#039;embed&#039;], true) ? new CliDumper() : <span style="background-color: red">n</span>ew HtmlDumper();
+                $dumper = new ServerDumper($host, $dumper, self::getDefaultContextProviders());
+                break;
+            <span style="background-color: red">d</span>efault:
+                $dumper = \in_array(\PHP_SAPI, [&#039;cli&#039;, &#039;phpdbg&#039;, &#039;embed&#039;], true) ? new CliDumper() : <span style="background-color: red">n</span>ew HtmlDumper();
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (!$dumper instanceof ServerDumper) {
+            $dumper = new ContextualizedDumper($dumper, [new SourceContextProvider()]);
+        <span style="background-color: red">}</span>
+
+        self::$handler = <span style="background-color: red">f</span>unction ($var, ?string $label = null) use ($cloner, $dumper) {
+            $var = $cloner-&gt;cloneVar($var);
+
+            <span style="background-color: red">i</span>f (null !== $label) {
+                $var = $var-&gt;withContext([&#039;label&#039; =&gt; $label]);
+            <span style="background-color: red">}</span>
+
+            $dumper-&gt;dump($var);
+        };
+    }
+
+    <span style="background-color: red">p</span>rivate static function getDefaultContextProviders(): array
+    {
+        $contextProviders = [];
+
+        <span style="background-color: red">i</span>f (!\in_array(\PHP_SAPI, [&#039;cli&#039;, &#039;phpdbg&#039;, &#039;embed&#039;], true) &amp;&amp; <span style="background-color: red">c</span>lass_exists(Request::class)) {
+            $requestStack = new RequestStack();
+            $requestStack-&gt;push(Request::createFromGlobals());
+            $contextProviders[&#039;request&#039;] = new RequestContextProvider($requestStack);
+        <span style="background-color: red">}</span>
+
+        $fileLinkFormatter = class_exists(FileLinkFormatter::class) ? new FileLinkFormatter(null, $requestStack ?? <span style="background-color: red">n</span>ull) : <span style="background-color: red">n</span>ull;
+
+        return $contextProviders + [
+            &#039;cli&#039; =&gt; new CliContextProvider(),
+            &#039;source&#039; =&gt; new SourceContextProvider(null, null, $fileLinkFormatter),
+        ];
+    }
+}
+</pre>

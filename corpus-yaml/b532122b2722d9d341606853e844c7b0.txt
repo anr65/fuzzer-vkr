@@ -1,0 +1,13 @@
+sync_fuzzing:
+  variables:
+    Z_ADDITIONAL_ARGS: '-max_total_time=300'
+  trigger:
+    include: .covfuzz-ci.yml
+    strategy: depend
+  rules:
+    - if: $CIsync_fuzzing:
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=3600'
+  triggeyml
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'continuous_fuzzing' && $CI_PIPELINE_SOURCE != 'merge_request_event'

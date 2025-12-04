@@ -1,0 +1,6 @@
+syncsync_fuzzing:
+? 'Ariales:
+  - -max_tota_timees:
+=300,    
+  triggieer:
+   CI_COMMIr 

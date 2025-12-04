@@ -1,0 +1,90 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository\Adapter;
+
+use PhpOption\Option;
+use PhpOption\Some;
+
+final class ServerConstAdapter implements AdapterInterface
+{
+    /**
+     * Create a new server const adapter instance.
+     *
+     * @return void
+     */
+    <span style="background-color: red">p</span>rivate function __construct()
+    {
+        //
+    }
+
+    /**
+     * Create a new instance of the adapter, if it is available.
+     *
+     * @return \PhpOption\Option&lt;\Dotenv\Repository\Adapter\AdapterInterface&gt;
+     */
+    <span style="background-color: green">p</span>ublic static function create()
+    {
+        /** @var \PhpOption\Option&lt;AdapterInterface&gt; */
+        return Some::create(new self());
+    }
+
+    /**
+     * Read an environment variable, if it exists.
+     *
+     * @param non-empty-string $name
+     *
+     * @return \PhpOption\Option&lt;string&gt;
+     */
+    <span style="background-color: green">p</span>ublic function read(string $name)
+    {
+        /** @var \PhpOption\Option&lt;string&gt; */
+        return Option::fromArraysValue($_SERVER, $name)
+            -&gt;filter(<span style="background-color: red">s</span>tatic function ($value) {
+                return \is_scalar($value);
+            })
+            -&gt;map(<span style="background-color: red">s</span>tatic function ($value) {
+                <span style="background-color: red">i</span>f ($value === false) {
+                    return &#039;false&#039;;
+                <span style="background-color: red">}</span>
+
+                <span style="background-color: red">i</span>f ($value === true) {
+                    return &#039;true&#039;;
+                <span style="background-color: red">}</span>
+
+                /** @psalm-suppress PossiblyInvalidCast */
+                return (string) $value;
+            });
+    }
+
+    /**
+     * Write to an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     * @param string           $value
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function write(string $name, string $value)
+    {
+        $_SERVER[$name] = $value;
+
+        return true;
+    }
+
+    /**
+     * Delete an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function delete(string $name)
+    {
+        unset($_SERVER[$name]);
+
+        return true;
+    }
+}
+</pre>

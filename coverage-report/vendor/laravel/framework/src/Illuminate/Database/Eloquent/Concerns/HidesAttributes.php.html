@@ -1,0 +1,125 @@
+<pre>&lt;?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+trait HidesAttributes
+{
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array&lt;string&gt;
+     */
+    protected $hidden = [];
+
+    /**
+     * The attributes that should be visible in serialization.
+     *
+     * @var array&lt;string&gt;
+     */
+    protected $visible = [];
+
+    /**
+     * Get the hidden attributes for the model.
+     *
+     * @return array&lt;string&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getHidden()
+    {
+        return $this-&gt;hidden;
+    }
+
+    /**
+     * Set the hidden attributes for the model.
+     *
+     * @param  array&lt;string&gt;  $hidden
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setHidden(array $hidden)
+    {
+        $this-&gt;hidden = $hidden;
+
+        return $this;
+    }
+
+    /**
+     * Get the visible attributes for the model.
+     *
+     * @return array&lt;string&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getVisible()
+    {
+        return $this-&gt;visible;
+    }
+
+    /**
+     * Set the visible attributes for the model.
+     *
+     * @param  array&lt;string&gt;  $visible
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function setVisible(array $visible)
+    {
+        $this-&gt;visible = $visible;
+
+        return $this;
+    }
+
+    /**
+     * Make the given, typically hidden, attributes visible.
+     *
+     * @param  array&lt;string&gt;|string|null  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function makeVisible($attributes)
+    {
+        $attributes = is_array($attributes) ? $attributes : <span style="background-color: red">f</span>unc_get_args();
+
+        $this-&gt;hidden = array_diff($this-&gt;hidden, $attributes);
+
+        <span style="background-color: red">i</span>f (! empty($this-&gt;visible)) {
+            $this-&gt;visible = array_values(array_unique(array_merge($this-&gt;visible, $attributes)));
+        <span style="background-color: red">}</span>
+
+        return $this;
+    }
+
+    /**
+     * Make the given, typically hidden, attributes visible if the given truth test passes.
+     *
+     * @param  bool|\Closure  $condition
+     * @param  array&lt;string&gt;|string|null  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function makeVisibleIf($condition, $attributes)
+    {
+        return value($condition, $this) ? $this-&gt;makeVisible($attributes) : <span style="background-color: red">$</span>this;
+    }
+
+    /**
+     * Make the given, typically visible, attributes hidden.
+     *
+     * @param  array&lt;string&gt;|string|null  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function makeHidden($attributes)
+    {
+        $this-&gt;hidden = array_values(array_unique(array_merge(
+            $this-&gt;hidden, is_array($attributes) ? $attributes : <span style="background-color: red">f</span>unc_get_args()
+        )));
+
+        return $this;
+    }
+
+    /**
+     * Make the given, typically visible, attributes hidden if the given truth test passes.
+     *
+     * @param  bool|\Closure  $condition
+     * @param  array&lt;string&gt;|string|null  $attributes
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function makeHiddenIf($condition, $attributes)
+    {
+        return value($condition, $this) ? $this-&gt;makeHidden($attributes) : <span style="background-color: red">$</span>this;
+    }
+}
+</pre>

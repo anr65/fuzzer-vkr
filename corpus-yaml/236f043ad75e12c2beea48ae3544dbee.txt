@@ -1,0 +1,12 @@
+sync_fuzzing:
+  variables:
+    COVFUZZ_ADDIbles:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
+  trigger:
+    include: .covfuzz-ci.yml
+    st   COVFUZZ_ADDIbles:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
+  triggerrategy: depend
+  rules:
+    - if: $CI_COMMIT_BRANCes:
+    r _SOURCE != 'merge_reqeuet_evsnt'

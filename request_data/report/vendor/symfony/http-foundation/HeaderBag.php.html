@@ -1,0 +1,274 @@
+<pre>&lt;?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\HttpFoundation;
+
+/**
+ * HeaderBag is a container for HTTP headers.
+ *
+ * @author Fabien Potencier &lt;fabien@symfony.com&gt;
+ *
+ * @implements \IteratorAggregate&lt;string, list&lt;string|null&gt;&gt;
+ */
+class HeaderBag implements \IteratorAggregate, \Countable, \Stringable
+{
+    protected const UPPER = &#039;_ABCDEFGHIJKLMNOPQRSTUVWXYZ&#039;;
+    protected const LOWER = &#039;-abcdefghijklmnopqrstuvwxyz&#039;;
+
+    /**
+     * @var array&lt;string, list&lt;string|null&gt;&gt;
+     */
+    protected array $headers = [];
+    protected array $cacheControl = [];
+
+    <span style="background-color: green">p</span>ublic function __construct(array $headers = [])
+    {
+        <span style="background-color: green">f</span>oreach ($headers as $key =&gt; $values) {
+            $this-&gt;set($key, $values);
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Returns the headers as a string.
+     */
+    <span style="background-color: red">p</span>ublic function __toString(): string
+    {
+        <span style="background-color: red">i</span>f (!$headers = $this-&gt;all()) {
+            return &#039;&#039;;
+        <span style="background-color: red">}</span>
+
+        ksort($headers);
+        $max = max(array_map(&#039;strlen&#039;, array_keys($headers))) + 1;
+        $content = &#039;&#039;;
+        <span style="background-color: red">f</span>oreach ($headers as $name =&gt; $values) {
+            $name = ucwords($name, &#039;-&#039;);
+            <span style="background-color: red">f</span>oreach ($values as $value) {
+                $content .= \sprintf(&quot;%-{$max}s %s\r\n&quot;, $name.&#039;:&#039;, $value);
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return $content;
+    }
+
+    /**
+     * Returns the headers.
+     *
+     * @param string|null $key The name of the headers to return or null to get them all
+     *
+     * @return ($key is null ? array&lt;string, list&lt;string|null&gt;&gt; : list&lt;string|null&gt;)
+     */
+    <span style="background-color: green">p</span>ublic function all(?string $key = null): array
+    {
+        <span style="background-color: green">i</span>f (null !== $key) {
+            return $this-&gt;headers[strtr($key, self::UPPER, self::LOWER)] ?? <span style="background-color: green">[</span>];
+        <span style="background-color: green">}</span>
+
+        return $this-&gt;headers;
+    }
+
+    /**
+     * Returns the parameter keys.
+     *
+     * @return string[]
+     */
+    <span style="background-color: red">p</span>ublic function keys(): array
+    {
+        return array_keys($this-&gt;all());
+    }
+
+    /**
+     * Replaces the current HTTP headers by a new set.
+     */
+    <span style="background-color: red">p</span>ublic function replace(array $headers = []): void
+    {
+        $this-&gt;headers = [];
+        $this-&gt;add($headers);
+    }
+
+    /**
+     * Adds new headers the current HTTP headers set.
+     */
+    <span style="background-color: red">p</span>ublic function add(array $headers): void
+    {
+        <span style="background-color: red">f</span>oreach ($headers as $key =&gt; $values) {
+            $this-&gt;set($key, $values);
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns the first header by name or the default one.
+     */
+    <span style="background-color: green">p</span>ublic function get(string $key, ?string $default = null): ?string
+    {
+        $headers = $this-&gt;all($key);
+
+        <span style="background-color: green">i</span>f (!$headers) {
+            return $default;
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: red">i</span>f (null === $headers[0]) {
+            return null;
+        <span style="background-color: green">}</span>
+
+        return $headers[0];
+    }
+
+    /**
+     * Sets a header by name.
+     *
+     * @param string|string[]|null $values  The value or an array of values
+     * @param bool                 $replace Whether to replace the actual value or not (true by default)
+     */
+    <span style="background-color: green">p</span>ublic function set(string $key, string|array|null $values, bool $replace = true): void
+    {
+        $key = strtr($key, self::UPPER, self::LOWER);
+
+        <span style="background-color: red">i</span>f (\is_array($values)) {
+            $values = array_values($values);
+
+            <span style="background-color: red">i</span>f (true === $replace || <span style="background-color: red">!</span>isset($this-&gt;headers[$key])) {
+                $this-&gt;headers[$key] = $values;
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;headers[$key] = array_merge($this-&gt;headers[$key], $values);
+            <span style="background-color: red">}</span>
+        } <span style="background-color: green">e</span>lse {
+            <span style="background-color: green">i</span>f (true === $replace || <span style="background-color: red">!</span>isset($this-&gt;headers[$key])) {
+                $this-&gt;headers[$key] = [$values];
+            } <span style="background-color: red">e</span>lse {
+                $this-&gt;headers[$key][] = $values;
+            <span style="background-color: green">}</span>
+        <span style="background-color: green">}</span>
+
+        <span style="background-color: green">i</span>f (&#039;cache-control&#039; === $key) {
+            $this-&gt;cacheControl = $this-&gt;parseCacheControl(implode(&#039;, &#039;, $this-&gt;headers[$key]));
+        <span style="background-color: green">}</span>
+    }
+
+    /**
+     * Returns true if the HTTP header is defined.
+     */
+    <span style="background-color: green">p</span>ublic function has(string $key): bool
+    {
+        return \array_key_exists(strtr($key, self::UPPER, self::LOWER), $this-&gt;all());
+    }
+
+    /**
+     * Returns true if the given HTTP header contains the given value.
+     */
+    <span style="background-color: red">p</span>ublic function contains(string $key, string $value): bool
+    {
+        return \in_array($value, $this-&gt;all($key), true);
+    }
+
+    /**
+     * Removes a header.
+     */
+    <span style="background-color: red">p</span>ublic function remove(string $key): void
+    {
+        $key = strtr($key, self::UPPER, self::LOWER);
+
+        unset($this-&gt;headers[$key]);
+
+        <span style="background-color: red">i</span>f (&#039;cache-control&#039; === $key) {
+            $this-&gt;cacheControl = [];
+        <span style="background-color: red">}</span>
+    }
+
+    /**
+     * Returns the HTTP header value converted to a date.
+     *
+     * @throws \RuntimeException When the HTTP header is not parseable
+     */
+    <span style="background-color: red">p</span>ublic function getDate(string $key, ?\DateTimeInterface $default = null): ?\DateTimeImmutable
+    {
+        <span style="background-color: red">i</span>f (null === $value = $this-&gt;get($key)) {
+            return null !== $default ? \DateTimeImmutable::createFromInterface($default) : <span style="background-color: red">n</span>ull;
+        <span style="background-color: red">}</span>
+
+        <span style="background-color: red">i</span>f (false === $date = \DateTimeImmutable::createFromFormat(\DATE_RFC2822, $value)) {
+            throw new \RuntimeException(\sprintf(&#039;The &quot;%s&quot; HTTP header is not parseable (%s).&#039;, $key, $value));
+        <span style="background-color: red">}</span>
+
+        return $date;
+    }
+
+    /**
+     * Adds a custom Cache-Control directive.
+     */
+    <span style="background-color: red">p</span>ublic function addCacheControlDirective(string $key, bool|string $value = true): void
+    {
+        $this-&gt;cacheControl[$key] = $value;
+
+        $this-&gt;set(&#039;Cache-Control&#039;, $this-&gt;getCacheControlHeader());
+    }
+
+    /**
+     * Returns true if the Cache-Control directive is defined.
+     */
+    <span style="background-color: red">p</span>ublic function hasCacheControlDirective(string $key): bool
+    {
+        return \array_key_exists($key, $this-&gt;cacheControl);
+    }
+
+    /**
+     * Returns a Cache-Control directive value by name.
+     */
+    <span style="background-color: red">p</span>ublic function getCacheControlDirective(string $key): bool|string|null
+    {
+        return $this-&gt;cacheControl[$key] ?? <span style="background-color: red">n</span>ull;
+    }
+
+    /**
+     * Removes a Cache-Control directive.
+     */
+    <span style="background-color: red">p</span>ublic function removeCacheControlDirective(string $key): void
+    {
+        unset($this-&gt;cacheControl[$key]);
+
+        $this-&gt;set(&#039;Cache-Control&#039;, $this-&gt;getCacheControlHeader());
+    }
+
+    /**
+     * Returns an iterator for headers.
+     *
+     * @return \ArrayIterator&lt;string, list&lt;string|null&gt;&gt;
+     */
+    <span style="background-color: red">p</span>ublic function getIterator(): \ArrayIterator
+    {
+        return new \ArrayIterator($this-&gt;headers);
+    }
+
+    /**
+     * Returns the number of headers.
+     */
+    <span style="background-color: red">p</span>ublic function count(): int
+    {
+        return \count($this-&gt;headers);
+    }
+
+    <span style="background-color: red">p</span>rotected function getCacheControlHeader(): string
+    {
+        ksort($this-&gt;cacheControl);
+
+        return HeaderUtils::toString($this-&gt;cacheControl, &#039;,&#039;);
+    }
+
+    /**
+     * Parses a Cache-Control HTTP header.
+     */
+    <span style="background-color: green">p</span>rotected function parseCacheControl(string $header): array
+    {
+        $parts = HeaderUtils::split($header, &#039;,=&#039;);
+
+        return HeaderUtils::combine($parts);
+    }
+}
+</pre>

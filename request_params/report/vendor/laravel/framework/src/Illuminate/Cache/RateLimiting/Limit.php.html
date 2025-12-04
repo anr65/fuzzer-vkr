@@ -1,0 +1,157 @@
+<pre>&lt;?php
+
+namespace Illuminate\Cache\RateLimiting;
+
+class Limit
+{
+    /**
+     * The rate limit signature key.
+     *
+     * @var mixed
+     */
+    public $key;
+
+    /**
+     * The maximum number of attempts allowed within the given number of seconds.
+     *
+     * @var int
+     */
+    public $maxAttempts;
+
+    /**
+     * The number of seconds until the rate limit is reset.
+     *
+     * @var int
+     */
+    public $decaySeconds;
+
+    /**
+     * The response generator callback.
+     *
+     * @var callable
+     */
+    public $responseCallback;
+
+    /**
+     * Create a new limit instance.
+     *
+     * @param  mixed  $key
+     * @param  int  $maxAttempts
+     * @param  int  $decaySeconds
+     */
+    <span style="background-color: green">p</span>ublic function __construct($key = &#039;&#039;, int $maxAttempts = 60, int $decaySeconds = 60)
+    {
+        $this-&gt;key = $key;
+        $this-&gt;maxAttempts = $maxAttempts;
+        $this-&gt;decaySeconds = $decaySeconds;
+    }
+
+    /**
+     * Create a new rate limit.
+     *
+     * @param  int  $maxAttempts
+     * @param  int  $decaySeconds
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function perSecond($maxAttempts, $decaySeconds = 1)
+    {
+        return new static(&#039;&#039;, $maxAttempts, $decaySeconds);
+    }
+
+    /**
+     * Create a new rate limit.
+     *
+     * @param  int  $maxAttempts
+     * @param  int  $decayMinutes
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function perMinute($maxAttempts, $decayMinutes = 1)
+    {
+        return new static(&#039;&#039;, $maxAttempts, 60 * $decayMinutes);
+    }
+
+    /**
+     * Create a new rate limit using minutes as decay time.
+     *
+     * @param  int  $decayMinutes
+     * @param  int  $maxAttempts
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function perMinutes($decayMinutes, $maxAttempts)
+    {
+        return new static(&#039;&#039;, $maxAttempts, 60 * $decayMinutes);
+    }
+
+    /**
+     * Create a new rate limit using hours as decay time.
+     *
+     * @param  int  $maxAttempts
+     * @param  int  $decayHours
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function perHour($maxAttempts, $decayHours = 1)
+    {
+        return new static(&#039;&#039;, $maxAttempts, 60 * 60 * $decayHours);
+    }
+
+    /**
+     * Create a new rate limit using days as decay time.
+     *
+     * @param  int  $maxAttempts
+     * @param  int  $decayDays
+     * @return static
+     */
+    <span style="background-color: red">p</span>ublic static function perDay($maxAttempts, $decayDays = 1)
+    {
+        return new static(&#039;&#039;, $maxAttempts, 60 * 60 * 24 * $decayDays);
+    }
+
+    /**
+     * Create a new unlimited rate limit.
+     *
+     * @return static
+     */
+    <span style="background-color: green">p</span>ublic static function none()
+    {
+        return new Unlimited;
+    }
+
+    /**
+     * Set the key of the rate limit.
+     *
+     * @param  mixed  $key
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function by($key)
+    {
+        $this-&gt;key = $key;
+
+        return $this;
+    }
+
+    /**
+     * Set the callback that should generate the response when the limit is exceeded.
+     *
+     * @param  callable  $callback
+     * @return $this
+     */
+    <span style="background-color: red">p</span>ublic function response(callable $callback)
+    {
+        $this-&gt;responseCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Get a potential fallback key for the limit.
+     *
+     * @return string
+     */
+    <span style="background-color: red">p</span>ublic function fallbackKey()
+    {
+        $prefix = $this-&gt;key ? &quot;{$this-&gt;key}:&quot; : <span style="background-color: red">'</span>&#039;;
+
+        return &quot;{$prefix}attempts:{$this-&gt;maxAttempts}:decay:{$this-&gt;decaySeconds}&quot;;
+    }
+}
+</pre>

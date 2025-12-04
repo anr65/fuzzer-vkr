@@ -1,0 +1,88 @@
+<pre>&lt;?php
+
+namespace Illuminate\Encryption;
+
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
+use Laravel\SerializableClosure\SerializableClosure;
+
+class EncryptionServiceProvider extends ServiceProvider
+{
+    /**
+     * Register the service provider.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function register()
+    {
+        $this-&gt;registerEncrypter();
+        $this-&gt;registerSerializableClosureSecurityKey();
+    }
+
+    /**
+     * Register the encrypter.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerEncrypter()
+    {
+        $this-&gt;app-&gt;singleton(&#039;encrypter&#039;, <span style="background-color: red">f</span>unction ($app) {
+            $config = $app-&gt;make(&#039;config&#039;)-&gt;get(&#039;app&#039;);
+
+            return (new Encrypter($this-&gt;parseKey($config), $config[&#039;cipher&#039;]))
+                -&gt;previousKeys(array_map(
+                    fn ($key) =&gt; <span style="background-color: red">$</span>this-&gt;parseKey([&#039;key&#039; =&gt; $key]),
+                    $config[&#039;previous_keys&#039;] ?? <span style="background-color: red">[</span>]
+                ));
+        });
+    }
+
+    /**
+     * Configure Serializable Closure signing for security.
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>rotected function registerSerializableClosureSecurityKey()
+    {
+        $config = $this-&gt;app-&gt;make(&#039;config&#039;)-&gt;get(&#039;app&#039;);
+
+        <span style="background-color: green">i</span>f (! class_exists(SerializableClosure::class) || <span style="background-color: green">e</span>mpty($config[&#039;key&#039;])) {
+            return;
+        <span style="background-color: red">}</span>
+
+        SerializableClosure::setSecretKey($this-&gt;parseKey($config));
+    }
+
+    /**
+     * Parse the encryption key.
+     *
+     * @param  array  $config
+     * @return string
+     */
+    <span style="background-color: red">p</span>rotected function parseKey(array $config)
+    {
+        <span style="background-color: red">i</span>f (Str::startsWith($key = $this-&gt;key($config), $prefix = &#039;base64:&#039;)) {
+            $key = base64_decode(Str::after($key, $prefix));
+        <span style="background-color: red">}</span>
+
+        return $key;
+    }
+
+    /**
+     * Extract the encryption key from the given configuration.
+     *
+     * @param  array  $config
+     * @return string
+     *
+     * @throws \Illuminate\Encryption\MissingAppKeyException
+     */
+    <span style="background-color: red">p</span>rotected function key(array $config)
+    {
+        return tap($config[&#039;key&#039;], <span style="background-color: red">f</span>unction ($key) {
+            <span style="background-color: red">i</span>f (empty($key)) {
+                throw new MissingAppKeyException;
+            <span style="background-color: red">}</span>
+        });
+    }
+}
+</pre>

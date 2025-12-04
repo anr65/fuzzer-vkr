@@ -1,0 +1,65 @@
+<pre>&lt;?php
+
+declare(strict_types=1);
+
+namespace Dotenv\Repository\Adapter;
+
+final class MultiWriter implements WriterInterface
+{
+    /**
+     * The set of writers to use.
+     *
+     * @var \Dotenv\Repository\Adapter\WriterInterface[]
+     */
+    private $writers;
+
+    /**
+     * Create a new multi-writer instance.
+     *
+     * @param \Dotenv\Repository\Adapter\WriterInterface[] $writers
+     *
+     * @return void
+     */
+    <span style="background-color: green">p</span>ublic function __construct(array $writers)
+    {
+        $this-&gt;writers = $writers;
+    }
+
+    /**
+     * Write to an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     * @param string           $value
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function write(string $name, string $value)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;writers as $writers) {
+            <span style="background-color: red">i</span>f (!$writers-&gt;write($name, $value)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+
+    /**
+     * Delete an environment variable, if possible.
+     *
+     * @param non-empty-string $name
+     *
+     * @return bool
+     */
+    <span style="background-color: red">p</span>ublic function delete(string $name)
+    {
+        <span style="background-color: red">f</span>oreach ($this-&gt;writers as $writers) {
+            <span style="background-color: red">i</span>f (!$writers-&gt;delete($name)) {
+                return false;
+            <span style="background-color: red">}</span>
+        <span style="background-color: red">}</span>
+
+        return true;
+    }
+}
+</pre>
