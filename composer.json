@@ -6,7 +6,6 @@
     "nikic/php-parser": "^5.0",
     "nikic/include-interceptor": "^0.1.1",
     "ulrichsg/getopt-php": "^4.0",
-    "laravel/laravel": "^12.0",
     "ext-json": "*",
     "symfony/yaml": "^7.2"
   },
