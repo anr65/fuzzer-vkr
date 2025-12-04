@@ -9,6 +9,7 @@ use GetOpt\Operand;
 use GetOpt\Option;
 use Nikic\IncludeInterceptor\FileFilter;
 use Nikic\IncludeInterceptor\Interceptor;
+use PhpFuzzer\Diagnostics\CorpusDiagnostics;
 use PhpFuzzer\Instrumentation\FileInfo;
 use PhpFuzzer\Instrumentation\Instrumentor;
 use PhpFuzzer\Mutation\Dictionary;
@@ -47,6 +48,7 @@ final class Fuzzer {
     private int $crashes = 0;
     private int $maxCrashes = 100;
     private ?StabilityLogger $stabilityLogger = null;
+    private ?CorpusDiagnostics $corpusDiagnostics = null;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -113,6 +115,22 @@ final class Fuzzer {
         $this->stabilityLogger = new StabilityLogger($path, $format, $logInterval);
     }
 
+    public function setCorpusDiagnostics(
+        string $eventsLogFile,
+        string $snapshotDir,
+        int $snapshotFrequency
+    ): void {
+        $this->corpusDiagnostics = new CorpusDiagnostics();
+        $this->corpusDiagnostics->enable(
+            $eventsLogFile,
+            $snapshotDir,
+            $snapshotFrequency,
+            function() { return $this->runs; },
+            function() { return $this->corpus->getNumFeatures(); }
+        );
+        $this->corpus->setDiagnostics($this->corpusDiagnostics);
+    }
+
 
     public function startInstrumentation(): void {
         $this->interceptor->setUp();
@@ -165,9 +183,11 @@ final class Fuzzer {
                     break;
                 }
 
+                $coverageBefore = $this->corpus->getNumFeatures();
                 $this->corpus->computeUniqueFeatures($entry);
                 if ($entry->uniqueFeatures) {
-                    $this->corpus->addEntry($entry);
+                    $parentHash = $origEntry !== null ? $origEntry->hash : null;
+                    $this->corpus->addEntry($entry, $parentHash);
                     $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
 
                     $this->lastInterestingRun = $this->runs;
@@ -177,8 +197,27 @@ final class Fuzzer {
                         $this->stabilityLogger->recordContribution($origEntry->hash, $this->runs);
                     }
                     
+                    // Record contribution in diagnostics
+                    if ($this->corpusDiagnostics !== null && $origEntry !== null) {
+                        $this->corpusDiagnostics->recordContribution($origEntry);
+                    }
+                    
                     $this->printAction('NEW', $entry);
                     break;
+                } else {
+                    // Log rejected candidate (has features but no unique features)
+                    if ($this->corpusDiagnostics !== null && $origEntry !== null) {
+                        $coverageAfter = $this->corpus->getNumFeatures();
+                        $parentSeedId = $this->corpusDiagnostics->getSeedId($origEntry->hash);
+                        $this->corpusDiagnostics->logCandidateSeed(
+                            $entry,
+                            $parentSeedId,
+                            $coverageBefore,
+                            $coverageAfter,
+                            'rejected',
+                            'no_unique_features'
+                        );
+                    }
                 }
 
                 if ($origEntry !== null &&
@@ -200,6 +239,11 @@ final class Fuzzer {
                         $this->stabilityLogger->recordContribution($origEntry->hash, $this->runs);
                     }
                     
+                    // Record contribution in diagnostics
+                    if ($this->corpusDiagnostics !== null) {
+                        $this->corpusDiagnostics->recordContribution($origEntry);
+                    }
+                    
                     $this->printAction('REDUCE', $entry);
                     break;
                 }
@@ -216,23 +260,98 @@ final class Fuzzer {
             
             // Log stability metrics periodically
             if ($this->stabilityLogger !== null) {
+                $extendedMetrics = null;
+                if ($this->corpusDiagnostics !== null) {
+                    $extendedMetrics = $this->computeExtendedMetrics();
+                }
                 $this->stabilityLogger->logIfInterval(
                     $this->runs,
                     $this->corpus->getNumFeatures(),
-                    $this->corpus->getNumCorpusEntries()
+                    $this->corpus->getNumCorpusEntries(),
+                    $extendedMetrics
                 );
+            }
+            
+            // Create corpus snapshot periodically
+            if ($this->corpusDiagnostics !== null) {
+                $this->corpusDiagnostics->createSnapshot($this->runs);
             }
         }
         
         // Final log at end of fuzzing
         if ($this->stabilityLogger !== null) {
+            $extendedMetrics = null;
+            if ($this->corpusDiagnostics !== null) {
+                $extendedMetrics = $this->computeExtendedMetrics();
+            }
             $this->stabilityLogger->logMetrics(
                 $this->runs,
                 $this->corpus->getNumFeatures(),
-                $this->corpus->getNumCorpusEntries()
+                $this->corpus->getNumCorpusEntries(),
+                $extendedMetrics
             );
             $this->stabilityLogger->finalize();
         }
+        
+        // Final snapshot
+        if ($this->corpusDiagnostics !== null) {
+            $this->corpusDiagnostics->createSnapshot($this->runs);
+        }
+    }
+
+    /**
+     * Compute extended metrics from corpus diagnostics.
+     * @return array<string, mixed>|null
+     */
+    private function computeExtendedMetrics(): ?array {
+        if ($this->corpusDiagnostics === null) {
+            return null;
+        }
+
+        $allStats = $this->corpusDiagnostics->getAllSeedStats();
+        if (empty($allStats)) {
+            return null;
+        }
+
+        $currentRun = $this->runs;
+        $recentWindow = min(1000, $currentRun / 2); // Look back at most 1000 runs or half of total runs
+        $thresholdRun = $currentRun - $recentWindow;
+
+        $totalSeeds = count($allStats);
+        $deadSeeds = 0;
+        $activeSeeds = 0;
+        $totalAge = 0;
+        $totalSelected = 0;
+        $totalContributed = 0;
+        $deadSelections = 0;
+
+        foreach ($allStats as $stats) {
+            $age = $currentRun - $stats->creationRun;
+            $totalAge += $age;
+            $totalSelected += $stats->timesSelected;
+            $totalContributed += $stats->timesContributed;
+
+            if ($stats->isDead) {
+                $deadSeeds++;
+                $deadSelections += $stats->timesSelected;
+            }
+
+            if ($stats->lastContributionRun !== null && $stats->lastContributionRun >= $thresholdRun) {
+                $activeSeeds++;
+            }
+        }
+
+        $avgSeedAge = $totalSeeds > 0 ? $totalAge / $totalSeeds : 0;
+        $deadSelectionPercentage = $totalSelected > 0 ? (100.0 * $deadSelections / $totalSelected) : 0;
+        $contributionRate = $currentRun > 0 ? (100.0 * $totalContributed / $currentRun) : 0;
+
+        return [
+            'avg_seed_age' => round($avgSeedAge, 2),
+            'active_seeds' => $activeSeeds,
+            'dead_seeds' => $deadSeeds,
+            'dead_selection_percentage' => round($deadSelectionPercentage, 2),
+            'contribution_rate' => round($contributionRate, 2),
+        ];
     }
 
     private function isAllowedException(\Throwable $e): bool {
@@ -330,7 +449,17 @@ final class Fuzzer {
         foreach ($entries as $entry) {
             $this->corpus->computeUniqueFeatures($entry);
             if ($entry->uniqueFeatures) {
-                $this->corpus->addEntry($entry);
+                // Register initial seeds in diagnostics if enabled (before addEntry to avoid double registration)
+                // Note: runs will be reset to 0 after loading, so initial seeds are effectively at run 0
+                if ($this->corpusDiagnostics !== null) {
+                    $coverage = $this->corpus->getNumFeatures();
+                    // Temporarily set runs to 0 for seed registration (since runs will be reset after loading)
+                    $savedRuns = $this->runs;
+                    $this->runs = 0;
+                    $this->corpusDiagnostics->registerSeed($entry, null, $coverage);
+                    $this->runs = $savedRuns;
+                }
+                $this->corpus->addEntry($entry, null, true); // Skip registration in addEntry
             }
         }
         $this->initialFeatures = $this->corpus->getNumFeatures();
@@ -449,6 +578,14 @@ final class Fuzzer {
             Option::create(null, 'stability-interval', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('runs')
                 ->setDescription('Log stability metrics every N runs (default: 1000)'),
+            Option::create(null, 'enable-corpus-diagnostics', GetOpt::NO_ARGUMENT)
+                ->setDescription('Enable deep corpus diagnostic instrumentation'),
+            Option::create(null, 'corpus-events-log', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('file')
+                ->setDescription('Path to corpus events log file (CSV)'),
+            Option::create(null, 'corpus-snapshot-frequency', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Create corpus snapshot every N runs (default: 2000)'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -509,6 +646,16 @@ final class Fuzzer {
             $format = $opts['stability-format'] ?? 'csv';
             $interval = isset($opts['stability-interval']) ? (int) $opts['stability-interval'] : 1000;
             $this->setStabilityLogFile($opts['stability-log'], $format, $interval);
+        }
+
+        // Setup corpus diagnostics if requested
+        if (isset($opts['enable-corpus-diagnostics'])) {
+            $eventsLog = $opts['corpus-events-log'] ?? 'corpus_events.csv';
+            $snapshotDir = dirname($eventsLog) . '/corpus_snapshots';
+            $snapshotFreq = isset($opts['corpus-snapshot-frequency']) 
+                ? (int) $opts['corpus-snapshot-frequency'] 
+                : 2000;
+            $this->setCorpusDiagnostics($eventsLog, $snapshotDir, $snapshotFreq);
         }
 
         try {

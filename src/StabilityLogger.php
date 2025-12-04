@@ -79,20 +79,32 @@ final class StabilityLogger {
     
     /**
      * Log metrics if interval has elapsed.
+     * @param array<string, mixed>|null $extendedMetrics
      */
-    public function logIfInterval(int $runs, int $totalFeatures, int $corpusSize): void {
+    public function logIfInterval(
+        int $runs,
+        int $totalFeatures,
+        int $corpusSize,
+        ?array $extendedMetrics = null
+    ): void {
         if ($runs - $this->lastLogRun < $this->logInterval) {
             return;
         }
         
-        $this->logMetrics($runs, $totalFeatures, $corpusSize);
+        $this->logMetrics($runs, $totalFeatures, $corpusSize, $extendedMetrics);
         $this->lastLogRun = $runs;
     }
     
     /**
      * Force log current metrics (e.g., at end of fuzzing).
+     * @param array<string, mixed>|null $extendedMetrics
      */
-    public function logMetrics(int $runs, int $totalFeatures, int $corpusSize): void {
+    public function logMetrics(
+        int $runs,
+        int $totalFeatures,
+        int $corpusSize,
+        ?array $extendedMetrics = null
+    ): void {
         $now = microtime(true);
         $timestamp = $now - $this->startTime;
         
@@ -111,24 +123,32 @@ final class StabilityLogger {
         $currentStagnationRuns = $runs - $this->currentStagnationStartRun;
         $currentStagnationSeconds = $now - $this->currentStagnationStartTime;
         
+        // Merge extended metrics if available
+        $baseData = [
+            'timestamp' => round($timestamp, 2),
+            'runs' => $runs,
+            'unique_features' => $totalFeatures,
+            'corpus_size' => $corpusSize,
+            'interval_runs' => $intervalRuns,
+            'interval_features' => $intervalFeatures,
+            'interval_seconds' => round($intervalSeconds, 2),
+            'contributing_entries' => $contributingCount,
+            'contribution_percentage' => round($contributionPercentage, 2),
+            'longest_stagnation_runs' => $this->longestStagnationRuns,
+            'longest_stagnation_seconds' => round($this->longestStagnationSeconds, 2),
+            'current_stagnation_runs' => $currentStagnationRuns,
+            'current_stagnation_seconds' => round($currentStagnationSeconds, 2),
+        ];
+        
+        if ($extendedMetrics !== null) {
+            $baseData = array_merge($baseData, $extendedMetrics);
+        }
+        
         if ($this->format === 'json') {
-            $this->logJson([
-                'timestamp' => round($timestamp, 2),
-                'runs' => $runs,
-                'unique_features' => $totalFeatures,
-                'corpus_size' => $corpusSize,
-                'interval_runs' => $intervalRuns,
-                'interval_features' => $intervalFeatures,
-                'interval_seconds' => round($intervalSeconds, 2),
-                'contributing_entries' => $contributingCount,
-                'contribution_percentage' => round($contributionPercentage, 2),
-                'longest_stagnation_runs' => $this->longestStagnationRuns,
-                'longest_stagnation_seconds' => round($this->longestStagnationSeconds, 2),
-                'current_stagnation_runs' => $currentStagnationRuns,
-                'current_stagnation_seconds' => round($currentStagnationSeconds, 2),
-            ]);
+            $this->logJson($baseData);
         } else {
-            $this->logCsv([
+            // For CSV, we need to maintain consistent column order
+            $csvData = [
                 round($timestamp, 2),
                 $runs,
                 $totalFeatures,
@@ -142,7 +162,18 @@ final class StabilityLogger {
                 round($this->longestStagnationSeconds, 2),
                 $currentStagnationRuns,
                 round($currentStagnationSeconds, 2),
-            ]);
+            ];
+            
+            // Append extended metrics if available
+            if ($extendedMetrics !== null) {
+                $csvData[] = $extendedMetrics['avg_seed_age'] ?? '';
+                $csvData[] = $extendedMetrics['active_seeds'] ?? '';
+                $csvData[] = $extendedMetrics['dead_seeds'] ?? '';
+                $csvData[] = $extendedMetrics['dead_selection_percentage'] ?? '';
+                $csvData[] = $extendedMetrics['contribution_rate'] ?? '';
+            }
+            
+            $this->logCsv($csvData);
         }
         
         // Reset interval tracking
@@ -157,7 +188,7 @@ final class StabilityLogger {
             // JSON format: array of objects
             file_put_contents($this->logFile, "[\n");
         } else {
-            // CSV format: header row
+            // CSV format: header row (with extended metrics columns)
             $header = [
                 'timestamp',
                 'runs',
@@ -172,6 +203,11 @@ final class StabilityLogger {
                 'longest_stagnation_seconds',
                 'current_stagnation_runs',
                 'current_stagnation_seconds',
+                'avg_seed_age',
+                'active_seeds',
+                'dead_seeds',
+                'dead_selection_percentage',
+                'contribution_rate',
             ];
             file_put_contents($this->logFile, implode(',', $header) . "\n");
         }

@@ -34,3 +34,9 @@ auth.json
 *stability*.json
 stability*.csv
 stability*.json
+
+# Corpus diagnostics output files
+corpus_events.csv
+*corpus_events*.csv
+corpus_snapshots/
+*corpus_snapshot*.json

@@ -19208,3 +19208,45 @@ NEW    run: 3765 ( 699/s), ft: 4626 (76/s), corp: 22 (54b), len:  2/13, t: 5s, m
 NEW    run: 3836 ( 701/s), ft: 4629 (75/s), corp: 22 (56b), len:  2/13, t: 5s, mem: 40mb
 NEW    run: 3988 ( 699/s), ft: 4752 (94/s), corp: 22 (58b), len:  2/13, t: 6s, mem: 40mb
 NEW    run: 4789 ( 712/s), ft: 4766 (82/s), corp: 22 (60b), len:  2/13, t: 7s, mem: 41mb
+NEW    run: 1 ( 919/s), ft: 4451 (919/s), corp: 24 (46b), len:  7/13, t: 0s, mem: 35mb
+NEW    run: 63 (1115/s), ft: 4452 (35/s), corp: 25 (48b), len:  2/13, t: 0s, mem: 35mb
+REDUCE run: 147 (1093/s), ft: 4452 (15/s), corp: 25 (47b), len:  1/13, t: 0s, mem: 35mb
+NEW    run: 628 (1243/s), ft: 4482 (63/s), corp: 25 (49b), len:  2/13, t: 1s, mem: 36mb
+REDUCE run: 742 (1237/s), ft: 4482 (53/s), corp: 25 (46b), len:  4/13, t: 1s, mem: 36mb
+NEW    run: 1428 (1267/s), ft: 4596 (130/s), corp: 25 (48b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 1949 (1275/s), ft: 4600 (98/s), corp: 25 (50b), len:  2/13, t: 2s, mem: 38mb
+REDUCE run: 2239 (1272/s), ft: 4600 (85/s), corp: 25 (48b), len:  2/13, t: 2s, mem: 38mb
+NEW    run: 2365 (1270/s), ft: 4603 (82/s), corp: 25 (50b), len:  2/13, t: 2s, mem: 38mb
+REDUCE run: 2990 (1258/s), ft: 4603 (64/s), corp: 25 (49b), len:  1/13, t: 2s, mem: 38mb
+NEW    run: 3499 (1253/s), ft: 4632 (65/s), corp: 25 (51b), len:  2/13, t: 3s, mem: 40mb
+NEW    run: 4420 (1238/s), ft: 4633 (51/s), corp: 25 (53b), len:  2/13, t: 4s, mem: 41mb
+NEW    run: 1 ( 647/s), ft: 4475 (647/s), corp: 20 (38b), len:  1/13, t: 0s, mem: 34mb
+NEW    run: 143 (1231/s), ft: 4476 (17/s), corp: 21 (39b), len:  1/13, t: 0s, mem: 35mb
+NEW    run: 144 (1225/s), ft: 4518 (374/s), corp: 21 (41b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 320 (1197/s), ft: 4531 (213/s), corp: 21 (43b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 571 (1221/s), ft: 4655 (387/s), corp: 21 (45b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 652 (1011/s), ft: 4671 (305/s), corp: 21 (47b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 684 ( 801/s), ft: 4672 (232/s), corp: 21 (49b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 770 ( 788/s), ft: 4742 (274/s), corp: 21 (51b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 1211 ( 852/s), ft: 4746 (191/s), corp: 21 (53b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 1292 ( 868/s), ft: 4748 (184/s), corp: 21 (55b), len:  2/13, t: 1s, mem: 37mb
+NEW    run: 1424 ( 848/s), ft: 4752 (166/s), corp: 21 (57b), len:  2/13, t: 2s, mem: 37mb
+NEW    run: 2471 ( 935/s), ft: 4756 (107/s), corp: 21 (59b), len:  2/13, t: 3s, mem: 38mb
+NEW    run: 2977 ( 942/s), ft: 4760 (91/s), corp: 21 (61b), len:  2/13, t: 3s, mem: 39mb
+NEW    run: 3423 ( 960/s), ft: 4764 (81/s), corp: 21 (63b), len:  2/13, t: 4s, mem: 40mb
+NEW    run: 3479 ( 962/s), ft: 4768 (81/s), corp: 21 (65b), len:  2/13, t: 4s, mem: 41mb
+NEW    run: 3890 ( 960/s), ft: 4772 (74/s), corp: 21 (67b), len:  2/13, t: 4s, mem: 41mb
+NEW    run: 4316 ( 974/s), ft: 4776 (68/s), corp: 21 (69b), len:  2/13, t: 4s, mem: 41mb
+NEW    run: 4577 ( 957/s), ft: 4780 (64/s), corp: 21 (71b), len:  2/13, t: 5s, mem: 42mb
+NEW    run: 7 (1012/s), ft: 4216 (145/s), corp: 23 (47b), len:  2/13, t: 0s, mem: 34mb
+NEW    run: 86 (1120/s), ft: 4217 (26/s), corp: 23 (48b), len:  1/13, t: 0s, mem: 35mb
+NEW    run: 112 (1088/s), ft: 4218 (29/s), corp: 23 (50b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 164 (1060/s), ft: 4289 (478/s), corp: 23 (52b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 265 (1026/s), ft: 4596 (1475/s), corp: 23 (54b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 361 (1022/s), ft: 4745 (1500/s), corp: 23 (56b), len:  2/13, t: 0s, mem: 35mb
+NEW    run: 692 (1024/s), ft: 4747 (788/s), corp: 23 (58b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 783 (1029/s), ft: 4748 (700/s), corp: 23 (60b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 1314 (1056/s), ft: 4775 (450/s), corp: 23 (62b), len:  2/13, t: 1s, mem: 37mb
+NEW    run: 1540 (1068/s), ft: 4778 (391/s), corp: 23 (64b), len:  2/13, t: 1s, mem: 38mb
+NEW    run: 1801 (1062/s), ft: 4782 (334/s), corp: 23 (66b), len:  2/13, t: 2s, mem: 38mb
+NEW    run: 2977 (1067/s), ft: 4786 (205/s), corp: 23 (68b), len:  2/13, t: 3s, mem: 40mb

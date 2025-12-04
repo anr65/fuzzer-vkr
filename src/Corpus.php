@@ -2,6 +2,7 @@
 
 namespace PhpFuzzer;
 
+use PhpFuzzer\Diagnostics\CorpusDiagnostics;
 use PhpFuzzer\Mutation\RNG;
 
 final class Corpus {
@@ -17,6 +18,12 @@ final class Corpus {
 
     private int $totalLen = 0;
     private int $maxLen = 0;
+    
+    private ?CorpusDiagnostics $diagnostics = null;
+
+    public function setDiagnostics(?CorpusDiagnostics $diagnostics): void {
+        $this->diagnostics = $diagnostics;
+    }
 
     public function computeUniqueFeatures(CorpusEntry $entry): void {
         $entry->uniqueFeatures = [];
@@ -27,7 +34,8 @@ final class Corpus {
         }
     }
 
-    public function addEntry(CorpusEntry $entry): void {
+    public function addEntry(CorpusEntry $entry, ?string $parentHash = null, bool $skipRegistration = false): void {
+        $coverageBefore = $this->getNumFeatures();
         $this->entriesByHash[$entry->hash] = $entry;
         $this->entriesByIndex[] = $entry;
         foreach ($entry->uniqueFeatures as $feature => $_) {
@@ -36,14 +44,43 @@ final class Corpus {
         $len = \strlen($entry->input);
         $this->totalLen += $len;
         $this->maxLen = max($this->maxLen, $len);
+        
+        // Register seed in diagnostics (unless already registered during corpus loading)
+        if ($this->diagnostics !== null && $this->diagnostics->isEnabled() && !$skipRegistration) {
+            $coverageAfter = $this->getNumFeatures();
+            $parentSeedId = $parentHash ? $this->diagnostics->getSeedId($parentHash) : null;
+            $seedId = $this->diagnostics->registerSeed($entry, $parentHash, $coverageAfter);
+            
+            // Log candidate seed event
+            $this->diagnostics->logCandidateSeed(
+                $entry,
+                $parentSeedId,
+                $coverageBefore,
+                $coverageAfter,
+                'accepted',
+                'new_coverage'
+            );
+        }
     }
 
     // Returns whether the new entry has been added. The old one will always be removed.
     public function replaceEntry(CorpusEntry $origEntry, CorpusEntry $newEntry): bool {
+        $coverageBefore = $this->getNumFeatures();
         unset($this->entriesByHash[$origEntry->hash]);
         $this->entriesByIndex = array_values($this->entriesByHash); // TODO optimize
         if (isset($this->entriesByHash[$newEntry->hash])) {
             // The new entry is already part of the corpus, nothing to do.
+            if ($this->diagnostics !== null && $this->diagnostics->isEnabled()) {
+                $parentSeedId = $this->diagnostics->getSeedId($origEntry->hash);
+                $this->diagnostics->logCandidateSeed(
+                    $newEntry,
+                    $parentSeedId,
+                    $coverageBefore,
+                    $this->getNumFeatures(),
+                    'rejected',
+                    'duplicate_hash'
+                );
+            }
             return false;
         }
 
@@ -51,6 +88,22 @@ final class Corpus {
         $this->entriesByIndex[] = $newEntry;
         $this->totalLen -= \strlen($origEntry->input);
         $this->totalLen += \strlen($newEntry->input);
+        
+        // Handle seed replacement in diagnostics
+        if ($this->diagnostics !== null && $this->diagnostics->isEnabled()) {
+            $coverageAfter = $this->getNumFeatures();
+            $parentSeedId = $this->diagnostics->getSeedId($origEntry->hash);
+            $this->diagnostics->handleSeedReplacement($origEntry, $newEntry);
+            $this->diagnostics->logCandidateSeed(
+                $newEntry,
+                $parentSeedId,
+                $coverageBefore,
+                $coverageAfter,
+                'accepted',
+                'minimization'
+            );
+        }
+        
         return true;
     }
 
@@ -59,7 +112,14 @@ final class Corpus {
             return null;
         }
 
-        return $rng->randomElement($this->entriesByIndex);
+        $entry = $rng->randomElement($this->entriesByIndex);
+        
+        // Record selection in diagnostics
+        if ($this->diagnostics !== null && $entry !== null) {
+            $this->diagnostics->recordSelection($entry);
+        }
+        
+        return $entry;
     }
 
     public function getNumCorpusEntries(): int {
