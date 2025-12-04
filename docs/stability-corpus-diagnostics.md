@@ -1,200 +1,199 @@
-# Stability Corpus Diagnostics
+# Диагностика стабильности корпуса
 
-## Overview
+## Обзор
 
-The corpus diagnostics system provides deep instrumentation to analyze corpus evolution problems, specifically designed to understand why corpus stagnation occurs and how seeds contribute (or fail to contribute) to new coverage.
+Система corpus diagnostics предоставляет глубокие инструменты для анализа проблем с эволюцией корпуса, специально разработанные для понимания того, почему происходит застой корпуса и как seeds способствуют (или не способствуют) созданию нового покрытия.
 
-## Features
+## Особенности
 
-### 1. Per-Seed Lifecycle Tracking
+### 1. Отслеживание жизненного цикла каждого Seed.
 
-Each seed in the corpus is tracked with the following statistics:
+Каждое начальное значение в корпусе отслеживается с помощью следующей статистики:
 
-- **seed_id**: Unique identifier for the seed
-- **origin_hash**: Hash of the parent input that created this seed
-- **creation_run**: Run number when the seed was added to corpus
-- **times_selected**: How many times this seed was chosen for mutation
-- **times_contributed**: How many times mutations from this seed produced new coverage
-- **last_contribution_run**: Last run when this seed contributed
-- **is_dead**: Flag indicating if seed is considered "dead" (no recent contributions)
-- **coverage_at_creation**: Number of unique features when seed was created
-- **size**: Size of the seed input in bytes
+- **seed_id**: Уникальный идентификатор начального значения
+- **origin_hash**: Хэш родительского ввода, который создал это начальное значение
+- **creation_run**: номер запуска, когда начальное значение было добавлено в corpus
+- **times_selected**: Сколько раз это начальное значение выбиралось для мутации
+- **times_contributed**: Сколько раз мутации из этого начального значения приводили к появлению нового покрытия
+- **last_contribution_run**: Последний запуск, когда это начальное значение вносило свой вклад
+- **is_dead**: Флаг, указывающий, считается ли начальное значение "мертвым" (последние вклады отсутствуют).
+- **coverage_at_creation**: Количество уникальных объектов при создании начального значения
+- **size**: Размер входных данных начального значения в байтах
 
-### 2. Corpus Event Logging
+### 2. Ведение журнала событий Corpus
 
-All candidate seeds that could potentially be added to the corpus are logged to `stability_corpus_events.csv`:
+Все исходные данные-кандидаты, которые потенциально могут быть добавлены в корпус, регистрируются в "stability_corpus_events.csv":
 
-**Columns:**
-- `run`: Run number
-- `parent_seed_id`: ID of the seed that produced this candidate
-- `input_hash`: MD5 hash of the candidate input
-- `size`: Size of the candidate input
-- `coverage_before`: Coverage count before adding candidate
-- `coverage_after`: Coverage count after adding candidate
-- `delta`: Coverage delta (after - before)
-- `decision`: `accepted` or `rejected`
-- `reason`: Reason for decision:
-  - `new_coverage`: Accepted due to new unique features
-  - `minimization`: Accepted as smaller replacement
-  - `no_unique_features`: Rejected - no new unique features
-  - `duplicate_hash`: Rejected - hash already exists in corpus
+**Столбцы:**
+- `run`: номер запуска
+- `parent_seed_id`: идентификатор исходного кода, который создал этого кандидата
+- `input_hash`: MD5-хэш входных данных кандидата
+- `size`: размер входных данных кандидата
+- `coverage_before`: количество охватов до добавления кандидата
+- `coverage_after": количество охватов после добавления кандидата
+- "delta": разница в охватах (после - до)
+- `decision`: `принято` или `отклонено`
+- `reason": Причина принятия решения:
+  - "new_coverage": Принято из-за новых уникальных функций
+  - `minimization": Принято в качестве замены меньшего размера
+  - "no_unique_features": Отклонено - нет новых уникальных функций
+  - `duplicate_hash`: Отклонено - хэш уже существует в корпусе
 
-### 3. Corpus Snapshots
+### 3. Снимки корпуса
 
-Periodic snapshots of the entire corpus state are saved as JSON files:
+Периодические снимки состояния всего корпуса сохраняются в виде файлов JSON:
 
-**File format:** `stability_corpus_snapshot_<run>.json`
+**Формат файла:** `stability_corpus_snapshot_<запуск>.json`
 
-**Contents:**
-- Run number and timestamp
-- Complete list of all seeds with their statistics
-- Allows post-analysis of corpus drift and seed lifecycle
+**Содержимое:**
+- Номер запуска и временная метка
+- Полный список всех семян с их статистикой
+- Позволяет проводить последующий анализ дрейфа корпуса и жизненного цикла семян
 
-### 4. Extended Stability Metrics
+### 4. Расширенные показатели стабильности
 
-Enhanced metrics added to stability logs:
+Добавлены расширенные показатели в журналы стабильности:
 
-- **avg_seed_age**: Average age of seeds in runs
-- **active_seeds**: Number of seeds that contributed in recent window
-- **dead_seeds**: Number of seeds marked as dead
-- **dead_selection_percentage**: % of selections that chose dead seeds
-- **contribution_rate**: Overall contribution rate (% of runs that produced new coverage)
+- **avg_seed_age**: Средний возраст семян в запусках
+- **active_seeds**: Количество семян, добавленных в последнее окно
+- **dead_seeds**: Количество семян, помеченных как погибшие
+- **dead_selection_percentage**: % выборок, в которых были выбраны погибшие семена
+- **contribution_rate**: Общий уровень вклада (% запусков, которые привели к новому охвату)
 
-## Usage
+## Использование
 
-### Enable Diagnostics
+### Включить диагностику
 
-```bash
-php bin/php-fuzzer fuzz target.php corpus/ output/ log.txt \
-    --enable-corpus-diagnostics \
-    --corpus-events-log=corpus_events.csv \
-    --corpus-snapshot-frequency=2000 \
-    --stability-log=stability.csv
+``bash
+php bin/php-fuzzer fuzz target.php корпус/ вывод/ log.txt \
+    --включить диагностику корпуса \
+    --журнал событий корпуса=corpus_events.csv \
+    --корпус-моментальный снимок-частота=2000 \
+    --стабильность-журнал=stability.csv
 ```
 
-### Command-Line Options
+### Параметры командной строки
 
-- `--enable-corpus-diagnostics`: Enable diagnostic instrumentation (required)
-- `--corpus-events-log=<file>`: Path to corpus events CSV file (default: `corpus_events.csv`)
-- `--corpus-snapshot-frequency=<runs>`: Create snapshot every N runs (default: 2000)
+- `--enable-corpus-diagnostics`: Включить диагностические инструменты (обязательно).
+- `--corpus-events-log=<файл>`: Путь к CSV-файлу corpus events (по умолчанию: `corpus_events.csv`)
+- `--corpus-snapshot-frequency=<запуски>`: Создавать моментальный снимок при каждом N запусках (по умолчанию: 2000)
 
-## Interpreting Results
+## Интерпретация результатов
 
-### Understanding Seed Lifecycle
+### Понимание жизненного цикла исходного кода
 
-1. **Active Seeds**: Seeds that contributed to new coverage in the recent window (last 1000 runs or half of total runs, whichever is smaller)
-2. **Dead Seeds**: Seeds that haven't contributed in the recent window
-3. **Contribution Rate**: Percentage of runs that resulted in new coverage
+1. **Активные сеянцы**: Сеянцы, которые внесли свой вклад в новое покрытие в недавнем окне (последние 1000 просмотров или половина от общего количества просмотров, в зависимости от того, что меньше)
+2. ** Неактивные сеянцы**: Сеянцы, которые не внесли свой вклад в недавнее окно
+3. **Коэффициент вклада**: Процент просмотров, которые привели к появлению нового покрытия
 
-### Analyzing Stagnation
+### Анализ стагнации
 
-When corpus size stays constant despite new coverage:
+Когда размер списка остается неизменным, несмотря на новый охват:
 
-1. Check `corpus_events.csv` for rejected candidates:
-   - Look for patterns in rejection reasons
-   - Count how many candidates were rejected vs accepted
+1. Проверьте "corpus_events.csv" на наличие отклоненных кандидатов:
+   - Найдите закономерности в причинах отклонения
+   - Подсчитайте, сколько кандидатов было отклонено по сравнению с принятыми
 
-2. Analyze seed statistics in snapshots:
-   - Which seeds are selected most often?
-   - Which seeds contribute most?
-   - Are dead seeds being selected frequently?
+2. Проанализируйте статистику исходных данных в моментальных снимках:
+   - Какие исходные данные выбираются чаще всего?
+   - Какие семена вносят наибольший вклад?
+   - Часто ли отбираются мертвые семена?
 
-3. Review extended metrics:
-   - High `dead_selection_percentage` indicates inefficient seed selection
-   - Low `contribution_rate` indicates overall stagnation
-   - Increasing `avg_seed_age` suggests corpus is not evolving
+3. Просмотрите расширенные показатели:
+   - Высокий процент "мертвого выбора" указывает на неэффективный отбор семян
+   - Низкий показатель "вклада" указывает на общую стагнацию
+   - Увеличение `avg_seed_age` указывает на то, что корпус не развивается
 
-### Example Analysis Scenarios
+### Примеры сценариев анализа
 
-#### Scenario 1: Corpus Not Growing
+#### Сценарий 1: Корпус не увеличивается
 
-**Symptoms:**
-- Corpus size constant at 22 entries
-- New coverage appears but corpus doesn't grow
+**Симптомы:**
+- Размер корпуса остается неизменным и составляет 22 записи
+- Появляется новое покрытие, но корпус не увеличивается
 
-**Diagnosis:**
-1. Check `corpus_events.csv` - are candidates being rejected?
-2. Look for `decision=rejected` entries with reason `no_unique_features`
-3. Check if accepted entries are replacing existing ones (minimization)
+**Диагностика:**
+1. Проверьте `corpus_events.csv` - отклоняются ли кандидаты?
+2. Найдите записи "решение=отклонено" с указанием причины "no_unique_features"
+3. Проверьте, заменяют ли принятые записи существующие (минимизация)
 
-**Possible Causes:**
-- All new coverage is already covered by existing seeds
-- Minimization is replacing seeds instead of adding new ones
-- Unique feature detection is too strict
+**Возможные причины:**
+- Все новые записи уже покрыты существующими исходными данными
+- Минимизация заключается в замене исходных данных вместо добавления новых
+- Определение уникальных характеристик слишком строго
 
-#### Scenario 2: Dead Seeds Dominating
+#### Сценарий 2: Преобладают мертвые семена
 
-**Symptoms:**
-- High `dead_selection_percentage`
-- Low `contribution_rate`
-- Many seeds with `times_contributed=0`
+**Симптомы:**
+- Высокий процент "мертвого выбора"
+- Низкий уровень "вклада"
+- У многих семян значение "times_contributed=0`
 
-**Diagnosis:**
-1. Review snapshots to identify dead seeds
-2. Check if dead seeds are being selected frequently
-3. Analyze why dead seeds aren't producing new coverage
+**Диагноз:**
+1. Просмотрите снимки, чтобы определить мертвые семена
+2. Проверьте, часто ли отбираются неработающие исходные данные
+3. Проанализируйте, почему неработающие исходные данные не дают нового покрытия
 
-**Possible Causes:**
-- Seed selection is not weighted by contribution history
-- Dead seeds represent exhausted code paths
-- Mutation strategies are not diverse enough
+**Возможные причины:**
+- Выбор исходных данных не учитывает историю вкладов
+- Неработающие исходные данные представляют собой исчерпанные пути кода
+- Стратегии мутации недостаточно разнообразны
 
-#### Scenario 3: Low Contribution Rate
+#### Сценарий 3: Низкий уровень вклада
 
-**Symptoms:**
-- `contribution_rate` < 5%
-- Long stagnation periods
-- Most runs produce no new coverage
+**Симптомы:**
+- "коэффициент полезного действия" < 5%
+- Длительные периоды застоя
+- Большинство запусков не дают нового покрытия
 
-**Diagnosis:**
-1. Check which seeds are contributing
-2. Analyze coverage deltas in events log
-3. Review seed age distribution
+**Диагностика:**
+1. Проверьте, какие семена вносят свой вклад
+2. Проанализируйте разницу в покрытии в журнале событий
+3. Просмотрите распределение по возрасту семян
 
-**Possible Causes:**
-- Fuzzing has reached saturation
-- Mutation strategies need improvement
-- Target has limited code paths
+**Возможные причины:**
+- Размывание достигло максимума
+- Стратегии мутации нуждаются в улучшении
+- У цели ограниченное количество путей к коду
 
-## Implementation Details
+## Подробности реализации
 
-### Seed Registration
+### Регистрация исходных данных
 
-Seeds are registered when:
-1. Loading initial corpus (during `loadCorpus()`)
-2. Adding new entries (during `addEntry()`)
-3. Replacing entries (during `replaceEntry()`)
+Исходные данные регистрируются, когда:
+1. Загружается исходный корпус (во время `loadCorpus()`)
+2. Добавляются новые записи (во время `addEntry()`)
+3. Заменяются записи (во время `replaceEntry()`)
 
-### Dead Seed Detection
+### Обнаружение мертвых семян
 
-Seeds are marked as dead if:
-- They have never contributed (`last_contribution_run === null`) AND were created before the threshold run
-- OR their last contribution was before the threshold run
+Семена помечаются как мертвые, если:
+- Они никогда не вносили свой вклад (`last_contribution_run === null`) И были созданы до порогового запуска
+- ИЛИ их последний вклад был внесен до порогового запуска
 
-Threshold run = current_run - min(1000, current_run / 2)
+Пороговый запуск = current_run - min(1000, current_run / 2)
 
-### Snapshot Frequency
+### Частота создания моментальных снимков
 
-Snapshots are created:
-- Every N runs (configurable via `--corpus-snapshot-frequency`)
-- At the end of fuzzing (final snapshot)
+Создаются моментальные снимки:
+- Запускаются каждые N запусков (настраивается с помощью `--corpus-snapshot-frequency`)
+- В конце фаззинга (финальный моментальный снимок)
 
-## Performance Impact
+## Влияние на производительность
 
-Diagnostics are designed to be lightweight:
+Диагностика разработана таким образом, чтобы быть простой:
 
-- Event logging: O(1) per candidate seed
-- Seed tracking: O(1) per selection/contribution
-- Snapshot creation: O(N) where N = corpus size, but only every N runs
+- Регистрация событий: O(1) на исходное число кандидатов
+- Отслеживание семян: O(1) для каждого вида/вклада
+- Создание моментальных снимков: O(N), где N = размер корпуса, но выполняется только каждый N запусков
 
-When disabled (default), there is **zero performance impact**.
+Если функция отключена (по умолчанию), это **не влияет на производительность **.
 
-## Future Improvements
+## Будущие улучшения
 
-Potential enhancements based on diagnostic insights:
+Возможные улучшения, основанные на результатах диагностики:
 
-1. **Adaptive Seed Selection**: Weight selection by contribution history
-2. **Dead Seed Removal**: Periodically remove seeds that haven't contributed
-3. **Coverage-Based Prioritization**: Prioritize seeds that cover rare code paths
-4. **Mutation Strategy Tuning**: Adjust mutation strategies based on seed performance
-
+1. ** Адаптивный отбор исходных данных **: Выбор веса по истории вклада
+2. ** Удаление неактивных исходных данных **: Периодическое удаление исходных данных, которые не внесли свой вклад
+3. ** Определение приоритетов на основе охвата **: Определение приоритетов исходных данных, которые охватывают редкие пути кода
+4. ** Настройка стратегии мутации **: Настройка стратегии мутации в зависимости от производительности исходного кода
