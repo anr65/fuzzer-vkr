@@ -28,3 +28,9 @@ Homestead.json
 .env.production
 .phpactor.json
 auth.json
+
+# Stability logger output files
+*stability*.csv
+*stability*.json
+stability*.csv
+stability*.json

@@ -19183,3 +19183,28 @@ NEW    run: 119982 (1075/s), ft: 9178 (45/s), corp: 25 (2273b), len:  2/13, t: 1
 NEW    run: 120003 (1075/s), ft: 9182 (45/s), corp: 25 (2275b), len:  2/13, t: 112s, mem: 290mb
 Memory limit of 300 MB exceeded, aborting
 [!] Total timeout of 30 minutes reached. Exiting.
+NEW    run: 1 ( 774/s), ft: 4821 (774/s), corp: 23 (47b), len: 12/13, t: 0s, mem: 36mb
+REDUCE run: 179 ( 765/s), ft: 4821 (4/s), corp: 23 (37b), len:  2/13, t: 0s, mem: 36mb
+NEW    run: 250 ( 816/s), ft: 4865 (147/s), corp: 23 (39b), len:  2/13, t: 0s, mem: 36mb
+REDUCE run: 421 ( 928/s), ft: 4865 (99/s), corp: 22 (39b), len:  1/13, t: 0s, mem: 36mb
+NEW    run: 592 ( 974/s), ft: 4937 (192/s), corp: 22 (41b), len:  2/13, t: 1s, mem: 36mb
+NEW    run: 1110 (1013/s), ft: 4939 (109/s), corp: 22 (43b), len:  2/13, t: 1s, mem: 37mb
+NEW    run: 2401 (1045/s), ft: 5077 (112/s), corp: 22 (45b), len:  2/13, t: 2s, mem: 39mb
+NEW    run: 2907 (1042/s), ft: 5097 (99/s), corp: 22 (47b), len:  2/13, t: 3s, mem: 39mb
+NEW    run: 3537 (1044/s), ft: 5103 (84/s), corp: 22 (49b), len:  2/13, t: 3s, mem: 41mb
+NEW    run: 3608 (1042/s), ft: 5107 (83/s), corp: 22 (51b), len:  2/13, t: 3s, mem: 41mb
+NEW    run: 3964 (1048/s), ft: 5114 (78/s), corp: 22 (53b), len:  2/13, t: 4s, mem: 42mb
+NEW    run: 3973 (1048/s), ft: 5118 (79/s), corp: 22 (55b), len:  2/13, t: 4s, mem: 42mb
+NEW    run: 4059 (1051/s), ft: 5122 (78/s), corp: 22 (57b), len:  2/13, t: 4s, mem: 42mb
+NEW    run: 4435 (1056/s), ft: 5126 (73/s), corp: 22 (59b), len:  2/13, t: 4s, mem: 42mb
+NEW    run: 4966 (1060/s), ft: 5130 (66/s), corp: 22 (61b), len:  2/13, t: 5s, mem: 43mb
+NEW    run: 1 ( 587/s), ft: 4218 (587/s), corp: 23 (44b), len:  2/13, t: 0s, mem: 34mb
+NEW    run: 337 ( 690/s), ft: 4219 (4/s), corp: 23 (46b), len:  2/13, t: 0s, mem: 35mb
+REDUCE run: 431 ( 724/s), ft: 4219 (3/s), corp: 22 (46b), len:  1/13, t: 1s, mem: 35mb
+NEW    run: 3072 ( 713/s), ft: 4533 (73/s), corp: 22 (48b), len:  2/13, t: 4s, mem: 38mb
+NEW    run: 3413 ( 715/s), ft: 4555 (71/s), corp: 22 (50b), len:  2/13, t: 5s, mem: 40mb
+NEW    run: 3759 ( 699/s), ft: 4625 (76/s), corp: 22 (52b), len:  2/13, t: 5s, mem: 40mb
+NEW    run: 3765 ( 699/s), ft: 4626 (76/s), corp: 22 (54b), len:  2/13, t: 5s, mem: 40mb
+NEW    run: 3836 ( 701/s), ft: 4629 (75/s), corp: 22 (56b), len:  2/13, t: 5s, mem: 40mb
+NEW    run: 3988 ( 699/s), ft: 4752 (94/s), corp: 22 (58b), len:  2/13, t: 6s, mem: 40mb
+NEW    run: 4789 ( 712/s), ft: 4766 (82/s), corp: 22 (60b), len:  2/13, t: 7s, mem: 41mb

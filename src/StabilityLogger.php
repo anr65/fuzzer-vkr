@@ -1,0 +1,214 @@
+<?php declare(strict_types=1);
+
+namespace PhpFuzzer;
+
+/**
+ * Logs stability and degradation metrics for the fuzzing corpus.
+ * Tracks coverage over time, corpus contribution, and stagnation periods.
+ */
+final class StabilityLogger {
+    private string $logFile;
+    private string $format; // 'csv' or 'json'
+    private float $startTime;
+    private int $logInterval; // Log every N runs
+    private int $lastLogRun = 0;
+    private bool $isFirstJsonEntry = true;
+    
+    // Current interval tracking
+    private int $intervalStartRun = 0;
+    private int $intervalStartFeatures = 0;
+    private float $intervalStartTime = 0.0;
+    
+    // Stagnation tracking
+    private int $longestStagnationRuns = 0;
+    private float $longestStagnationSeconds = 0.0;
+    private int $currentStagnationStartRun = 0;
+    private float $currentStagnationStartTime = 0.0;
+    
+    // Corpus entry tracking
+    /** @var array<string, bool> Map of corpus entry hashes that produced new coverage in current interval */
+    private array $intervalContributingEntries = [];
+    
+    /** @var array<string, int> Map of corpus entry hashes to last run when they contributed */
+    private array $entryLastContribution = [];
+    
+    public function __construct(string $logFile, string $format = 'csv', int $logInterval = 1000) {
+        $this->logFile = $logFile;
+        $this->format = $format;
+        $this->logInterval = $logInterval;
+        
+        // Ensure directory exists
+        $dir = dirname($logFile);
+        if ($dir && !is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        
+        // Initialize log file with header
+        $this->initializeLogFile();
+    }
+    
+    public function start(float $startTime): void {
+        $this->startTime = $startTime;
+        $this->intervalStartTime = $startTime;
+        $this->currentStagnationStartTime = $startTime;
+    }
+    
+    /**
+     * Record that a corpus entry contributed to new coverage.
+     */
+    public function recordContribution(string $entryHash, int $currentRun): void {
+        $this->intervalContributingEntries[$entryHash] = true;
+        $this->entryLastContribution[$entryHash] = $currentRun;
+        
+        // Reset stagnation tracking if we got new coverage
+        if ($currentRun > $this->currentStagnationStartRun) {
+            $stagnationRuns = $currentRun - $this->currentStagnationStartRun;
+            $stagnationSeconds = (microtime(true) - $this->currentStagnationStartTime);
+            
+            if ($stagnationRuns > $this->longestStagnationRuns) {
+                $this->longestStagnationRuns = $stagnationRuns;
+            }
+            if ($stagnationSeconds > $this->longestStagnationSeconds) {
+                $this->longestStagnationSeconds = $stagnationSeconds;
+            }
+            
+            $this->currentStagnationStartRun = $currentRun;
+            $this->currentStagnationStartTime = microtime(true);
+        }
+    }
+    
+    /**
+     * Log metrics if interval has elapsed.
+     */
+    public function logIfInterval(int $runs, int $totalFeatures, int $corpusSize): void {
+        if ($runs - $this->lastLogRun < $this->logInterval) {
+            return;
+        }
+        
+        $this->logMetrics($runs, $totalFeatures, $corpusSize);
+        $this->lastLogRun = $runs;
+    }
+    
+    /**
+     * Force log current metrics (e.g., at end of fuzzing).
+     */
+    public function logMetrics(int $runs, int $totalFeatures, int $corpusSize): void {
+        $now = microtime(true);
+        $timestamp = $now - $this->startTime;
+        
+        // Calculate metrics for current interval
+        $intervalRuns = $runs - $this->intervalStartRun;
+        $intervalFeatures = $totalFeatures - $this->intervalStartFeatures;
+        $intervalSeconds = $now - $this->intervalStartTime;
+        
+        // Calculate % of corpus entries that contributed in this interval
+        $contributingCount = count($this->intervalContributingEntries);
+        $contributionPercentage = $corpusSize > 0 
+            ? (100.0 * $contributingCount / $corpusSize) 
+            : 0.0;
+        
+        // Calculate current stagnation
+        $currentStagnationRuns = $runs - $this->currentStagnationStartRun;
+        $currentStagnationSeconds = $now - $this->currentStagnationStartTime;
+        
+        if ($this->format === 'json') {
+            $this->logJson([
+                'timestamp' => round($timestamp, 2),
+                'runs' => $runs,
+                'unique_features' => $totalFeatures,
+                'corpus_size' => $corpusSize,
+                'interval_runs' => $intervalRuns,
+                'interval_features' => $intervalFeatures,
+                'interval_seconds' => round($intervalSeconds, 2),
+                'contributing_entries' => $contributingCount,
+                'contribution_percentage' => round($contributionPercentage, 2),
+                'longest_stagnation_runs' => $this->longestStagnationRuns,
+                'longest_stagnation_seconds' => round($this->longestStagnationSeconds, 2),
+                'current_stagnation_runs' => $currentStagnationRuns,
+                'current_stagnation_seconds' => round($currentStagnationSeconds, 2),
+            ]);
+        } else {
+            $this->logCsv([
+                round($timestamp, 2),
+                $runs,
+                $totalFeatures,
+                $corpusSize,
+                $intervalRuns,
+                $intervalFeatures,
+                round($intervalSeconds, 2),
+                $contributingCount,
+                round($contributionPercentage, 2),
+                $this->longestStagnationRuns,
+                round($this->longestStagnationSeconds, 2),
+                $currentStagnationRuns,
+                round($currentStagnationSeconds, 2),
+            ]);
+        }
+        
+        // Reset interval tracking
+        $this->intervalStartRun = $runs;
+        $this->intervalStartFeatures = $totalFeatures;
+        $this->intervalStartTime = $now;
+        $this->intervalContributingEntries = [];
+    }
+    
+    private function initializeLogFile(): void {
+        if ($this->format === 'json') {
+            // JSON format: array of objects
+            file_put_contents($this->logFile, "[\n");
+        } else {
+            // CSV format: header row
+            $header = [
+                'timestamp',
+                'runs',
+                'unique_features',
+                'corpus_size',
+                'interval_runs',
+                'interval_features',
+                'interval_seconds',
+                'contributing_entries',
+                'contribution_percentage',
+                'longest_stagnation_runs',
+                'longest_stagnation_seconds',
+                'current_stagnation_runs',
+                'current_stagnation_seconds',
+            ];
+            file_put_contents($this->logFile, implode(',', $header) . "\n");
+        }
+    }
+    
+    private function logCsv(array $values): void {
+        $line = implode(',', array_map(function($v) {
+            return is_string($v) ? '"' . str_replace('"', '""', $v) . '"' : (string)$v;
+        }, $values)) . "\n";
+        file_put_contents($this->logFile, $line, FILE_APPEND);
+    }
+    
+    private function logJson(array $data): void {
+        $json = json_encode($data, JSON_PRETTY_PRINT);
+        $prefix = $this->isFirstJsonEntry ? "" : ",\n";
+        $this->isFirstJsonEntry = false;
+        file_put_contents($this->logFile, $prefix . $json, FILE_APPEND);
+    }
+    
+    /**
+     * Finalize log file (close JSON array, etc.)
+     */
+    public function finalize(): void {
+        if ($this->format === 'json') {
+            file_put_contents($this->logFile, "\n]\n", FILE_APPEND);
+        }
+    }
+    
+    /**
+     * Get statistics about corpus entry contributions.
+     * @return array<string, mixed>
+     */
+    public function getContributionStats(): array {
+        return [
+            'total_tracked_entries' => count($this->entryLastContribution),
+            'entries_contributing_in_interval' => count($this->intervalContributingEntries),
+        ];
+    }
+}
+

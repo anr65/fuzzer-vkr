@@ -46,6 +46,7 @@ final class Fuzzer {
     // Counts all crashes, including duplicates
     private int $crashes = 0;
     private int $maxCrashes = 100;
+    private ?StabilityLogger $stabilityLogger = null;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -108,6 +109,10 @@ final class Fuzzer {
         $this->logFile = $path;
     }
 
+    public function setStabilityLogFile(string $path, string $format = 'csv', int $logInterval = 1000): void {
+        $this->stabilityLogger = new StabilityLogger($path, $format, $logInterval);
+    }
+
 
     public function startInstrumentation(): void {
         $this->interceptor->setUp();
@@ -124,6 +129,12 @@ final class Fuzzer {
         // Don't count runs while loading the corpus.
         $this->runs = 0;
         $this->startTime = microtime(true);
+        
+        // Initialize stability logger if configured
+        if ($this->stabilityLogger !== null) {
+            $this->stabilityLogger->start($this->startTime);
+        }
+        
         while ($this->runs < $this->maxRuns) {
 
             if (memory_get_usage(true) / 1024 / 1024 >= $this->memory_limit) {
@@ -160,6 +171,12 @@ final class Fuzzer {
                     $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
 
                     $this->lastInterestingRun = $this->runs;
+                    
+                    // Track contribution: the original entry led to new coverage
+                    if ($this->stabilityLogger !== null && $origEntry !== null) {
+                        $this->stabilityLogger->recordContribution($origEntry->hash, $this->runs);
+                    }
+                    
                     $this->printAction('NEW', $entry);
                     break;
                 }
@@ -177,6 +194,12 @@ final class Fuzzer {
                     unlink($origEntry->path);
 
                     $this->lastInterestingRun = $this->runs;
+                    
+                    // Track contribution: the original entry led to a reduction (also counts as contribution)
+                    if ($this->stabilityLogger !== null) {
+                        $this->stabilityLogger->recordContribution($origEntry->hash, $this->runs);
+                    }
+                    
                     $this->printAction('REDUCE', $entry);
                     break;
                 }
@@ -190,6 +213,25 @@ final class Fuzzer {
                     $this->lastInterestingRun = $this->runs;
                 }
             }
+            
+            // Log stability metrics periodically
+            if ($this->stabilityLogger !== null) {
+                $this->stabilityLogger->logIfInterval(
+                    $this->runs,
+                    $this->corpus->getNumFeatures(),
+                    $this->corpus->getNumCorpusEntries()
+                );
+            }
+        }
+        
+        // Final log at end of fuzzing
+        if ($this->stabilityLogger !== null) {
+            $this->stabilityLogger->logMetrics(
+                $this->runs,
+                $this->corpus->getNumFeatures(),
+                $this->corpus->getNumCorpusEntries()
+            );
+            $this->stabilityLogger->finalize();
         }
     }
 
@@ -398,6 +440,15 @@ final class Fuzzer {
             Option::create(null, 'len-control-factor', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('num')
                 ->setDescription('A higher value will increase the maximum length more slowly'),
+            Option::create(null, 'stability-log', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('file')
+                ->setDescription('Enable stability logging to file (CSV or JSON)'),
+            Option::create(null, 'stability-format', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('format')
+                ->setDescription('Stability log format: csv or json (default: csv)'),
+            Option::create(null, 'stability-interval', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Log stability metrics every N runs (default: 1000)'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -451,6 +502,13 @@ final class Fuzzer {
 
         if (isset($opts['memory-limit'])) {
             $this->memory_limit = (int) $opts['memory-limit'];
+        }
+
+        // Setup stability logger if requested
+        if (isset($opts['stability-log'])) {
+            $format = $opts['stability-format'] ?? 'csv';
+            $interval = isset($opts['stability-interval']) ? (int) $opts['stability-interval'] : 1000;
+            $this->setStabilityLogFile($opts['stability-log'], $format, $interval);
         }
 
         try {
