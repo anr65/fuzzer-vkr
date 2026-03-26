@@ -619,6 +619,9 @@ final class Fuzzer {
             Option::create(null, 'mutator-profile', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('profile_id')
                 ->setDescription('Mutator profile ID from config/mutator_profiles.json. Use "default" for all mutators.'),
+            Option::create(null, 'profile', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('path')
+                ->setDescription('Path to PHP mutator profile file that returns array config.'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -684,8 +687,24 @@ final class Fuzzer {
             $this->rng->setSeed($seed);
         }
 
-        // Setup mutator profile if provided
+        if (isset($opts['profile'])) {
+            $profilePath = (string) $opts['profile'];
+            if (!file_exists($profilePath)) {
+                throw new FuzzerException("Profile file not found: $profilePath");
+            }
+
+            $profile = require $profilePath;
+            if (!is_array($profile)) {
+                throw new FuzzerException("Profile file must return array: $profilePath");
+            }
+            $this->setMutatorProfile($profile);
+        }
+
+        // Setup legacy mutator profile if provided
         if (isset($opts['mutator-profile'])) {
+            if (isset($opts['profile'])) {
+                throw new FuzzerException('Use either --profile or --mutator-profile, not both');
+            }
             $profileId = $opts['mutator-profile'];
             $profilePath = __DIR__ . '/../config/mutator_profiles.json';
             

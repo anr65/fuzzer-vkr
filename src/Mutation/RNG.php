@@ -48,6 +48,42 @@ final class RNG {
         return $array[$this->randomInt(\count($array))];
     }
 
+    /**
+     * Pick a key using weighted random selection.
+     *
+     * @param array<string, float|int> $weights
+     */
+    public function weightedRandomKey(array $weights): ?string {
+        $normalizedWeights = [];
+        $totalWeight = 0.0;
+        foreach ($weights as $key => $weight) {
+            if (!\is_numeric($weight)) {
+                continue;
+            }
+            $numericWeight = (float) $weight;
+            if ($numericWeight <= 0.0) {
+                continue;
+            }
+            $normalizedWeights[$key] = $numericWeight;
+            $totalWeight += $numericWeight;
+        }
+
+        if ($totalWeight <= 0.0) {
+            return null;
+        }
+
+        $target = ($this->randomInt(PHP_INT_MAX) / PHP_INT_MAX) * $totalWeight;
+        $cursor = 0.0;
+        foreach ($normalizedWeights as $key => $weight) {
+            $cursor += $weight;
+            if ($target <= $cursor) {
+                return $key;
+            }
+        }
+
+        return (string) array_key_last($normalizedWeights);
+    }
+
     public function randomBool(): bool {
         return (bool) \mt_rand(0, 1);
     }

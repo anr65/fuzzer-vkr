@@ -10,15 +10,27 @@ final class Mutator {
     private Dictionary $dictionary;
     /** @var list<callable> */
     private array $mutators;
+    /** @var array<string, callable> */
+    private array $allMutators;
+    /** @var array<string, float|int> */
+    private array $flatProfileWeights = [];
+    /**
+     * @var array<string, array{weight: float|int, operators: array<string, float|int>}>
+     */
+    private array $groupProfileWeights = [];
+    private bool $useFlatProfileWeights = false;
+    private bool $useGroupProfileWeights = false;
     private ?string $crossOverWith = null; // TODO: Get rid of this
+    private YamlStructuralMutator $yamlStructuralMutator;
 
 
     public function __construct(RNG $rng, Dictionary $dictionary, ?array $mutatorProfile = null) {
         $this->rng = $rng;
         $this->dictionary = $dictionary;
+        $this->yamlStructuralMutator = new YamlStructuralMutator($rng);
         
         // Build full mutator map
-        $allMutators = [
+        $this->allMutators = [
             'EraseBytes' => [$this, 'mutateEraseBytes'],
             'InsertByte' => [$this, 'mutateInsertByte'],
             'InsertRepeatedBytes' => [$this, 'mutateInsertRepeatedBytes'],
@@ -30,24 +42,11 @@ final class Mutator {
             'CopyPart' => [$this, 'mutateCopyPart'],
             'CrossOver' => [$this, 'mutateCrossOver'],
             'AddWordFromManualDictionary' => [$this, 'mutateAddWordFromManualDictionary'],
+            'yaml_structural' => [$this, 'mutateYamlStructural'],
         ];
-        
-        // If profile is provided, filter mutators; otherwise use all
-        if ($mutatorProfile !== null && !empty($mutatorProfile)) {
-            $this->mutators = [];
-            foreach ($mutatorProfile as $mutatorName) {
-                if (isset($allMutators[$mutatorName])) {
-                    $this->mutators[] = $allMutators[$mutatorName];
-                }
-            }
-            // If profile resulted in empty mutators, fall back to all
-            if (empty($this->mutators)) {
-                $this->mutators = array_values($allMutators);
-            }
-        } else {
-            // Default: use all mutators
-            $this->mutators = array_values($allMutators);
-        }
+
+        $this->mutators = $this->buildLegacyMutatorList($mutatorProfile);
+        $this->initializeWeightedProfiles($mutatorProfile);
     }
 
     /**
@@ -55,6 +54,13 @@ final class Mutator {
      */
     public function getMutators(): array {
         return $this->mutators;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getAvailableMutatorNames(): array {
+        return array_keys($this->allMutators);
     }
 
     private function randomBiasedChar(): string {
@@ -349,15 +355,147 @@ final class Mutator {
         }
     }
 
+    public function mutateYamlStructural(string $str, int $maxLen): ?string {
+        if (\strlen($str) > $maxLen) {
+            return null;
+        }
+        $mutated = $this->yamlStructuralMutator->mutate($str);
+        if (\strlen($mutated) > $maxLen) {
+            return null;
+        }
+        return $mutated;
+    }
+
     public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
         $this->crossOverWith = $crossOverWith;
         while (true) {
-            $mutator = $this->rng->randomElement($this->mutators);
+            $mutator = $this->selectMutatorCallable();
             $newStr = $mutator($str, $maxLen);
             if (null !== $newStr) {
                 assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $mutator[1]);
                 return $newStr;
             }
         }
+    }
+
+    /**
+     * @param array<mixed>|null $mutatorProfile
+     * @return list<callable>
+     */
+    private function buildLegacyMutatorList(?array $mutatorProfile): array {
+        if ($mutatorProfile === null || empty($mutatorProfile)) {
+            return array_values($this->allMutators);
+        }
+
+        $resolvedMutators = [];
+        foreach ($mutatorProfile as $mutatorName) {
+            if (\is_string($mutatorName) && isset($this->allMutators[$mutatorName])) {
+                $resolvedMutators[] = $this->allMutators[$mutatorName];
+            }
+        }
+
+        if (empty($resolvedMutators)) {
+            return array_values($this->allMutators);
+        }
+
+        return $resolvedMutators;
+    }
+
+    /**
+     * @param array<mixed>|null $mutatorProfile
+     */
+    private function initializeWeightedProfiles(?array $mutatorProfile): void {
+        if ($mutatorProfile === null || empty($mutatorProfile)) {
+            return;
+        }
+
+        $groupProfile = $this->normalizeGroupedProfile($mutatorProfile);
+        if (!empty($groupProfile)) {
+            $this->groupProfileWeights = $groupProfile;
+            $this->useGroupProfileWeights = true;
+            return;
+        }
+
+        $flatProfile = $this->normalizeFlatProfile($mutatorProfile);
+        if (!empty($flatProfile)) {
+            $this->flatProfileWeights = $flatProfile;
+            $this->useFlatProfileWeights = true;
+        }
+    }
+
+    /**
+     * @param array<mixed> $mutatorProfile
+     * @return array<string, float|int>
+     */
+    private function normalizeFlatProfile(array $mutatorProfile): array {
+        $normalized = [];
+        foreach ($mutatorProfile as $operatorName => $weight) {
+            if (!\is_string($operatorName) || !isset($this->allMutators[$operatorName]) || !\is_numeric($weight)) {
+                continue;
+            }
+            if ((float) $weight <= 0.0) {
+                continue;
+            }
+            $normalized[$operatorName] = $weight;
+        }
+        return $normalized;
+    }
+
+    /**
+     * @param array<mixed> $mutatorProfile
+     * @return array<string, array{weight: float|int, operators: array<string, float|int>}>
+     */
+    private function normalizeGroupedProfile(array $mutatorProfile): array {
+        $normalized = [];
+        foreach ($mutatorProfile as $groupName => $groupConfig) {
+            if (!\is_string($groupName) || !\is_array($groupConfig)) {
+                continue;
+            }
+            if (!isset($groupConfig['weight'], $groupConfig['operators'])) {
+                continue;
+            }
+            if (!\is_numeric($groupConfig['weight']) || !\is_array($groupConfig['operators'])) {
+                continue;
+            }
+            if ((float) $groupConfig['weight'] <= 0.0) {
+                continue;
+            }
+
+            $operators = $this->normalizeFlatProfile($groupConfig['operators']);
+            if (empty($operators)) {
+                continue;
+            }
+
+            $normalized[$groupName] = [
+                'weight' => $groupConfig['weight'],
+                'operators' => $operators,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function selectMutatorCallable(): callable {
+        if ($this->useGroupProfileWeights) {
+            $selectedGroup = $this->rng->weightedRandomKey(array_map(
+                static fn(array $config) => $config['weight'],
+                $this->groupProfileWeights
+            ));
+            if ($selectedGroup !== null && isset($this->groupProfileWeights[$selectedGroup])) {
+                $selectedOperator = $this->rng->weightedRandomKey($this->groupProfileWeights[$selectedGroup]['operators']);
+                if ($selectedOperator !== null && isset($this->allMutators[$selectedOperator])) {
+                    return $this->allMutators[$selectedOperator];
+                }
+            }
+        }
+
+        if ($this->useFlatProfileWeights) {
+            $selectedOperator = $this->rng->weightedRandomKey($this->flatProfileWeights);
+            if ($selectedOperator !== null && isset($this->allMutators[$selectedOperator])) {
+                return $this->allMutators[$selectedOperator];
+            }
+        }
+
+        return $this->rng->randomElement($this->mutators);
     }
 }
