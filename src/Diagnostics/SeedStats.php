@@ -16,6 +16,7 @@ final class SeedStats {
     public int $coverageAtCreation = 0;
     public int $size;
     public string $inputHash;
+    public string $seedClass;
 
     public function __construct(
         string $seedId,
@@ -23,7 +24,8 @@ final class SeedStats {
         string $originHash,
         int $creationRun,
         int $size,
-        int $coverageAtCreation
+        int $coverageAtCreation,
+        string $seedClass = 'default'
     ) {
         $this->seedId = $seedId;
         $this->inputHash = $inputHash;
@@ -31,6 +33,7 @@ final class SeedStats {
         $this->creationRun = $creationRun;
         $this->size = $size;
         $this->coverageAtCreation = $coverageAtCreation;
+        $this->seedClass = $seedClass;
     }
 
     /**
@@ -72,6 +75,7 @@ final class SeedStats {
             'is_dead' => $this->isDead,
             'coverage_at_creation' => $this->coverageAtCreation,
             'size' => $this->size,
+            'seed_class' => $this->seedClass,
         ];
     }
 }

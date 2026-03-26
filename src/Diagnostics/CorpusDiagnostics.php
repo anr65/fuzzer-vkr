@@ -64,7 +64,8 @@ final class CorpusDiagnostics {
     public function registerSeed(
         CorpusEntry $entry,
         ?string $parentHash,
-        int $coverageAtCreation
+        int $coverageAtCreation,
+        ?string $seedClass = null
     ): string {
         if (!$this->enabled) {
             return '';
@@ -79,7 +80,8 @@ final class CorpusDiagnostics {
             $originHash,
             $this->getCurrentRun ? ($this->getCurrentRun)() : 0,
             \strlen($entry->input),
-            $coverageAtCreation
+            $coverageAtCreation,
+            $seedClass ?? 'default'
         );
 
         $this->seedStats[$entry->hash] = $stats;
@@ -130,7 +132,11 @@ final class CorpusDiagnostics {
         int $coverageBefore,
         int $coverageAfter,
         string $decision,
-        string $reason = ''
+        string $reason = '',
+        ?string $operatorId = null,
+        ?int $wasInteresting = null,
+        ?string $seedClass = null,
+        ?string $weightSnapshotId = null
     ): void {
         if (!$this->enabled) {
             return;
@@ -140,7 +146,7 @@ final class CorpusDiagnostics {
         $delta = $coverageAfter - $coverageBefore;
 
         $line = sprintf(
-            "%d,%s,%s,%d,%d,%d,%d,%s,%s\n",
+            "%d,%s,%s,%d,%d,%d,%d,%s,%s,%s,%s,%s,%s\n",
             $run,
             $parentSeedId ?? '',
             $entry->hash,
@@ -149,7 +155,11 @@ final class CorpusDiagnostics {
             $coverageAfter,
             $delta,
             $decision,
-            $reason
+            $reason,
+            $operatorId ?? '',
+            $wasInteresting === null ? '' : (string) $wasInteresting,
+            $seedClass ?? '',
+            $weightSnapshotId ?? ''
         );
 
         file_put_contents($this->eventsLogFile, $line, FILE_APPEND);
@@ -158,7 +168,7 @@ final class CorpusDiagnostics {
     /**
      * Update seed stats when a seed is replaced.
      */
-    public function handleSeedReplacement(CorpusEntry $oldEntry, CorpusEntry $newEntry): void {
+    public function handleSeedReplacement(CorpusEntry $oldEntry, CorpusEntry $newEntry, ?string $seedClass = null): void {
         if (!$this->enabled) {
             return;
         }
@@ -169,7 +179,11 @@ final class CorpusDiagnostics {
             // If new entry has different hash, create new stats
             if ($newEntry->hash !== $oldEntry->hash) {
                 $coverage = $this->getCurrentCoverage ? ($this->getCurrentCoverage)() : 0;
-                $this->registerSeed($newEntry, $oldEntry->hash, $coverage);
+                $inheritedClass = $seedClass;
+                if ($inheritedClass === null && isset($this->seedStats[$oldEntry->hash])) {
+                    $inheritedClass = $this->seedStats[$oldEntry->hash]->seedClass;
+                }
+                $this->registerSeed($newEntry, $oldEntry->hash, $coverage, $inheritedClass);
             }
         }
     }
@@ -246,7 +260,7 @@ final class CorpusDiagnostics {
     }
 
     private function initializeEventsLog(): void {
-        $header = "run,parent_seed_id,input_hash,size,coverage_before,coverage_after,delta,decision,reason\n";
+        $header = "run,parent_seed_id,input_hash,size,coverage_before,coverage_after,delta,decision,reason,operator_id,was_interesting,seed_class,weight_snapshot_id\n";
         file_put_contents($this->eventsLogFile, $header);
     }
 }

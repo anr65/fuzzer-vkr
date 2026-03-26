@@ -1,0 +1,17 @@
+{
+  "uniform": {},
+  "static_default": {
+    "EraseBytes": 1.0,
+    "InsertByte": 1.0,
+    "InsertRepeatedBytes": 1.0,
+    "ChangeByte": 1.0,
+    "ChangeBit": 1.0,
+    "ShuffleBytes": 1.0,
+    "ChangeASCIIInt": 1.0,
+    "ChangeBinInt": 1.0,
+    "CopyPart": 1.0,
+    "CrossOver": 1.0,
+    "AddWordFromManualDictionary": 1.0
+  },
+  "static_by_class": {}
+}

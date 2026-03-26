@@ -10,11 +10,15 @@ use GetOpt\Option;
 use Nikic\IncludeInterceptor\FileFilter;
 use Nikic\IncludeInterceptor\Interceptor;
 use PhpFuzzer\Diagnostics\CorpusDiagnostics;
+use PhpFuzzer\Diagnostics\OperatorWeightsLogger;
 use PhpFuzzer\Instrumentation\FileInfo;
 use PhpFuzzer\Instrumentation\Instrumentor;
 use PhpFuzzer\Mutation\Dictionary;
+use PhpFuzzer\Mutation\MutationDecision;
 use PhpFuzzer\Mutation\Mutator;
+use PhpFuzzer\Mutation\MutationWeightManager;
 use PhpFuzzer\Mutation\RNG;
+use PhpFuzzer\Mutation\YamlSeedClassifier;
 use PhpParser\PhpVersion;
 
 final class Fuzzer {
@@ -51,6 +55,20 @@ final class Fuzzer {
     private ?StabilityLogger $stabilityLogger = null;
     private ?CorpusDiagnostics $corpusDiagnostics = null;
     private ?array $mutatorProfile = null;
+    private ?MutationWeightManager $weightManager = null;
+    private string $operatorPolicy = 'uniform';
+    private ?string $operatorWeightsConfigPath = null;
+    /** @var array<string, mixed> */
+    private array $operatorStaticWeights = [];
+    private float $operatorAlpha = 0.2;
+    private int $operatorPeriod = 1000;
+    private int $operatorWarmupIterations = 2000;
+    private string $operatorDecayMode = 'reset';
+    private float $operatorDecayFactor = 0.5;
+    private ?OperatorWeightsLogger $operatorWeightsLogger = null;
+    private ?string $latestWeightSnapshotId = null;
+    private string $seedClassifierMode = 'none';
+    private ?YamlSeedClassifier $yamlSeedClassifier = null;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -60,6 +78,7 @@ final class Fuzzer {
         $this->config = new Config();
         // Mutator will be created after profile is set (if provided) or use default
         $this->mutator = new Mutator($this->rng, $this->config->dictionary, null);
+        $this->initializeWeightManager();
         $this->corpus = new Corpus();
 
         // Instrument everything apart from our src/ directory.
@@ -128,6 +147,40 @@ final class Fuzzer {
         $this->mutatorProfile = $mutatorProfile;
         // Recreate mutator with new profile
         $this->mutator = new Mutator($this->rng, $this->config->dictionary, $this->mutatorProfile);
+        $this->initializeWeightManager();
+    }
+
+    private function initializeWeightManager(): void {
+        $this->weightManager = new MutationWeightManager(
+            $this->mutator->getMutatorIds(),
+            $this->operatorPolicy,
+            $this->operatorStaticWeights,
+            $this->operatorAlpha,
+            $this->operatorPeriod,
+            $this->operatorWarmupIterations,
+            $this->operatorDecayMode,
+            $this->operatorDecayFactor
+        );
+        if ($this->seedClassifierMode === 'yaml') {
+            if ($this->yamlSeedClassifier === null) {
+                $this->yamlSeedClassifier = new YamlSeedClassifier();
+            }
+            $this->weightManager->setClassifier([$this->yamlSeedClassifier, 'classify']);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadOperatorWeightsConfig(string $path): array {
+        if (!is_file($path)) {
+            throw new FuzzerException("Operator weights file not found: $path");
+        }
+        $data = json_decode(file_get_contents($path), true);
+        if (!is_array($data)) {
+            throw new FuzzerException("Failed to parse operator weights config JSON: $path");
+        }
+        return $data;
     }
 
     public function setCorpusDiagnostics(
@@ -191,7 +244,21 @@ final class Fuzzer {
             $crossOverEntry = $this->corpus->getRandomEntry($this->rng);
             $crossOverInput = $crossOverEntry !== null ? $crossOverEntry->input : null;
             for ($m = 0; $m < $this->mutationDepthLimit; $m++) {
-                $input = $this->mutator->mutate($input, $maxLen, $crossOverInput);
+                $seedInput = $origEntry !== null ? $origEntry->input : $input;
+                $seedClass = $this->weightManager !== null
+                    ? $this->weightManager->classify($seedInput)
+                    : 'default';
+                $selectedOperatorId = $this->weightManager !== null
+                    ? $this->weightManager->select($seedClass, $this->rng)
+                    : $this->rng->randomElement($this->mutator->getMutatorIds());
+                $decision = new MutationDecision(
+                    $selectedOperatorId,
+                    $seedClass,
+                    $this->weightManager !== null ? $this->weightManager->getPolicy() : 'uniform'
+                );
+                $input = $this->mutator->mutateWithOperator($decision->operatorId, $input, $maxLen, $crossOverInput);
+                $operatorId = $this->mutator->getLastOperatorId();
+                $weightSnapshotId = $this->latestWeightSnapshotId;
                 $entry = $this->runInput($input);
                 if ($entry->crashInfo) {
                     if ($this->corpus->addCrashEntry($entry)) {
@@ -209,9 +276,22 @@ final class Fuzzer {
 
                 $coverageBefore = $this->corpus->getNumFeatures();
                 $this->corpus->computeUniqueFeatures($entry);
+                $wasInteresting = !empty($entry->uniqueFeatures);
+                if ($this->weightManager !== null && $operatorId !== null) {
+                    $rebalanceSnapshot = $this->weightManager->update($seedClass, $operatorId, $wasInteresting);
+                    if ($rebalanceSnapshot !== null && $this->operatorWeightsLogger !== null) {
+                        $weightSnapshotId = $this->operatorWeightsLogger->logSnapshot(
+                            $this->runs,
+                            $rebalanceSnapshot['seed_class'],
+                            $rebalanceSnapshot['weights'],
+                            $rebalanceSnapshot['stats']
+                        );
+                        $this->latestWeightSnapshotId = $weightSnapshotId;
+                    }
+                }
                 if ($entry->uniqueFeatures) {
                     $parentHash = $origEntry !== null ? $origEntry->hash : null;
-                    $this->corpus->addEntry($entry, $parentHash);
+                    $this->corpus->addEntry($entry, $parentHash, false, $operatorId, 1, $seedClass, $weightSnapshotId);
                     $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
 
                     $this->lastInterestingRun = $this->runs;
@@ -239,7 +319,11 @@ final class Fuzzer {
                             $coverageBefore,
                             $coverageAfter,
                             'rejected',
-                            'no_unique_features'
+                            'no_unique_features',
+                            $operatorId,
+                            0,
+                            $seedClass,
+                            $weightSnapshotId
                         );
                     }
                 }
@@ -251,7 +335,7 @@ final class Fuzzer {
                     // Preserve unique features of original entry,
                     // even if they are not unique anymore at this point.
                     $entry->uniqueFeatures = $origEntry->uniqueFeatures;
-                    if ($this->corpus->replaceEntry($origEntry, $entry)) {
+                    if ($this->corpus->replaceEntry($origEntry, $entry, $operatorId, null, $seedClass, $weightSnapshotId)) {
                         $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
                     }
                     unlink($origEntry->path);
@@ -477,10 +561,13 @@ final class Fuzzer {
                 // Note: runs will be reset to 0 after loading, so initial seeds are effectively at run 0
                 if ($this->corpusDiagnostics !== null) {
                     $coverage = $this->corpus->getNumFeatures();
+                    $seedClass = $this->weightManager !== null
+                        ? $this->weightManager->classify($entry->input)
+                        : 'default';
                     // Temporarily set runs to 0 for seed registration (since runs will be reset after loading)
                     $savedRuns = $this->runs;
                     $this->runs = 0;
-                    $this->corpusDiagnostics->registerSeed($entry, null, $coverage);
+                    $this->corpusDiagnostics->registerSeed($entry, null, $coverage, $seedClass);
                     $this->runs = $savedRuns;
                 }
                 $this->corpus->addEntry($entry, null, true); // Skip registration in addEntry
@@ -619,6 +706,36 @@ final class Fuzzer {
             Option::create(null, 'mutator-profile', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('profile_id')
                 ->setDescription('Mutator profile ID from config/mutator_profiles.json. Use "default" for all mutators.'),
+            Option::create(null, 'operator-policy', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('policy')
+                ->setDescription('Operator selection policy: uniform|static|adaptive|class-adaptive (default: uniform)'),
+            Option::create(null, 'operator-weights-config', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('file')
+                ->setDescription('JSON config with static operator weights (default: config/operator_weights.json)'),
+            Option::create(null, 'operator-alpha', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('float')
+                ->setDescription('Adaptive alpha parameter (parsed now, used by adaptive policies)'),
+            Option::create(null, 'operator-period', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Adaptive rebalance period (parsed now, used by adaptive policies)'),
+            Option::create(null, 'operator-rebalance-period', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Alias for --operator-period'),
+            Option::create(null, 'operator-weights-log', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('file')
+                ->setDescription('Path to JSONL log for operator weight snapshots'),
+            Option::create(null, 'operator-warmup-iterations', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Warm-up iterations before adaptive rebalancing (default: 2 * period)'),
+            Option::create(null, 'operator-decay-mode', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('mode')
+                ->setDescription('Forgetting mode after rebalance: reset|ema_decay'),
+            Option::create(null, 'operator-decay-factor', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('float')
+                ->setDescription('Decay factor for ema_decay mode'),
+            Option::create(null, 'seed-classifier', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('mode')
+                ->setDescription('Seed classifier mode: none|yaml (default: none)'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -678,6 +795,70 @@ final class Fuzzer {
             $this->maxTimeSeconds = (int) $opts['max-time'];
         }
 
+        if (isset($opts['operator-policy'])) {
+            $allowedPolicies = ['uniform', 'static', 'adaptive', 'class-adaptive'];
+            $policy = (string) $opts['operator-policy'];
+            if (!in_array($policy, $allowedPolicies, true)) {
+                throw new FuzzerException("Invalid operator policy: $policy");
+            }
+            $this->operatorPolicy = $policy;
+        }
+
+        if (isset($opts['operator-alpha'])) {
+            $this->operatorAlpha = (float) $opts['operator-alpha'];
+        }
+
+        if (isset($opts['operator-period'])) {
+            $this->operatorPeriod = max(1, (int) $opts['operator-period']);
+        }
+        if (isset($opts['operator-rebalance-period'])) {
+            $this->operatorPeriod = max(1, (int) $opts['operator-rebalance-period']);
+        }
+
+        if (isset($opts['operator-warmup-iterations'])) {
+            $this->operatorWarmupIterations = max(0, (int) $opts['operator-warmup-iterations']);
+        } else {
+            $this->operatorWarmupIterations = 2 * $this->operatorPeriod;
+        }
+
+        if (isset($opts['operator-decay-mode'])) {
+            $decayMode = (string) $opts['operator-decay-mode'];
+            if (!in_array($decayMode, ['reset', 'ema_decay'], true)) {
+                throw new FuzzerException("Invalid operator decay mode: $decayMode");
+            }
+            $this->operatorDecayMode = $decayMode;
+        }
+
+        if (isset($opts['operator-decay-factor'])) {
+            $this->operatorDecayFactor = (float) $opts['operator-decay-factor'];
+        }
+
+        if (isset($opts['operator-weights-config'])) {
+            $this->operatorWeightsConfigPath = (string) $opts['operator-weights-config'];
+        }
+
+        if (isset($opts['operator-weights-log'])) {
+            $this->operatorWeightsLogger = new OperatorWeightsLogger((string) $opts['operator-weights-log']);
+        }
+
+        if (isset($opts['seed-classifier'])) {
+            $seedClassifierMode = (string) $opts['seed-classifier'];
+            if (!in_array($seedClassifierMode, ['none', 'yaml'], true)) {
+                throw new FuzzerException("Invalid seed classifier mode: $seedClassifierMode");
+            }
+            $this->seedClassifierMode = $seedClassifierMode;
+        }
+
+        if ($this->operatorPolicy === 'static') {
+            $weightsPath = $this->operatorWeightsConfigPath ?? (__DIR__ . '/../config/operator_weights.json');
+            $weightsConfig = $this->loadOperatorWeightsConfig($weightsPath);
+            $this->operatorStaticWeights = isset($weightsConfig['static_default']) && is_array($weightsConfig['static_default'])
+                ? $weightsConfig['static_default']
+                : [];
+        } else {
+            $this->operatorStaticWeights = [];
+        }
+
         // Setup deterministic seed if provided
         if (isset($opts['seed'])) {
             $seed = (int) $opts['seed'];
@@ -712,6 +893,9 @@ final class Fuzzer {
                 $this->setMutatorProfile($profiles[$profileId]);
             }
         }
+
+        // Ensure manager is synchronized with final mutator profile and operator policy.
+        $this->initializeWeightManager();
 
         // Setup stability logger if requested
         if (isset($opts['stability-log'])) {

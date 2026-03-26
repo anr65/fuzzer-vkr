@@ -34,7 +34,15 @@ final class Corpus {
         }
     }
 
-    public function addEntry(CorpusEntry $entry, ?string $parentHash = null, bool $skipRegistration = false): void {
+    public function addEntry(
+        CorpusEntry $entry,
+        ?string $parentHash = null,
+        bool $skipRegistration = false,
+        ?string $operatorId = null,
+        ?int $wasInteresting = null,
+        ?string $seedClass = null,
+        ?string $weightSnapshotId = null
+    ): void {
         $coverageBefore = $this->getNumFeatures();
         $this->entriesByHash[$entry->hash] = $entry;
         $this->entriesByIndex[] = $entry;
@@ -49,7 +57,7 @@ final class Corpus {
         if ($this->diagnostics !== null && $this->diagnostics->isEnabled() && !$skipRegistration) {
             $coverageAfter = $this->getNumFeatures();
             $parentSeedId = $parentHash ? $this->diagnostics->getSeedId($parentHash) : null;
-            $seedId = $this->diagnostics->registerSeed($entry, $parentHash, $coverageAfter);
+            $seedId = $this->diagnostics->registerSeed($entry, $parentHash, $coverageAfter, $seedClass);
             
             // Log candidate seed event
             $this->diagnostics->logCandidateSeed(
@@ -58,13 +66,24 @@ final class Corpus {
                 $coverageBefore,
                 $coverageAfter,
                 'accepted',
-                'new_coverage'
+                'new_coverage',
+                $operatorId,
+                $wasInteresting,
+                $seedClass,
+                $weightSnapshotId
             );
         }
     }
 
     // Returns whether the new entry has been added. The old one will always be removed.
-    public function replaceEntry(CorpusEntry $origEntry, CorpusEntry $newEntry): bool {
+    public function replaceEntry(
+        CorpusEntry $origEntry,
+        CorpusEntry $newEntry,
+        ?string $operatorId = null,
+        ?int $wasInteresting = null,
+        ?string $seedClass = null,
+        ?string $weightSnapshotId = null
+    ): bool {
         $coverageBefore = $this->getNumFeatures();
         unset($this->entriesByHash[$origEntry->hash]);
         $this->entriesByIndex = array_values($this->entriesByHash); // TODO optimize
@@ -78,7 +97,11 @@ final class Corpus {
                     $coverageBefore,
                     $this->getNumFeatures(),
                     'rejected',
-                    'duplicate_hash'
+                    'duplicate_hash',
+                    $operatorId,
+                    $wasInteresting,
+                    $seedClass,
+                    $weightSnapshotId
                 );
             }
             return false;
@@ -93,14 +116,18 @@ final class Corpus {
         if ($this->diagnostics !== null && $this->diagnostics->isEnabled()) {
             $coverageAfter = $this->getNumFeatures();
             $parentSeedId = $this->diagnostics->getSeedId($origEntry->hash);
-            $this->diagnostics->handleSeedReplacement($origEntry, $newEntry);
+            $this->diagnostics->handleSeedReplacement($origEntry, $newEntry, $seedClass);
             $this->diagnostics->logCandidateSeed(
                 $newEntry,
                 $parentSeedId,
                 $coverageBefore,
                 $coverageAfter,
                 'accepted',
-                'minimization'
+                'minimization',
+                $operatorId,
+                $wasInteresting,
+                $seedClass,
+                $weightSnapshotId
             );
         }
         

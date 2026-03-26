@@ -10,7 +10,12 @@ final class Mutator {
     private Dictionary $dictionary;
     /** @var list<callable> */
     private array $mutators;
+    /** @var list<string> */
+    private array $mutatorIds = [];
+    /** @var array<string, callable> */
+    private array $mutatorsById = [];
     private ?string $crossOverWith = null; // TODO: Get rid of this
+    private ?string $lastOperatorId = null;
 
 
     public function __construct(RNG $rng, Dictionary $dictionary, ?array $mutatorProfile = null) {
@@ -35,18 +40,26 @@ final class Mutator {
         // If profile is provided, filter mutators; otherwise use all
         if ($mutatorProfile !== null && !empty($mutatorProfile)) {
             $this->mutators = [];
+            $this->mutatorIds = [];
             foreach ($mutatorProfile as $mutatorName) {
                 if (isset($allMutators[$mutatorName])) {
+                    $this->mutatorIds[] = $mutatorName;
                     $this->mutators[] = $allMutators[$mutatorName];
                 }
             }
             // If profile resulted in empty mutators, fall back to all
             if (empty($this->mutators)) {
+                $this->mutatorIds = array_keys($allMutators);
                 $this->mutators = array_values($allMutators);
             }
         } else {
             // Default: use all mutators
+            $this->mutatorIds = array_keys($allMutators);
             $this->mutators = array_values($allMutators);
+        }
+
+        foreach ($this->mutatorIds as $index => $mutatorId) {
+            $this->mutatorsById[$mutatorId] = $this->mutators[$index];
         }
     }
 
@@ -55,6 +68,17 @@ final class Mutator {
      */
     public function getMutators(): array {
         return $this->mutators;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getMutatorIds(): array {
+        return $this->mutatorIds;
+    }
+
+    public function getLastOperatorId(): ?string {
+        return $this->lastOperatorId;
     }
 
     private function randomBiasedChar(): string {
@@ -349,15 +373,35 @@ final class Mutator {
         }
     }
 
-    public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
+    public function mutateWithOperator(string $operatorId, string $str, int $maxLen, ?string $crossOverWith): string {
         $this->crossOverWith = $crossOverWith;
-        while (true) {
-            $mutator = $this->rng->randomElement($this->mutators);
+
+        // First, try the requested operator.
+        if (isset($this->mutatorsById[$operatorId])) {
+            $mutator = $this->mutatorsById[$operatorId];
             $newStr = $mutator($str, $maxLen);
             if (null !== $newStr) {
-                assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $mutator[1]);
+                $this->lastOperatorId = $operatorId;
+                assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $operatorId);
                 return $newStr;
             }
         }
+
+        // Fallback: preserve legacy liveness guarantees if chosen operator is not currently applicable.
+        while (true) {
+            $index = $this->rng->randomInt(\count($this->mutators));
+            $mutator = $this->mutators[$index];
+            $newStr = $mutator($str, $maxLen);
+            if (null !== $newStr) {
+                $this->lastOperatorId = $this->mutatorIds[$index];
+                assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $this->lastOperatorId);
+                return $newStr;
+            }
+        }
+    }
+
+    public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
+        $randomOperatorId = $this->rng->randomElement($this->mutatorIds);
+        return $this->mutateWithOperator($randomOperatorId, $str, $maxLen, $crossOverWith);
     }
 }
