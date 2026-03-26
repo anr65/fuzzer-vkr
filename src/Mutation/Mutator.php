@@ -11,11 +11,18 @@ final class Mutator {
     /** @var list<callable> */
     private array $mutators;
     private ?string $crossOverWith = null; // TODO: Get rid of this
+    private ?string $forcedMutatorName = null;
+    private ?int $forcedOffset = null;
+    private ?int $forcedLength = null;
+    private ?string $lastMutatorUsed = null;
+    private TypeAwareMutator $typeAwareMutator;
+    private ?StructuralCrossOver $structuralCrossOver = null;
 
 
     public function __construct(RNG $rng, Dictionary $dictionary, ?array $mutatorProfile = null) {
         $this->rng = $rng;
         $this->dictionary = $dictionary;
+        $this->typeAwareMutator = new TypeAwareMutator();
         
         // Build full mutator map
         $allMutators = [
@@ -30,6 +37,7 @@ final class Mutator {
             'CopyPart' => [$this, 'mutateCopyPart'],
             'CrossOver' => [$this, 'mutateCrossOver'],
             'AddWordFromManualDictionary' => [$this, 'mutateAddWordFromManualDictionary'],
+            'TypeAwareMutator' => [$this, 'mutateTypeAware'],
         ];
         
         // If profile is provided, filter mutators; otherwise use all
@@ -55,6 +63,33 @@ final class Mutator {
      */
     public function getMutators(): array {
         return $this->mutators;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getMutatorNames(): array {
+        $names = [];
+        foreach ($this->mutators as $mutator) {
+            $names[] = $mutator[1] === 'mutateTypeAware'
+                ? 'TypeAwareMutator'
+                : substr((string) $mutator[1], 6);
+        }
+        return $names;
+    }
+
+    public function setStructuralCrossOver(?StructuralCrossOver $structuralCrossOver): void {
+        $this->structuralCrossOver = $structuralCrossOver;
+    }
+
+    public function getLastMutatorUsed(): ?string {
+        return $this->lastMutatorUsed;
+    }
+
+    public function setForcedSelection(?string $mutatorName, ?int $offset, ?int $length): void {
+        $this->forcedMutatorName = $mutatorName;
+        $this->forcedOffset = $offset;
+        $this->forcedLength = $length;
     }
 
     private function randomBiasedChar(): string {
@@ -293,6 +328,23 @@ final class Mutator {
     }
 
     public function mutateCrossOver(string $str, int $maxLen): ?string {
+        if ($this->structuralCrossOver !== null) {
+            $randomizer = new \Random\Randomizer(new \Random\Engine\Mt19937($this->rng->randomInt(PHP_INT_MAX)));
+            $new = $this->structuralCrossOver->mutate($str, $randomizer);
+            return \strlen($new) <= $maxLen ? $new : \substr($new, 0, $maxLen);
+        }
+        return $this->mutateCrossOverByteLevel($str, $maxLen);
+    }
+
+    public function mutateCrossOverWithDonor(string $str, string $donor, int $maxLen): ?string {
+        $saved = $this->crossOverWith;
+        $this->crossOverWith = $donor;
+        $result = $this->mutateCrossOverByteLevel($str, $maxLen);
+        $this->crossOverWith = $saved;
+        return $result;
+    }
+
+    private function mutateCrossOverByteLevel(string $str, int $maxLen): ?string {
         if ($this->crossOverWith === null) {
             return null;
         }
@@ -349,15 +401,88 @@ final class Mutator {
         }
     }
 
-    public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
+    public function mutateTypeAware(string $str, int $maxLen): ?string {
+        $randomizer = new \Random\Randomizer(new \Random\Engine\Mt19937($this->rng->randomInt(PHP_INT_MAX)));
+        $new = $this->typeAwareMutator->mutate($str, $randomizer);
+        if (\strlen($new) > $maxLen) {
+            return null;
+        }
+        return $new;
+    }
+
+    /**
+     * @param callable $mutator
+     */
+    private function applyMutatorWithRange(callable $mutator, string $str, int $maxLen): ?string {
+        if ($this->forcedOffset === null || $this->forcedLength === null) {
+            return $mutator($str, $maxLen);
+        }
+
+        $offset = max(0, $this->forcedOffset);
+        $length = max(0, $this->forcedLength);
+        if ($offset >= \strlen($str)) {
+            return $mutator($str, $maxLen);
+        }
+
+        $segment = \substr($str, $offset, $length);
+        if ($segment === false || $segment === '') {
+            return $mutator($str, $maxLen);
+        }
+
+        $mutatedSegment = $mutator($segment, min($maxLen, \strlen($segment) + 256));
+        if ($mutatedSegment === null) {
+            return $mutator($str, $maxLen);
+        }
+
+        $newStr = \substr($str, 0, $offset) . $mutatedSegment . \substr($str, $offset + $length);
+        if (\strlen($newStr) > $maxLen) {
+            return $mutator($str, $maxLen);
+        }
+        return $newStr;
+    }
+
+    /**
+     * @param list<callable> $pool
+     */
+    public function mutateFromPool(string $str, int $maxLen, ?string $crossOverWith, array $pool): string {
         $this->crossOverWith = $crossOverWith;
         while (true) {
-            $mutator = $this->rng->randomElement($this->mutators);
-            $newStr = $mutator($str, $maxLen);
+            $mutator = $this->rng->randomElement($pool);
+            $newStr = $this->applyMutatorWithRange($mutator, $str, $maxLen);
             if (null !== $newStr) {
+                $this->lastMutatorUsed = $mutator[1] === 'mutateTypeAware'
+                    ? 'TypeAwareMutator'
+                    : substr((string) $mutator[1], 6);
                 assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $mutator[1]);
                 return $newStr;
             }
         }
+    }
+
+    /**
+     * @return list<callable>
+     */
+    public function getPoolByNames(array $names): array {
+        $pool = [];
+        $nameSet = array_fill_keys($names, true);
+        foreach ($this->mutators as $mutator) {
+            $name = $mutator[1] === 'mutateTypeAware'
+                ? 'TypeAwareMutator'
+                : substr((string) $mutator[1], 6);
+            if (isset($nameSet[$name])) {
+                $pool[] = $mutator;
+            }
+        }
+        return $pool;
+    }
+
+    public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
+        if ($this->forcedMutatorName !== null) {
+            $pool = $this->getPoolByNames([$this->forcedMutatorName]);
+            if ($pool !== []) {
+                return $this->mutateFromPool($str, $maxLen, $crossOverWith, $pool);
+            }
+        }
+        return $this->mutateFromPool($str, $maxLen, $crossOverWith, $this->mutators);
     }
 }

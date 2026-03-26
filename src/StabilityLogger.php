@@ -33,11 +33,17 @@ final class StabilityLogger {
     
     /** @var array<string, int> Map of corpus entry hashes to last run when they contributed */
     private array $entryLastContribution = [];
+    /** @var list<string> */
+    private array $optionalColumns;
     
-    public function __construct(string $logFile, string $format = 'csv', int $logInterval = 1000) {
+    /**
+     * @param list<string> $optionalColumns
+     */
+    public function __construct(string $logFile, string $format = 'csv', int $logInterval = 1000, array $optionalColumns = []) {
         $this->logFile = $logFile;
         $this->format = $format;
         $this->logInterval = $logInterval;
+        $this->optionalColumns = $optionalColumns;
         
         // Ensure directory exists
         $dir = dirname($logFile);
@@ -183,13 +189,10 @@ final class StabilityLogger {
                 round($currentStagnationSeconds, 2),
             ];
             
-            // Append extended metrics if available
             if ($extendedMetrics !== null) {
-                $csvData[] = $extendedMetrics['avg_seed_age'] ?? '';
-                $csvData[] = $extendedMetrics['active_seeds'] ?? '';
-                $csvData[] = $extendedMetrics['dead_seeds'] ?? '';
-                $csvData[] = $extendedMetrics['dead_selection_percentage'] ?? '';
-                $csvData[] = $extendedMetrics['contribution_rate'] ?? '';
+                foreach ($this->optionalColumns as $column) {
+                    $csvData[] = $extendedMetrics[$column] ?? '';
+                }
             }
             
             $this->logCsv($csvData);
@@ -220,7 +223,7 @@ final class StabilityLogger {
             // JSON format: array of objects
             file_put_contents($this->logFile, "[\n");
         } else {
-            // CSV format: header row (with extended metrics columns)
+            // CSV format: header row
             $header = [
                 'timestamp',
                 'runs',
@@ -235,12 +238,10 @@ final class StabilityLogger {
                 'longest_stagnation_seconds',
                 'current_stagnation_runs',
                 'current_stagnation_seconds',
-                'avg_seed_age',
-                'active_seeds',
-                'dead_seeds',
-                'dead_selection_percentage',
-                'contribution_rate',
             ];
+            foreach ($this->optionalColumns as $column) {
+                $header[] = $column;
+            }
             file_put_contents($this->logFile, implode(',', $header) . "\n");
         }
     }

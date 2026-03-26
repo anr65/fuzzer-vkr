@@ -12,9 +12,13 @@ use Nikic\IncludeInterceptor\Interceptor;
 use PhpFuzzer\Diagnostics\CorpusDiagnostics;
 use PhpFuzzer\Instrumentation\FileInfo;
 use PhpFuzzer\Instrumentation\Instrumentor;
+use PhpFuzzer\Mutation\AdaptiveMutatorScheduler;
 use PhpFuzzer\Mutation\Dictionary;
 use PhpFuzzer\Mutation\Mutator;
+use PhpFuzzer\Mutation\MutatorRegistry;
 use PhpFuzzer\Mutation\RNG;
+use PhpFuzzer\Mutation\StructuralCrossOver;
+use PhpFuzzer\Mutation\StructuralMutatorSelector;
 use PhpParser\PhpVersion;
 
 final class Fuzzer {
@@ -51,6 +55,21 @@ final class Fuzzer {
     private ?StabilityLogger $stabilityLogger = null;
     private ?CorpusDiagnostics $corpusDiagnostics = null;
     private ?array $mutatorProfile = null;
+    private bool $structuralMutatorSelectorEnabled = false;
+    private bool $structuralCrossOverEnabled = false;
+    private bool $adaptiveSchedulerEnabled = false;
+    private float $typeAwareWeight = 0.15;
+    private ?StructuralMutatorSelector $structuralSelector = null;
+    private ?AdaptiveMutatorScheduler $adaptiveScheduler = null;
+    private ?MutatorRegistry $mutatorRegistry = null;
+    private ?StructuralCrossOver $structuralCrossOverOperator = null;
+    /** @var list<bool> */
+    private array $structuralParseWindow = [];
+    /** @var list<bool> */
+    private array $structuralCrossOverWindow = [];
+    private int $typeAwareHits = 0;
+    private int $structuralCrossOverCoverageContribution = 0;
+    private int $stabilityLogInterval = 1000;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -60,6 +79,7 @@ final class Fuzzer {
         $this->config = new Config();
         // Mutator will be created after profile is set (if provided) or use default
         $this->mutator = new Mutator($this->rng, $this->config->dictionary, null);
+        $this->mutatorRegistry = new MutatorRegistry($this->mutator->getMutatorNames());
         $this->corpus = new Corpus();
 
         // Instrument everything apart from our src/ directory.
@@ -114,8 +134,12 @@ final class Fuzzer {
         $this->logFile = $path;
     }
 
-    public function setStabilityLogFile(string $path, string $format = 'csv', int $logInterval = 1000): void {
-        $this->stabilityLogger = new StabilityLogger($path, $format, $logInterval);
+    /**
+     * @param list<string> $optionalColumns
+     */
+    public function setStabilityLogFile(string $path, string $format = 'csv', int $logInterval = 1000, array $optionalColumns = []): void {
+        $this->stabilityLogger = new StabilityLogger($path, $format, $logInterval, $optionalColumns);
+        $this->stabilityLogInterval = $logInterval;
     }
 
     public function setStabilityGraphDataFile(string $graphDataFile, string $runId): void {
@@ -128,6 +152,7 @@ final class Fuzzer {
         $this->mutatorProfile = $mutatorProfile;
         // Recreate mutator with new profile
         $this->mutator = new Mutator($this->rng, $this->config->dictionary, $this->mutatorProfile);
+        $this->mutatorRegistry = new MutatorRegistry($this->mutator->getMutatorNames());
     }
 
     public function setCorpusDiagnostics(
@@ -191,8 +216,39 @@ final class Fuzzer {
             $crossOverEntry = $this->corpus->getRandomEntry($this->rng);
             $crossOverInput = $crossOverEntry !== null ? $crossOverEntry->input : null;
             for ($m = 0; $m < $this->mutationDepthLimit; $m++) {
-                $input = $this->mutator->mutate($input, $maxLen, $crossOverInput);
+                $this->mutator->setForcedSelection(null, null, null);
+                $activePool = $this->mutatorRegistry?->getPool() ?? $this->mutator->getMutatorNames();
+
+                if ($this->structuralMutatorSelectorEnabled && $this->structuralSelector !== null) {
+                    $selection = $this->structuralSelector->select($input);
+                    $this->structuralParseWindow[] = $selection->parsed;
+                    if (count($this->structuralParseWindow) > 100) {
+                        array_shift($this->structuralParseWindow);
+                    }
+                    $activePool = $this->mutatorRegistry?->filterPoolByStructuralType([$selection->mutatorName]) ?? [$selection->mutatorName];
+                    $this->mutator->setForcedSelection($selection->mutatorName, $selection->offset, $selection->length);
+                }
+
+                if ($this->adaptiveSchedulerEnabled && $this->adaptiveScheduler !== null && $activePool !== []) {
+                    $selected = $this->adaptiveScheduler->selectMutatorName($activePool, $this->runs + 1);
+                    $activePool = [$selected];
+                    $this->adaptiveScheduler->recordUse($selected);
+                }
+
+                $poolCallables = $this->mutator->getPoolByNames($activePool);
+                $input = $poolCallables === []
+                    ? $this->mutator->mutate($input, $maxLen, $crossOverInput)
+                    : $this->mutator->mutateFromPool($input, $maxLen, $crossOverInput, $poolCallables);
                 $entry = $this->runInput($input);
+                if ($this->mutator->getLastMutatorUsed() === 'CrossOver'
+                    && $this->structuralCrossOverEnabled
+                    && $this->structuralCrossOverOperator !== null
+                ) {
+                    $this->structuralCrossOverWindow[] = $this->structuralCrossOverOperator->wasLastValid();
+                    if (count($this->structuralCrossOverWindow) > 100) {
+                        array_shift($this->structuralCrossOverWindow);
+                    }
+                }
                 if ($entry->crashInfo) {
                     if ($this->corpus->addCrashEntry($entry)) {
                         $entry->storeAtPath($this->outputDir . '/crash-' . $entry->hash . '.txt');
@@ -210,6 +266,15 @@ final class Fuzzer {
                 $coverageBefore = $this->corpus->getNumFeatures();
                 $this->corpus->computeUniqueFeatures($entry);
                 if ($entry->uniqueFeatures) {
+                    if ($this->adaptiveSchedulerEnabled && $this->adaptiveScheduler !== null && $this->mutator->getLastMutatorUsed() !== null) {
+                        $this->adaptiveScheduler->reward((string) $this->mutator->getLastMutatorUsed());
+                    }
+                    if ($this->mutator->getLastMutatorUsed() === 'TypeAwareMutator') {
+                        $this->typeAwareHits++;
+                    }
+                    if ($this->mutator->getLastMutatorUsed() === 'CrossOver' && $this->structuralCrossOverEnabled) {
+                        $this->structuralCrossOverCoverageContribution++;
+                    }
                     $parentHash = $origEntry !== null ? $origEntry->hash : null;
                     $this->corpus->addEntry($entry, $parentHash);
                     $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
@@ -285,15 +350,20 @@ final class Fuzzer {
             // Log stability metrics periodically
             if ($this->stabilityLogger !== null) {
                 $extendedMetrics = null;
-                if ($this->corpusDiagnostics !== null) {
-                    $extendedMetrics = $this->computeExtendedMetrics();
-                }
+                $extendedMetrics = $this->computeExtendedMetrics();
                 $this->stabilityLogger->logIfInterval(
                     $this->runs,
                     $this->corpus->getNumFeatures(),
                     $this->corpus->getNumCorpusEntries(),
                     $extendedMetrics
                 );
+                if ($this->adaptiveSchedulerEnabled && $this->adaptiveScheduler !== null && $this->runs % $this->stabilityLogInterval === 0) {
+                    $snapshot = $this->adaptiveScheduler->snapshotScores($this->runs);
+                    file_put_contents(
+                        $this->outputDir . '/mutator_scores_' . time() . '.json',
+                        json_encode($snapshot, JSON_PRETTY_PRINT)
+                    );
+                }
             }
             
             // Create corpus snapshot periodically
@@ -304,10 +374,7 @@ final class Fuzzer {
         
         // Final log at end of fuzzing
         if ($this->stabilityLogger !== null) {
-            $extendedMetrics = null;
-            if ($this->corpusDiagnostics !== null) {
-                $extendedMetrics = $this->computeExtendedMetrics();
-            }
+            $extendedMetrics = $this->computeExtendedMetrics();
             $this->stabilityLogger->logMetrics(
                 $this->runs,
                 $this->corpus->getNumFeatures(),
@@ -328,54 +395,82 @@ final class Fuzzer {
      * @return array<string, mixed>|null
      */
     private function computeExtendedMetrics(): ?array {
-        if ($this->corpusDiagnostics === null) {
-            return null;
-        }
+        $metrics = [];
+        $allStats = $this->corpusDiagnostics?->getAllSeedStats() ?? [];
+        if (!empty($allStats)) {
+            $currentRun = $this->runs;
+            $recentWindow = min(1000, $currentRun / 2); // Look back at most 1000 runs or half of total runs
+            $thresholdRun = $currentRun - $recentWindow;
 
-        $allStats = $this->corpusDiagnostics->getAllSeedStats();
-        if (empty($allStats)) {
-            return null;
-        }
+            $totalSeeds = count($allStats);
+            $deadSeeds = 0;
+            $activeSeeds = 0;
+            $totalAge = 0;
+            $totalSelected = 0;
+            $totalContributed = 0;
+            $deadSelections = 0;
 
-        $currentRun = $this->runs;
-        $recentWindow = min(1000, $currentRun / 2); // Look back at most 1000 runs or half of total runs
-        $thresholdRun = $currentRun - $recentWindow;
+            foreach ($allStats as $stats) {
+                $age = $currentRun - $stats->creationRun;
+                $totalAge += $age;
+                $totalSelected += $stats->timesSelected;
+                $totalContributed += $stats->timesContributed;
 
-        $totalSeeds = count($allStats);
-        $deadSeeds = 0;
-        $activeSeeds = 0;
-        $totalAge = 0;
-        $totalSelected = 0;
-        $totalContributed = 0;
-        $deadSelections = 0;
+                if ($stats->isDead) {
+                    $deadSeeds++;
+                    $deadSelections += $stats->timesSelected;
+                }
 
-        foreach ($allStats as $stats) {
-            $age = $currentRun - $stats->creationRun;
-            $totalAge += $age;
-            $totalSelected += $stats->timesSelected;
-            $totalContributed += $stats->timesContributed;
-
-            if ($stats->isDead) {
-                $deadSeeds++;
-                $deadSelections += $stats->timesSelected;
+                if ($stats->lastContributionRun !== null && $stats->lastContributionRun >= $thresholdRun) {
+                    $activeSeeds++;
+                }
             }
 
-            if ($stats->lastContributionRun !== null && $stats->lastContributionRun >= $thresholdRun) {
-                $activeSeeds++;
-            }
+            $avgSeedAge = $totalSeeds > 0 ? $totalAge / $totalSeeds : 0;
+            $deadSelectionPercentage = $totalSelected > 0 ? (100.0 * $deadSelections / $totalSelected) : 0;
+            $contributionRate = $currentRun > 0 ? (100.0 * $totalContributed / $currentRun) : 0;
+
+            $metrics = [
+                'avg_seed_age' => round($avgSeedAge, 2),
+                'active_seeds' => $activeSeeds,
+                'dead_seeds' => $deadSeeds,
+                'dead_selection_percentage' => round($deadSelectionPercentage, 2),
+                'contribution_rate' => round($contributionRate, 2),
+            ];
         }
 
-        $avgSeedAge = $totalSeeds > 0 ? $totalAge / $totalSeeds : 0;
-        $deadSelectionPercentage = $totalSelected > 0 ? (100.0 * $deadSelections / $totalSelected) : 0;
-        $contributionRate = $currentRun > 0 ? (100.0 * $totalContributed / $currentRun) : 0;
+        if ($this->structuralMutatorSelectorEnabled) {
+            $metrics['structural_selector_used'] = 1;
+            $metrics['structural_valid_ratio'] = $this->windowRatio($this->structuralParseWindow);
+        }
+        if ($this->structuralCrossOverEnabled) {
+            $metrics['structural_crossover_valid_ratio'] = $this->windowRatio($this->structuralCrossOverWindow);
+            $metrics['structural_crossover_coverage_contribution'] = $this->structuralCrossOverCoverageContribution;
+        }
+        if ($this->typeAwareWeight > 0.0) {
+            $metrics['type_aware_hits'] = $this->typeAwareHits;
+        }
+        if ($this->adaptiveSchedulerEnabled && $this->adaptiveScheduler !== null) {
+            $metrics['active_top_mutator'] = $this->adaptiveScheduler->getTopMutator($this->runs) ?? '';
+            $metrics['entropy_of_weights'] = round($this->adaptiveScheduler->getEntropy($this->runs), 6);
+        }
+        return $metrics === [] ? null : $metrics;
+    }
 
-        return [
-            'avg_seed_age' => round($avgSeedAge, 2),
-            'active_seeds' => $activeSeeds,
-            'dead_seeds' => $deadSeeds,
-            'dead_selection_percentage' => round($deadSelectionPercentage, 2),
-            'contribution_rate' => round($contributionRate, 2),
-        ];
+    /**
+     * @param list<bool> $window
+     */
+    private function windowRatio(array $window): float {
+        if ($window === []) {
+            return 0.0;
+        }
+        $hits = 0;
+        foreach ($window as $item) {
+            if ($item) {
+                $hits++;
+            }
+        }
+        return round($hits / count($window), 6);
     }
 
     private function isAllowedException(\Throwable $e): bool {
@@ -619,6 +714,15 @@ final class Fuzzer {
             Option::create(null, 'mutator-profile', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('profile_id')
                 ->setDescription('Mutator profile ID from config/mutator_profiles.json. Use "default" for all mutators.'),
+            Option::create(null, 'structural-mutator-selector', GetOpt::NO_ARGUMENT)
+                ->setDescription('Enable YAML structural mutator selector'),
+            Option::create(null, 'type-aware-weight', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('float')
+                ->setDescription('Weight for TypeAwareMutator in pool (default: 0.15)'),
+            Option::create(null, 'structural-crossover', GetOpt::NO_ARGUMENT)
+                ->setDescription('Replace byte-level crossover with structural YAML crossover'),
+            Option::create(null, 'adaptive-scheduler', GetOpt::NO_ARGUMENT)
+                ->setDescription('Enable adaptive UCB1 mutator scheduler'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -713,11 +817,65 @@ final class Fuzzer {
             }
         }
 
+        if (isset($opts['structural-mutator-selector'])) {
+            $this->structuralMutatorSelectorEnabled = true;
+            $this->structuralSelector = new StructuralMutatorSelector($this->rng);
+        }
+        if (isset($opts['type-aware-weight'])) {
+            $this->typeAwareWeight = max(0.0, (float) $opts['type-aware-weight']);
+        }
+        if (isset($opts['adaptive-scheduler'])) {
+            $this->adaptiveSchedulerEnabled = true;
+            $this->adaptiveScheduler = new AdaptiveMutatorScheduler();
+        }
+        if (isset($opts['structural-crossover'])) {
+            $this->structuralCrossOverEnabled = true;
+            $this->structuralCrossOverOperator = new StructuralCrossOver(
+                $this->corpus,
+                $this->rng,
+                function(string $primary, string $donor): string {
+                    return $this->mutator->mutateCrossOverWithDonor($primary, $donor, $this->config->maxLen) ?? $primary;
+                }
+            );
+            $this->mutator->setStructuralCrossOver($this->structuralCrossOverOperator);
+        }
+
+        if ($this->mutatorRegistry !== null) {
+            $this->mutatorRegistry->setWeight('TypeAwareMutator', $this->typeAwareWeight);
+        }
+
+        if ($this->adaptiveSchedulerEnabled && $this->structuralMutatorSelectorEnabled) {
+            echo "Warning: --adaptive-scheduler is active; structural selector narrows pool, scheduler performs final selection.\n";
+        }
+
         // Setup stability logger if requested
         if (isset($opts['stability-log'])) {
             $format = $opts['stability-format'] ?? 'csv';
             $interval = isset($opts['stability-interval']) ? (int) $opts['stability-interval'] : 1000;
-            $this->setStabilityLogFile($opts['stability-log'], $format, $interval);
+            $optionalColumns = [];
+            if (isset($opts['enable-corpus-diagnostics'])) {
+                $optionalColumns[] = 'avg_seed_age';
+                $optionalColumns[] = 'active_seeds';
+                $optionalColumns[] = 'dead_seeds';
+                $optionalColumns[] = 'dead_selection_percentage';
+                $optionalColumns[] = 'contribution_rate';
+            }
+            if ($this->structuralMutatorSelectorEnabled) {
+                $optionalColumns[] = 'structural_selector_used';
+                $optionalColumns[] = 'structural_valid_ratio';
+            }
+            if ($this->typeAwareWeight > 0.0) {
+                $optionalColumns[] = 'type_aware_hits';
+            }
+            if ($this->structuralCrossOverEnabled) {
+                $optionalColumns[] = 'structural_crossover_valid_ratio';
+                $optionalColumns[] = 'structural_crossover_coverage_contribution';
+            }
+            if ($this->adaptiveSchedulerEnabled) {
+                $optionalColumns[] = 'active_top_mutator';
+                $optionalColumns[] = 'entropy_of_weights';
+            }
+            $this->setStabilityLogFile($opts['stability-log'], $format, $interval, $optionalColumns);
         }
 
         // Setup corpus diagnostics if requested
@@ -777,6 +935,15 @@ final class Fuzzer {
             $logFile = $outputDir.'/log/log.txt';
         }
         $this->setLogFile($logFile);
+        $modeLine = sprintf(
+            "Mutation mode: adaptive=%s, structural_selector=%s, structural_crossover=%s, type_aware_weight=%.3f\n",
+            $this->adaptiveSchedulerEnabled ? 'on' : 'off',
+            $this->structuralMutatorSelectorEnabled ? 'on' : 'off',
+            $this->structuralCrossOverEnabled ? 'on' : 'off',
+            $this->typeAwareWeight
+        );
+        file_put_contents($logFile, $modeLine, FILE_APPEND);
+        echo $modeLine;
         $this->setOutputDir($outputDir);
         $this->setCorpusDir($corpusDir);
         $this->fuzz();
