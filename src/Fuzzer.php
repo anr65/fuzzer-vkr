@@ -69,6 +69,10 @@ final class Fuzzer {
     private ?string $latestWeightSnapshotId = null;
     private string $seedClassifierMode = 'none';
     private ?YamlSeedClassifier $yamlSeedClassifier = null;
+    private bool $cleanupEnabled = false;
+    private bool $powerScheduleEnabled = false;
+    private int $cleanupEveryRuns = 1000;
+    private int $cleanupStaleWindow = 5000;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -239,9 +243,9 @@ final class Fuzzer {
             }
 
 
-            $origEntry = $this->corpus->getRandomEntry($this->rng);
+            $origEntry = $this->selectCorpusEntry();
             $input = $origEntry !== null ? $origEntry->input : "";
-            $crossOverEntry = $this->corpus->getRandomEntry($this->rng);
+            $crossOverEntry = $this->selectCorpusEntry();
             $crossOverInput = $crossOverEntry !== null ? $crossOverEntry->input : null;
             for ($m = 0; $m < $this->mutationDepthLimit; $m++) {
                 $seedInput = $origEntry !== null ? $origEntry->input : $input;
@@ -384,6 +388,23 @@ final class Fuzzer {
             if ($this->corpusDiagnostics !== null) {
                 $this->corpusDiagnostics->createSnapshot($this->runs);
             }
+
+            if ($this->cleanupEnabled && $this->runs % $this->cleanupEveryRuns === 0) {
+                $this->cleanupStaleSeeds();
+            }
+        }
+
+        if (
+            $this->weightManager !== null
+            && in_array($this->operatorPolicy, ['adaptive', 'class-adaptive'], true)
+            && $this->weightManager->hasWeightsDiverged() === false
+        ) {
+            $warning = '[WARNING] Weights never diverged from uniform during adaptive phase. '
+                . 'Possible causes: insufficient iterations, saturated target, or warmup >= total runs.' . PHP_EOL;
+            fwrite(STDERR, $warning);
+            if ($this->corpusDiagnostics !== null) {
+                $this->corpusDiagnostics->logWarningEvent('weights_never_diverged_uniform');
+            }
         }
         
         // Final log at end of fuzzing
@@ -460,6 +481,64 @@ final class Fuzzer {
             'dead_selection_percentage' => round($deadSelectionPercentage, 2),
             'contribution_rate' => round($contributionRate, 2),
         ];
+    }
+
+    private function selectCorpusEntry(): ?CorpusEntry {
+        if (!$this->powerScheduleEnabled || $this->corpusDiagnostics === null) {
+            return $this->corpus->getRandomEntry($this->rng);
+        }
+
+        $stats = $this->corpusDiagnostics->getAllSeedStats();
+        $currentRun = max(1, $this->runs);
+        return $this->corpus->getWeightedRandomEntry($this->rng, function (CorpusEntry $entry) use ($stats, $currentRun): float {
+            if (!isset($stats[$entry->hash])) {
+                return 1.0;
+            }
+            $seed = $stats[$entry->hash];
+            $last = $seed->lastContributionRun ?? $seed->creationRun;
+            $staleness = max(0, $currentRun - $last);
+            $stalenessFactor = 1.0 + min(5.0, $staleness / 500.0);
+            $contribFactor = 1.0 + min(10.0, (float) $seed->timesContributed);
+            return $stalenessFactor * $contribFactor;
+        });
+    }
+
+    private function cleanupStaleSeeds(): void {
+        if ($this->corpusDiagnostics === null) {
+            return;
+        }
+        $allStats = $this->corpusDiagnostics->getAllSeedStats();
+        if (empty($allStats)) {
+            return;
+        }
+        $thresholdRun = $this->runs - $this->cleanupStaleWindow;
+        $toRemove = [];
+        foreach ($this->corpus->getEntries() as $entry) {
+            $stats = $allStats[$entry->hash] ?? null;
+            if ($stats === null) {
+                continue;
+            }
+            $last = $stats->lastContributionRun;
+            if ($last === null) {
+                if ($stats->creationRun < $thresholdRun) {
+                    $toRemove[] = $entry->hash;
+                }
+                continue;
+            }
+            if ($last < $thresholdRun) {
+                $toRemove[] = $entry->hash;
+            }
+        }
+
+        $corpusSize = $this->corpus->getNumCorpusEntries();
+        if ($corpusSize - count($toRemove) < 1) {
+            return;
+        }
+
+        if (!empty($toRemove)) {
+            $removed = $this->corpus->removeEntriesByHashes($toRemove, true);
+            file_put_contents($this->logFile, "[cleanup] run={$this->runs} removed={$removed}\n", FILE_APPEND);
+        }
     }
 
     private function isAllowedException(\Throwable $e): bool {
@@ -729,13 +808,23 @@ final class Fuzzer {
                 ->setDescription('Warm-up iterations before adaptive rebalancing (default: 2 * period)'),
             Option::create(null, 'operator-decay-mode', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('mode')
-                ->setDescription('Forgetting mode after rebalance: reset|ema_decay'),
+                ->setDescription('Forgetting mode after rebalance: reset|cumulative|multiplicative'),
             Option::create(null, 'operator-decay-factor', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('float')
-                ->setDescription('Decay factor for ema_decay mode'),
+                ->setDescription('Decay factor for multiplicative mode (0.1-0.9, default: 0.5)'),
             Option::create(null, 'seed-classifier', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('mode')
                 ->setDescription('Seed classifier mode: none|yaml (default: none)'),
+            Option::create(null, 'cleanup', GetOpt::NO_ARGUMENT)
+                ->setDescription('Enable stale corpus seed cleanup'),
+            Option::create(null, 'cleanup-every', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Run cleanup every N executions (default: 1000)'),
+            Option::create(null, 'cleanup-stale-window', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('runs')
+                ->setDescription('Seed considered stale if no contribution in window (default: 5000)'),
+            Option::create(null, 'power-schedule', GetOpt::NO_ARGUMENT)
+                ->setDescription('Enable weighted seed selection instead of uniform random'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -823,7 +912,7 @@ final class Fuzzer {
 
         if (isset($opts['operator-decay-mode'])) {
             $decayMode = (string) $opts['operator-decay-mode'];
-            if (!in_array($decayMode, ['reset', 'ema_decay'], true)) {
+            if (!in_array($decayMode, ['reset', 'cumulative', 'multiplicative'], true)) {
                 throw new FuzzerException("Invalid operator decay mode: $decayMode");
             }
             $this->operatorDecayMode = $decayMode;
@@ -831,6 +920,13 @@ final class Fuzzer {
 
         if (isset($opts['operator-decay-factor'])) {
             $this->operatorDecayFactor = (float) $opts['operator-decay-factor'];
+            if ($this->operatorDecayFactor < 0.1 || $this->operatorDecayFactor > 0.9) {
+                throw new FuzzerException('operator-decay-factor must be in range [0.1, 0.9]');
+            }
+        }
+
+        if ($this->operatorDecayMode === 'multiplicative' && !isset($opts['operator-decay-factor'])) {
+            $this->operatorDecayFactor = 0.5;
         }
 
         if (isset($opts['operator-weights-config'])) {
@@ -839,6 +935,13 @@ final class Fuzzer {
 
         if (isset($opts['operator-weights-log'])) {
             $this->operatorWeightsLogger = new OperatorWeightsLogger((string) $opts['operator-weights-log']);
+            $this->operatorWeightsLogger->logMetadata([
+                'decay_mode' => $this->operatorDecayMode,
+                'decay_factor' => $this->operatorDecayFactor,
+                'alpha' => $this->operatorAlpha,
+                'period' => $this->operatorPeriod,
+                'warmup' => $this->operatorWarmupIterations,
+            ]);
         }
 
         if (isset($opts['seed-classifier'])) {
@@ -847,6 +950,14 @@ final class Fuzzer {
                 throw new FuzzerException("Invalid seed classifier mode: $seedClassifierMode");
             }
             $this->seedClassifierMode = $seedClassifierMode;
+        }
+        $this->cleanupEnabled = isset($opts['cleanup']);
+        $this->powerScheduleEnabled = isset($opts['power-schedule']);
+        if (isset($opts['cleanup-every'])) {
+            $this->cleanupEveryRuns = max(100, (int) $opts['cleanup-every']);
+        }
+        if (isset($opts['cleanup-stale-window'])) {
+            $this->cleanupStaleWindow = max(100, (int) $opts['cleanup-stale-window']);
         }
 
         if ($this->operatorPolicy === 'static') {

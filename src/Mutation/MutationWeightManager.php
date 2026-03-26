@@ -18,6 +18,7 @@ final class MutationWeightManager {
     private string $decayMode;
     private float $decayFactor;
     private float $minWeightFloor = 1e-6;
+    private bool $weightsEverDiverged = false;
     /** @var array<string, int> */
     private array $iterationsByClass = [];
 
@@ -141,6 +142,10 @@ final class MutationWeightManager {
         return $this->rebalancePeriod;
     }
 
+    public function hasWeightsDiverged(): bool {
+        return $this->weightsEverDiverged;
+    }
+
     /**
      * @param array<string, float>|array<string, array<string, float>> $staticWeights
      * @return array<string, float>
@@ -245,10 +250,38 @@ final class MutationWeightManager {
         }
 
         $this->weightsByClass[$seedClass] = $this->normalizeWeights($weights);
+        if ($this->isNonUniform($this->weightsByClass[$seedClass])) {
+            $this->weightsEverDiverged = true;
+        }
+    }
+
+    /**
+     * @param array<string, float> $weights
+     */
+    private function isNonUniform(array $weights): bool {
+        $count = \count($weights);
+        if ($count === 0) {
+            return false;
+        }
+
+        $uniformWeight = 1.0 / $count;
+        $maxDeviation = 0.0;
+        foreach ($weights as $weight) {
+            $deviation = abs($weight - $uniformWeight);
+            if ($deviation > $maxDeviation) {
+                $maxDeviation = $deviation;
+            }
+        }
+
+        return $maxDeviation > 0.01;
     }
 
     private function applyForgetting(string $seedClass): void {
-        if ($this->decayMode === 'ema_decay') {
+        if ($this->decayMode === 'cumulative') {
+            return;
+        }
+
+        if ($this->decayMode === 'multiplicative' || $this->decayMode === 'ema_decay') {
             foreach ($this->statsByClass[$seedClass] as $operatorId => $operatorStats) {
                 $this->statsByClass[$seedClass][$operatorId]['total_uses'] = (int) round($operatorStats['total_uses'] * $this->decayFactor);
                 $this->statsByClass[$seedClass][$operatorId]['interesting_count'] = (int) round($operatorStats['interesting_count'] * $this->decayFactor);

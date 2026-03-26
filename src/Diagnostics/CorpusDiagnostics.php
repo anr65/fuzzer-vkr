@@ -165,6 +165,24 @@ final class CorpusDiagnostics {
         file_put_contents($this->eventsLogFile, $line, FILE_APPEND);
     }
 
+    public function logWarningEvent(string $reason): void {
+        if (!$this->enabled) {
+            return;
+        }
+
+        $run = $this->getCurrentRun ? ($this->getCurrentRun)() : 0;
+        $coverage = $this->getCurrentCoverage ? ($this->getCurrentCoverage)() : 0;
+        $line = sprintf(
+            "%d,,,%d,%d,%d,0,warning,%s,,,,\n",
+            $run,
+            0,
+            $coverage,
+            $coverage,
+            $reason
+        );
+        file_put_contents($this->eventsLogFile, $line, FILE_APPEND);
+    }
+
     /**
      * Update seed stats when a seed is replaced.
      */

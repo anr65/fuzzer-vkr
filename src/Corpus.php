@@ -20,6 +20,8 @@ final class Corpus {
     private int $maxLen = 0;
     
     private ?CorpusDiagnostics $diagnostics = null;
+    /** @var array<string, bool> */
+    private array $inactiveHashes = [];
 
     public function setDiagnostics(?CorpusDiagnostics $diagnostics): void {
         $this->diagnostics = $diagnostics;
@@ -139,7 +141,11 @@ final class Corpus {
             return null;
         }
 
-        $entry = $rng->randomElement($this->entriesByIndex);
+        $activeEntries = $this->getActiveEntries();
+        if (empty($activeEntries)) {
+            return null;
+        }
+        $entry = $rng->randomElement($activeEntries);
         
         // Record selection in diagnostics
         if ($this->diagnostics !== null && $entry !== null) {
@@ -147,6 +153,110 @@ final class Corpus {
         }
         
         return $entry;
+    }
+
+    /**
+     * @param callable(CorpusEntry): float $weightProvider
+     */
+    public function getWeightedRandomEntry(RNG $rng, callable $weightProvider): ?CorpusEntry {
+        $activeEntries = $this->getActiveEntries();
+        if (empty($activeEntries)) {
+            return null;
+        }
+
+        $weights = [];
+        $total = 0.0;
+        foreach ($activeEntries as $entry) {
+            $weight = max(0.0, (float) $weightProvider($entry));
+            $weights[] = $weight;
+            $total += $weight;
+        }
+
+        if ($total <= 0.0) {
+            $entry = $rng->randomElement($activeEntries);
+            if ($this->diagnostics !== null && $entry !== null) {
+                $this->diagnostics->recordSelection($entry);
+            }
+            return $entry;
+        }
+
+        $threshold = ($rng->randomInt(1000000) / 1000000.0) * $total;
+        $acc = 0.0;
+        foreach ($activeEntries as $idx => $entry) {
+            $acc += $weights[$idx];
+            if ($threshold <= $acc) {
+                if ($this->diagnostics !== null) {
+                    $this->diagnostics->recordSelection($entry);
+                }
+                return $entry;
+            }
+        }
+
+        $last = $activeEntries[count($activeEntries) - 1];
+        if ($this->diagnostics !== null) {
+            $this->diagnostics->recordSelection($last);
+        }
+        return $last;
+    }
+
+    /**
+     * @return list<CorpusEntry>
+     */
+    public function getEntries(): array {
+        return $this->entriesByIndex;
+    }
+
+    /**
+     * @param list<string> $hashes
+     */
+    public function removeEntriesByHashes(array $hashes, bool $removeFiles = false): int {
+        if (empty($hashes)) {
+            return 0;
+        }
+        $removed = 0;
+        foreach ($hashes as $hash) {
+            if (!isset($this->entriesByHash[$hash])) {
+                continue;
+            }
+            $entry = $this->entriesByHash[$hash];
+            unset($this->entriesByHash[$hash], $this->inactiveHashes[$hash]);
+            $this->totalLen -= \strlen($entry->input);
+            $removed++;
+
+            if ($removeFiles && $entry->path !== null && is_file($entry->path)) {
+                @unlink($entry->path);
+            }
+        }
+        if ($removed > 0) {
+            $this->entriesByIndex = array_values($this->entriesByHash);
+            $this->maxLen = 0;
+            foreach ($this->entriesByIndex as $entry) {
+                $this->maxLen = max($this->maxLen, \strlen($entry->input));
+            }
+        }
+        return $removed;
+    }
+
+    /**
+     * @param list<string> $hashes
+     */
+    public function markInactiveByHashes(array $hashes): void {
+        foreach ($hashes as $hash) {
+            $this->inactiveHashes[$hash] = true;
+        }
+    }
+
+    private function getActiveEntries(): array {
+        if (empty($this->inactiveHashes)) {
+            return $this->entriesByIndex;
+        }
+        $active = [];
+        foreach ($this->entriesByIndex as $entry) {
+            if (!isset($this->inactiveHashes[$entry->hash])) {
+                $active[] = $entry;
+            }
+        }
+        return $active;
     }
 
     public function getNumCorpusEntries(): int {

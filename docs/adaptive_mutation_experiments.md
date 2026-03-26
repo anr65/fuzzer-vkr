@@ -62,3 +62,7 @@ Each run directory includes:
 - `events.csv` - candidate decision log with `operator_id`, `was_interesting`, `seed_class`, `weight_snapshot_id`
 - `operator_weights.jsonl` - periodic weight snapshots (`snapshot_id`, class, weights, stats)
 - `log.txt` - runtime textual log
+
+Determinism note for snapshot comparisons:
+
+- compare all `operator_weights.jsonl` fields except `wall_clock_ts`.
