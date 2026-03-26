@@ -43,12 +43,14 @@ final class Fuzzer {
     private int $lenControlFactor = 200;
     private int $timeout = 3;
     private int $memory_limit = 999;
+    private ?int $maxTimeSeconds = null;
 
     // Counts all crashes, including duplicates
     private int $crashes = 0;
     private int $maxCrashes = 100;
     private ?StabilityLogger $stabilityLogger = null;
     private ?CorpusDiagnostics $corpusDiagnostics = null;
+    private ?array $mutatorProfile = null;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -56,7 +58,8 @@ final class Fuzzer {
             FuzzingContext::class, PhpVersion::getHostVersion());
         $this->rng = new RNG();
         $this->config = new Config();
-        $this->mutator = new Mutator($this->rng, $this->config->dictionary);
+        // Mutator will be created after profile is set (if provided) or use default
+        $this->mutator = new Mutator($this->rng, $this->config->dictionary, null);
         $this->corpus = new Corpus();
 
         // Instrument everything apart from our src/ directory.
@@ -115,6 +118,18 @@ final class Fuzzer {
         $this->stabilityLogger = new StabilityLogger($path, $format, $logInterval);
     }
 
+    public function setStabilityGraphDataFile(string $graphDataFile, string $runId): void {
+        if ($this->stabilityLogger !== null) {
+            $this->stabilityLogger->setGraphDataFile($graphDataFile, $runId);
+        }
+    }
+
+    public function setMutatorProfile(?array $mutatorProfile): void {
+        $this->mutatorProfile = $mutatorProfile;
+        // Recreate mutator with new profile
+        $this->mutator = new Mutator($this->rng, $this->config->dictionary, $this->mutatorProfile);
+    }
+
     public function setCorpusDiagnostics(
         string $eventsLogFile,
         string $snapshotDir,
@@ -154,6 +169,15 @@ final class Fuzzer {
         }
         
         while ($this->runs < $this->maxRuns) {
+            // Check time limit if set
+            if ($this->maxTimeSeconds !== null) {
+                $elapsed = microtime(true) - $this->startTime;
+                if ($elapsed >= $this->maxTimeSeconds) {
+                    echo "Time limit of {$this->maxTimeSeconds} seconds reached, stopping\n";
+                    file_put_contents($this->logFile, "Time limit of {$this->maxTimeSeconds} seconds reached, stopping\n", FILE_APPEND);
+                    break;
+                }
+            }
 
             if (memory_get_usage(true) / 1024 / 1024 >= $this->memory_limit) {
                 echo "Memory limit of {$this->memory_limit} MB exceeded, aborting\n";
@@ -586,6 +610,15 @@ final class Fuzzer {
             Option::create(null, 'corpus-snapshot-frequency', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('runs')
                 ->setDescription('Create corpus snapshot every N runs (default: 2000)'),
+            Option::create(null, 'seed', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('int')
+                ->setDescription('Seed for deterministic random number generation. If seed and corpus are identical, the fuzzer generates identical mutation sequences.'),
+            Option::create(null, 'max-time', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('seconds')
+                ->setDescription('Maximum fuzzing time in seconds'),
+            Option::create(null, 'mutator-profile', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('profile_id')
+                ->setDescription('Mutator profile ID from config/mutator_profiles.json. Use "default" for all mutators.'),
         ]);
         $getOpt->addOperand(Operand::create('target', Operand::REQUIRED));
 
@@ -639,6 +672,45 @@ final class Fuzzer {
 
         if (isset($opts['memory-limit'])) {
             $this->memory_limit = (int) $opts['memory-limit'];
+        }
+
+        if (isset($opts['max-time'])) {
+            $this->maxTimeSeconds = (int) $opts['max-time'];
+        }
+
+        // Setup deterministic seed if provided
+        if (isset($opts['seed'])) {
+            $seed = (int) $opts['seed'];
+            $this->rng->setSeed($seed);
+        }
+
+        // Setup mutator profile if provided
+        if (isset($opts['mutator-profile'])) {
+            $profileId = $opts['mutator-profile'];
+            $profilePath = __DIR__ . '/../config/mutator_profiles.json';
+            
+            if (!file_exists($profilePath)) {
+                throw new FuzzerException("Mutator profiles file not found: $profilePath");
+            }
+            
+            $profiles = json_decode(file_get_contents($profilePath), true);
+            if ($profiles === null) {
+                throw new FuzzerException("Failed to parse mutator profiles JSON");
+            }
+            
+            if ($profileId === 'default') {
+                // Use default profile from JSON
+                if (isset($profiles['default'])) {
+                    $this->setMutatorProfile($profiles['default']);
+                } else {
+                    // Fallback: use all mutators (null = all)
+                    $this->setMutatorProfile(null);
+                }
+            } elseif (!isset($profiles[$profileId])) {
+                throw new FuzzerException("Unknown mutator profile: $profileId");
+            } else {
+                $this->setMutatorProfile($profiles[$profileId]);
+            }
         }
 
         // Setup stability logger if requested

@@ -8,11 +8,13 @@ namespace PhpFuzzer;
  */
 final class StabilityLogger {
     private string $logFile;
+    private ?string $graphDataFile = null;
     private string $format; // 'csv' or 'json'
     private float $startTime;
     private int $logInterval; // Log every N runs
     private int $lastLogRun = 0;
     private bool $isFirstJsonEntry = true;
+    private ?string $runId = null;
     
     // Current interval tracking
     private int $intervalStartRun = 0;
@@ -45,6 +47,23 @@ final class StabilityLogger {
         
         // Initialize log file with header
         $this->initializeLogFile();
+    }
+
+    /**
+     * Set the graph data file path and run ID for deterministic experiments.
+     */
+    public function setGraphDataFile(string $graphDataFile, string $runId): void {
+        $this->graphDataFile = $graphDataFile;
+        $this->runId = $runId;
+        
+        // Ensure directory exists
+        $dir = dirname($graphDataFile);
+        if ($dir && !is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        
+        // Initialize graph data file with header
+        file_put_contents($this->graphDataFile, "run_id,timestamp_relative_seconds,executions,coverage,corpus_size\n");
     }
     
     public function start(float $startTime): void {
@@ -174,6 +193,19 @@ final class StabilityLogger {
             }
             
             $this->logCsv($csvData);
+        }
+        
+        // Write to graph_data.csv if configured
+        if ($this->graphDataFile !== null && $this->runId !== null) {
+            $graphLine = sprintf(
+                "%s,%.2f,%d,%d,%d\n",
+                $this->runId,
+                round($timestamp, 2),
+                $runs,
+                $totalFeatures,
+                $corpusSize
+            );
+            file_put_contents($this->graphDataFile, $graphLine, FILE_APPEND);
         }
         
         // Reset interval tracking

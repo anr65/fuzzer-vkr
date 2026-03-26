@@ -1,0 +1,145 @@
+{
+  "bytes_only": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit"
+  ],
+  "structural_only": [
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart"
+  ],
+  "semantic_only": [
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary"
+  ],
+  "genetic_only": [
+    "CrossOver"
+  ],
+  "bytes_structural": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart"
+  ],
+  "bytes_semantic": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary"
+  ],
+  "bytes_genetic": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "CrossOver"
+  ],
+  "structural_semantic": [
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary"
+  ],
+  "structural_genetic": [
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "CrossOver"
+  ],
+  "semantic_genetic": [
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary",
+    "CrossOver"
+  ],
+  "bytes_structural_semantic": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary"
+  ],
+  "bytes_structural_genetic": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "CrossOver"
+  ],
+  "bytes_semantic_genetic": [
+    "EraseBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary",
+    "CrossOver"
+  ],
+  "structural_semantic_genetic": [
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary",
+    "CrossOver"
+  ],
+  "yaml_structural_heavy": [
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary"
+  ],
+  "yaml_semantic_heavy": [
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "AddWordFromManualDictionary",
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ShuffleBytes",
+    "CopyPart"
+  ],
+  "default": [
+    "EraseBytes",
+    "InsertByte",
+    "InsertRepeatedBytes",
+    "ChangeByte",
+    "ChangeBit",
+    "ShuffleBytes",
+    "ChangeASCIIInt",
+    "ChangeBinInt",
+    "CopyPart",
+    "CrossOver",
+    "AddWordFromManualDictionary"
+  ]
+}

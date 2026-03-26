@@ -3,6 +3,17 @@
 namespace PhpFuzzer\Mutation;
 
 final class RNG {
+    private bool $seedSet = false;
+
+    /**
+     * Set the seed for deterministic random number generation.
+     * If the seed and corpus are identical, the fuzzer should generate identical mutation sequences.
+     */
+    public function setSeed(int $seed): void {
+        \mt_srand($seed);
+        $this->seedSet = true;
+    }
+
     public function randomInt(int $maxExclusive): int {
         return \mt_rand(0, $maxExclusive - 1);
     }

@@ -12,22 +12,42 @@ final class Mutator {
     private array $mutators;
     private ?string $crossOverWith = null; // TODO: Get rid of this
 
-    public function __construct(RNG $rng, Dictionary $dictionary) {
+
+    public function __construct(RNG $rng, Dictionary $dictionary, ?array $mutatorProfile = null) {
         $this->rng = $rng;
         $this->dictionary = $dictionary;
-        $this->mutators = [
-            [$this, 'mutateEraseBytes'],
-            [$this, 'mutateInsertByte'],
-            [$this, 'mutateInsertRepeatedBytes'],
-            [$this, 'mutateChangeByte'],
-            [$this, 'mutateChangeBit'],
-            [$this, 'mutateShuffleBytes'],
-            [$this, 'mutateChangeASCIIInt'],
-            [$this, 'mutateChangeBinInt'],
-            [$this, 'mutateCopyPart'],
-            [$this, 'mutateCrossOver'],
-            [$this, 'mutateAddWordFromManualDictionary'],
+        
+        // Build full mutator map
+        $allMutators = [
+            'EraseBytes' => [$this, 'mutateEraseBytes'],
+            'InsertByte' => [$this, 'mutateInsertByte'],
+            'InsertRepeatedBytes' => [$this, 'mutateInsertRepeatedBytes'],
+            'ChangeByte' => [$this, 'mutateChangeByte'],
+            'ChangeBit' => [$this, 'mutateChangeBit'],
+            'ShuffleBytes' => [$this, 'mutateShuffleBytes'],
+            'ChangeASCIIInt' => [$this, 'mutateChangeASCIIInt'],
+            'ChangeBinInt' => [$this, 'mutateChangeBinInt'],
+            'CopyPart' => [$this, 'mutateCopyPart'],
+            'CrossOver' => [$this, 'mutateCrossOver'],
+            'AddWordFromManualDictionary' => [$this, 'mutateAddWordFromManualDictionary'],
         ];
+        
+        // If profile is provided, filter mutators; otherwise use all
+        if ($mutatorProfile !== null && !empty($mutatorProfile)) {
+            $this->mutators = [];
+            foreach ($mutatorProfile as $mutatorName) {
+                if (isset($allMutators[$mutatorName])) {
+                    $this->mutators[] = $allMutators[$mutatorName];
+                }
+            }
+            // If profile resulted in empty mutators, fall back to all
+            if (empty($this->mutators)) {
+                $this->mutators = array_values($allMutators);
+            }
+        } else {
+            // Default: use all mutators
+            $this->mutators = array_values($allMutators);
+        }
     }
 
     /**
