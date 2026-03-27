@@ -52,6 +52,11 @@ final class RNG {
         return (bool) \mt_rand(0, 1);
     }
 
+    /** @return float in [0.0, 1.0) */
+    public function randomUnitFloat(): float {
+        return \mt_rand() / (\mt_getrandmax() + 1.0);
+    }
+
     public function randomString(int $len): string {
         $result = '';
         for ($i = 0; $i < $len; $i++) {

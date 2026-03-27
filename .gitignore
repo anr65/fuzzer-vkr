@@ -49,3 +49,10 @@ mutator_profile_runs/
 coverage-report/
 corpus_yaml/
 log.txt
+
+# Fuzzer run artifacts
+results/
+determinism_runs.zip
+determinism_summary.csv
+determinism_summary_yaml.csv
+mutator_profiles_summary.csv

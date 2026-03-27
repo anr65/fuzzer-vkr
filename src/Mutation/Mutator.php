@@ -8,16 +8,19 @@ namespace PhpFuzzer\Mutation;
 final class Mutator {
     private RNG $rng;
     private Dictionary $dictionary;
-    /** @var list<callable> */
-    private array $mutators;
+    /** @var list<array{name: string, fn: callable}> */
+    private array $mutatorDefs;
+    /** @var list<array{name: string, fn: callable}> */
+    private array $activeMutatorDefs;
+    /** @var array<string, true> */
+    private array $disabledNames = [];
+    private bool $forceAllEnabled = false;
     private ?string $crossOverWith = null; // TODO: Get rid of this
-
 
     public function __construct(RNG $rng, Dictionary $dictionary, ?array $mutatorProfile = null) {
         $this->rng = $rng;
         $this->dictionary = $dictionary;
-        
-        // Build full mutator map
+
         $allMutators = [
             'EraseBytes' => [$this, 'mutateEraseBytes'],
             'InsertByte' => [$this, 'mutateInsertByte'],
@@ -31,22 +34,67 @@ final class Mutator {
             'CrossOver' => [$this, 'mutateCrossOver'],
             'AddWordFromManualDictionary' => [$this, 'mutateAddWordFromManualDictionary'],
         ];
-        
-        // If profile is provided, filter mutators; otherwise use all
+
+        $this->mutatorDefs = [];
         if ($mutatorProfile !== null && !empty($mutatorProfile)) {
-            $this->mutators = [];
             foreach ($mutatorProfile as $mutatorName) {
                 if (isset($allMutators[$mutatorName])) {
-                    $this->mutators[] = $allMutators[$mutatorName];
+                    $this->mutatorDefs[] = ['name' => $mutatorName, 'fn' => $allMutators[$mutatorName]];
                 }
             }
-            // If profile resulted in empty mutators, fall back to all
-            if (empty($this->mutators)) {
-                $this->mutators = array_values($allMutators);
+            if ($this->mutatorDefs === []) {
+                foreach ($allMutators as $name => $fn) {
+                    $this->mutatorDefs[] = ['name' => $name, 'fn' => $fn];
+                }
             }
         } else {
-            // Default: use all mutators
-            $this->mutators = array_values($allMutators);
+            foreach ($allMutators as $name => $fn) {
+                $this->mutatorDefs[] = ['name' => $name, 'fn' => $fn];
+            }
+        }
+        $this->rebuildActivePool();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getMutatorNames(): array {
+        $n = [];
+        foreach ($this->mutatorDefs as $d) {
+            $n[] = $d['name'];
+        }
+        return $n;
+    }
+
+    /**
+     * @param list<string> $names
+     */
+    public function setDisabledMutators(array $names): void {
+        $this->disabledNames = [];
+        foreach ($names as $name) {
+            $this->disabledNames[$name] = true;
+        }
+        $this->rebuildActivePool();
+    }
+
+    public function setForceAllEnabled(bool $force): void {
+        $this->forceAllEnabled = $force;
+        $this->rebuildActivePool();
+    }
+
+    private function rebuildActivePool(): void {
+        if ($this->forceAllEnabled) {
+            $this->activeMutatorDefs = $this->mutatorDefs;
+            return;
+        }
+        $this->activeMutatorDefs = [];
+        foreach ($this->mutatorDefs as $d) {
+            if (!isset($this->disabledNames[$d['name']])) {
+                $this->activeMutatorDefs[] = $d;
+            }
+        }
+        if ($this->activeMutatorDefs === []) {
+            $this->activeMutatorDefs = $this->mutatorDefs;
         }
     }
 
@@ -54,7 +102,39 @@ final class Mutator {
      * @return list<callable>
      */
     public function getMutators(): array {
-        return $this->mutators;
+        $out = [];
+        foreach ($this->activeMutatorDefs as $d) {
+            $out[] = $d['fn'];
+        }
+        return $out;
+    }
+
+    public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
+        $this->crossOverWith = $crossOverWith;
+        while (true) {
+            $def = $this->rng->randomElement($this->activeMutatorDefs);
+            $newStr = ($def['fn'])($str, $maxLen);
+            if (null !== $newStr) {
+                assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $def['name']);
+                return $newStr;
+            }
+        }
+    }
+
+    /**
+     * Same as mutate but returns the chosen mutator name (for adaptive instrumentation).
+     * @return array{0: string, 1: string}
+     */
+    public function mutateWithMeta(string $str, int $maxLen, ?string $crossOverWith): array {
+        $this->crossOverWith = $crossOverWith;
+        while (true) {
+            $def = $this->rng->randomElement($this->activeMutatorDefs);
+            $newStr = ($def['fn'])($str, $maxLen);
+            if (null !== $newStr) {
+                assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $def['name']);
+                return [$newStr, $def['name']];
+            }
+        }
     }
 
     private function randomBiasedChar(): string {
@@ -100,7 +180,6 @@ final class Mutator {
         $maxNumBytes = min($maxLen - $len, 128);
         $numBytes = $this->rng->randomIntRange($minNumBytes, $maxNumBytes);
         $pos = $this->rng->randomPosOrEnd($str);
-        // TODO: Biasing?
         $char = $this->rng->randomChar();
         return \substr($str, 0, $pos)
             . str_repeat($char, $numBytes)
@@ -135,7 +214,6 @@ final class Mutator {
         }
         $numBytes = $this->rng->randomInt(min($len, 8)) + 1;
         $pos = $this->rng->randomInt($len - $numBytes + 1);
-        // TODO: This does not use the RNG!
         return \substr($str, 0, $pos)
             . \str_shuffle(\substr($str, $pos, $numBytes))
             . \substr($str, $pos + $numBytes);
@@ -159,7 +237,6 @@ final class Mutator {
         while ($endPos < $len && \ctype_digit($str[$endPos])) {
             $endPos++;
         }
-        // TODO: We won't be able to get large unsigned integers here.
         $int = (int) \substr($str, $beginPos, $endPos - $beginPos);
         switch ($this->rng->randomInt(4)) {
             case 0:
@@ -287,9 +364,8 @@ final class Mutator {
         }
         if ($len == $maxLen || $this->rng->randomBool()) {
             return $this->copyPartOf($str, $str);
-        } else {
-            return $this->insertPartOf($str, $str, $maxLen);
         }
+        return $this->insertPartOf($str, $str, $maxLen);
     }
 
     public function mutateCrossOver(string $str, int $maxLen): ?string {
@@ -327,7 +403,6 @@ final class Mutator {
         $word = $this->rng->randomElement($this->dictionary->dict);
         $wordLen = \strlen($word);
         if ($this->rng->randomBool()) {
-            // Insert word.
             if ($len + $wordLen > $maxLen) {
                 return null;
             }
@@ -336,28 +411,14 @@ final class Mutator {
             return \substr($str, 0, $pos)
                 . $word
                 . \substr($str, $pos);
-        } else {
-            // Overwrite with word.
-            if ($wordLen > $len) {
-                return null;
-            }
-
-            $pos = $this->rng->randomInt($len - $wordLen + 1);
-            return \substr($str, 0, $pos)
-                . $word
-                . \substr($str, $pos + $wordLen);
         }
-    }
-
-    public function mutate(string $str, int $maxLen, ?string $crossOverWith): string {
-        $this->crossOverWith = $crossOverWith;
-        while (true) {
-            $mutator = $this->rng->randomElement($this->mutators);
-            $newStr = $mutator($str, $maxLen);
-            if (null !== $newStr) {
-                assert(\strlen($newStr) <= $maxLen, 'Mutator ' . $mutator[1]);
-                return $newStr;
-            }
+        if ($wordLen > $len) {
+            return null;
         }
+
+        $pos = $this->rng->randomInt($len - $wordLen + 1);
+        return \substr($str, 0, $pos)
+            . $word
+            . \substr($str, $pos + $wordLen);
     }
 }

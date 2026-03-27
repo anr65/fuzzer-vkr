@@ -14,9 +14,18 @@ class Config {
     /** @var list<class-string<\Throwable>> */
     public array $allowedExceptions = [\Exception::class];
     public int $maxLen = PHP_INT_MAX;
+    private ?YamlCache $yamlCache = null;
 
     public function __construct() {
         $this->dictionary = new Dictionary();
+    }
+
+    public function setYamlCache(?YamlCache $yamlCache): void {
+        $this->yamlCache = $yamlCache;
+    }
+
+    public function getYamlCache(): ?YamlCache {
+        return $this->yamlCache;
     }
 
     /**

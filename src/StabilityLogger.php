@@ -183,14 +183,14 @@ final class StabilityLogger {
                 round($currentStagnationSeconds, 2),
             ];
             
-            // Append extended metrics if available
-            if ($extendedMetrics !== null) {
-                $csvData[] = $extendedMetrics['avg_seed_age'] ?? '';
-                $csvData[] = $extendedMetrics['active_seeds'] ?? '';
-                $csvData[] = $extendedMetrics['dead_seeds'] ?? '';
-                $csvData[] = $extendedMetrics['dead_selection_percentage'] ?? '';
-                $csvData[] = $extendedMetrics['contribution_rate'] ?? '';
-            }
+            $em = $extendedMetrics ?? [];
+            $csvData[] = $em['avg_seed_age'] ?? '';
+            $csvData[] = $em['active_seeds'] ?? '';
+            $csvData[] = $em['dead_seeds'] ?? '';
+            $csvData[] = $em['dead_selection_percentage'] ?? '';
+            $csvData[] = $em['contribution_rate'] ?? '';
+            $csvData[] = $em['corpus_rejected_duplicates'] ?? '';
+            $csvData[] = $em['corpus_admitted_relaxed'] ?? '';
             
             $this->logCsv($csvData);
         }
@@ -240,6 +240,8 @@ final class StabilityLogger {
                 'dead_seeds',
                 'dead_selection_percentage',
                 'contribution_rate',
+                'corpus_rejected_duplicates',
+                'corpus_admitted_relaxed',
             ];
             file_put_contents($this->logFile, implode(',', $header) . "\n");
         }

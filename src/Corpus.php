@@ -107,6 +107,10 @@ final class Corpus {
         return true;
     }
 
+    public function getEntryByHash(string $hash): ?CorpusEntry {
+        return $this->entriesByHash[$hash] ?? null;
+    }
+
     public function getRandomEntry(RNG $rng): ?CorpusEntry {
         if (empty($this->entriesByHash)) {
             return null;
@@ -120,6 +124,13 @@ final class Corpus {
         }
         
         return $entry;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getAllSeedHashes(): array {
+        return array_keys($this->entriesByHash);
     }
 
     public function getNumCorpusEntries(): int {
