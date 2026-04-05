@@ -25,9 +25,10 @@ add_worktree() {
 add_worktree optimal-weights feature/optimal-mutator-weights
 add_worktree mutator-combinations feature/mutator-combinations
 add_worktree adaptive-mutations feature/adaptive-mutations
-# Branch name in this repo is matator-optimizations (typo preserved)
-add_worktree mutator-optimizations matator-optimizations
 
-echo "[✓] Worktrees ready. Build with:"
+# matator-optimizations is built from the main repo (.), not a worktree — git forbids
+# the same branch in two worktrees. Before: git checkout matator-optimizations
+
+echo "[✓] Worktrees ready. Ensure current branch is matator-optimizations, then:"
 echo "    docker compose -f docker-compose.benchmark.yml build"
 echo "    docker compose -f docker-compose.benchmark.yml up"

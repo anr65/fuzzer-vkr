@@ -50,9 +50,11 @@ services:
       - ./docker-output/benchmark/adaptive-mutations:/app/output
     <<: *fuzzer-deploy
 
+  # Same branch cannot be checked out in two worktrees; build from repo root.
+  # Run builds with main checkout on matator-optimizations (see benchmark-worktrees.sh).
   fuzzer_mutator_optimizations:
     build:
-      context: .benchmark/mutator-optimizations
+      context: .
     image: fuzzer-vkr:mutator-optimizations
     container_name: fuzzer-mutator-optimizations
     environment:
