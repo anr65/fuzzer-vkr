@@ -2,6 +2,7 @@
 # Prepare worktrees: ./scripts/benchmark-worktrees.sh
 # Run: docker compose -f docker-compose.benchmark.yml build && docker compose -f docker-compose.benchmark.yml up
 
+# Override for a quick parallel check: BENCHMARK_MAX_TIME_SECONDS=30 docker compose -f docker-compose.benchmark.yml up
 x-fuzzer-environment: &fuzzer-environment
   TARGET: request_mix_3/target.php
   CORPUS: corpus
@@ -9,7 +10,7 @@ x-fuzzer-environment: &fuzzer-environment
   LOGFILE: /app/output/fuzzer.log
   SEED: "42"
   MEMORY_LIMIT_MB: "1024"
-  MAX_TIME_SECONDS: "7200"
+  MAX_TIME_SECONDS: ${BENCHMARK_MAX_TIME_SECONDS:-7200}
   STABILITY_INTERVAL: "500"
 
 x-fuzzer-deploy: &fuzzer-deploy

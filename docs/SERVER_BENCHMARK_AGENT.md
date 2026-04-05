@@ -76,7 +76,10 @@ docker compose -f docker-compose.benchmark.yml down
 
 ## Настройка длительности и лимитов
 
-Переменные окружения задаются в `docker-compose.benchmark.yml` (якорь `x-fuzzer-environment`). Для длительного прогона измените `MAX_TIME_SECONDS` (по умолчанию 7200). Для одного контейнера без worktree используйте `docker-compose.yml` и при необходимости переопределите `MAX_TIME_SECONDS` в секции `environment`.
+В `docker-compose.benchmark.yml` длительность задаётся через переменную хоста **`BENCHMARK_MAX_TIME_SECONDS`** (по умолчанию 7200). Пример короткой проверки четырёх контейнеров:  
+`BENCHMARK_MAX_TIME_SECONDS=120 docker compose -f docker-compose.benchmark.yml up`.
+
+Для одного контейнера используйте `docker-compose.yml` и переопределите `MAX_TIME_SECONDS` в секции `environment`.
 
 Дополнительные флаги фаззера (если нужны одинаково на всех ветках): в образе поддерживается `FUZZER_EXTRA_ARGS` в `docker/entrypoint.sh` (добавьте в compose при необходимости).
 
