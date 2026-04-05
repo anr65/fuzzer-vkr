@@ -6,7 +6,7 @@ For step-by-step instructions to run four parallel fuzzer containers on a VPS (g
 
 ## Key files
 
-- [Dockerfile](Dockerfile) — PHP 8.2 CLI, `pcntl` / `mbstring` / `zip`, Composer deps
+- [Dockerfile](Dockerfile) — PHP 8.4 CLI, `pcntl` / `mbstring` / `zip`, Composer deps (Laravel 12)
 - [docker/entrypoint.sh](docker/entrypoint.sh) — `php bin/php-fuzzer fuzz` with env-driven limits and stability CSV
 - [docker-compose.yml](docker-compose.yml) — single-service smoke run
 - [docker-compose.benchmark.yml](docker-compose.benchmark.yml) — four services, contexts under `.benchmark/`
