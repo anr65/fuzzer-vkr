@@ -4,6 +4,7 @@
 
 ## Предпосылки
 
+- **Образ**: `Dockerfile` использует **PHP 8.4** CLI (требование транзитивных пакетов Symfony 8 из Laravel 12).
 - **CPU/RAM**: ориентир 8 vCPU, 12+ ГБ RAM; в `docker-compose.benchmark.yml` на контейнер задано ~2 vCPU и 2.5 ГиБ RAM. При OOM уменьшите параллелизм (остановите часть сервисов) или добавьте swap.
 - Ветки с **одинаковыми** файлами Docker (после мержа/cherry-pick): `Dockerfile`, `.dockerignore`, `docker/entrypoint.sh`, `docker-compose.yml`, `docker-compose.benchmark.yml`, `scripts/benchmark-worktrees.sh`.
 
