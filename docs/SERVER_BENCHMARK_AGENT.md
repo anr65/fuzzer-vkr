@@ -29,18 +29,19 @@ sudo usermod -aG docker "$USER"
 ```bash
 git clone <URL> fuzzer-vkr
 cd fuzzer-vkr
-git checkout mutator-optimizations   # или любая ветка, где есть Docker-файлы
+git checkout matator-optimizations   # ветка для четвёртого образа (сборка из корня `.`)
 ./scripts/benchmark-worktrees.sh
 ```
 
-Скрипт создаёт каталоги:
+Скрипт создаёт три worktree (одна ветка не может быть в двух деревьях одновременно):
 
-- `.benchmark/optimal-weights` → ветка `feature/optimal-mutator-weights`
+- `.benchmark/optimal-weights` → `feature/optimal-mutator-weights`
 - `.benchmark/mutator-combinations` → `feature/mutator-combinations`
 - `.benchmark/adaptive-mutations` → `feature/adaptive-mutations`
-- `.benchmark/mutator-optimizations` → ветка `matator-optimizations` (имя в git)
 
-Если `git worktree add` падает с ошибкой «branch already checked out», освободите ветку (удалите другой worktree или коммит в основном рабочем дереве).
+Четвёртый сервис в `docker-compose.benchmark.yml` собирается из **корня репозитория** (код ветки `matator-optimizations`). Перед `docker compose ... build` обязательно `git checkout matator-optimizations` в основном клоне.
+
+Если `git worktree add` падает с ошибкой «branch already checked out», освободите ветку (удалите другой worktree).
 
 ## Сборка и запуск четырёх контейнеров
 
