@@ -44,6 +44,9 @@ git checkout matator-optimizations   # ветка для четвёртого о
 
 Если `git worktree add` падает с ошибкой «branch already checked out», освободите ветку (удалите другой worktree).
 
+Если нужно переключить основной клон на ветку, которая уже используется в `.benchmark/`, сначала удалите worktree, например:  
+`git worktree remove .benchmark/optimal-weights --force` (и аналогично для остальных каталогов).
+
 ## Сборка и запуск четырёх контейнеров
 
 Из **корня** репозитория (там, где лежит `docker-compose.benchmark.yml`):
