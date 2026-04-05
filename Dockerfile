@@ -5,6 +5,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
         unzip \
+        libonig-dev \
         libzip-dev \
     && docker-php-ext-install -j"$(nproc)" pcntl mbstring zip \
     && rm -rf /var/lib/apt/lists/*
