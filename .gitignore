@@ -54,6 +54,9 @@ log.txt
 docker-output/
 .benchmark/
 
+# Committed visualization export (exception: allow benchmark-reports/)
+!benchmark-reports/
+
 # Fuzzer run artifacts
 results/
 determinism_runs.zip

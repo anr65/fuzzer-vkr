@@ -1,0 +1,21 @@
+{
+  "variant_dir": "adaptive-mutations",
+  "title": "Adaptive mutations",
+  "git_branch": "feature/adaptive-mutations",
+  "generated_at_utc": "2026-04-05T15:43:10Z",
+  "source_stability_csv": "docker-output/benchmark/adaptive-mutations/stability.csv",
+  "source_fuzzer_log": "docker-output/benchmark/adaptive-mutations/fuzzer.log",
+  "stability_interval_metrics_rows": 4599,
+  "peak_runs": 494370,
+  "peak_unique_features": 27290,
+  "fuzzer_log_new_lines_total": 24510,
+  "progress_sample_rows": 2724,
+  "progress_sample_stride": 9,
+  "supervisor_events": 2,
+  "memory_soft_abort_messages": 0,
+  "crash_inputs_saved": [
+    "crash-024a0d77cb6039e38cde76094b9bc475.txt",
+    "crash-ab2a17fa7af574b98318642987cdca6f.txt",
+    "crash-b89ad9b958cd42652e9f026c6af8f5c4.txt"
+  ]
+}

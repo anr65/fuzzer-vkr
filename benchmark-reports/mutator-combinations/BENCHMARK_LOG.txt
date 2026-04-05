@@ -1,0 +1,35 @@
+# Benchmark log — Mutator combinations
+Folder: benchmark-reports/mutator-combinations/
+Git branch (build context): feature/mutator-combinations
+Export UTC: 2026-04-05T15:43:10Z
+
+## Interval metrics (stability logger)
+Rows in interval_metrics.csv: 12898
+Peak runs: 481842
+Peak unique_features (edges): 29663
+
+## Fuzzer process log (aggregate)
+Lines starting with NEW (total): 86489
+progress_sample.csv: 2983 rows (stride every ~29 NEW lines)
+Supervisor / entrypoint events: 13
+Soft memory abort messages (1024 MB): 14
+
+## Supervisor events
+  - 2026-04-05T11:50:46+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:08:59+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:37:49+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:57:30+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T13:15:21+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T13:32:42+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T13:49:52+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T14:07:42+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T14:25:23+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T14:43:10+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T15:00:41+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T15:18:37+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T15:37:00+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+
+## Crash inputs in docker-output (filenames only)
+
+  - crash-3df95fbcdbe373e00b168f99b97da03d.txt
+  - crash-613e60f58a69bbcfc26ba9c97dcb3eec.txt

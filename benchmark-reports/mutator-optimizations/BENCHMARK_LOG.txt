@@ -1,0 +1,25 @@
+# Benchmark log — Mutator optimizations (matator-optimizations)
+Folder: benchmark-reports/mutator-optimizations/
+Git branch (build context): matator-optimizations
+Export UTC: 2026-04-05T15:43:10Z
+
+## Interval metrics (stability logger)
+Rows in interval_metrics.csv: 5911
+Peak runs: 476926
+Peak unique_features (edges): 27484
+
+## Fuzzer process log (aggregate)
+Lines starting with NEW (total): 35989
+progress_sample.csv: 3000 rows (stride every ~12 NEW lines)
+Supervisor / entrypoint events: 4
+Soft memory abort messages (1024 MB): 5
+
+## Supervisor events
+  - 2026-04-05T11:51:27+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:10:09+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:38:25+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:57:36+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+
+## Crash inputs in docker-output (filenames only)
+
+  - crash-83878c91171338902e0fe0fb97a8c47a.txt

@@ -1,0 +1,24 @@
+# Benchmark log — Optimal mutator weights
+Folder: benchmark-reports/optimal-weights/
+Git branch (build context): feature/optimal-mutator-weights
+Export UTC: 2026-04-05T15:43:10Z
+
+## Interval metrics (stability logger)
+Rows in interval_metrics.csv: 4572
+Peak runs: 487803
+Peak unique_features (edges): 27486
+
+## Fuzzer process log (aggregate)
+Lines starting with NEW (total): 27286
+progress_sample.csv: 2729 rows (stride every ~10 NEW lines)
+Supervisor / entrypoint events: 2
+Soft memory abort messages (1024 MB): 3
+
+## Supervisor events
+  - 2026-04-05T12:38:49+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T12:58:07+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+
+## Crash inputs in docker-output (filenames only)
+
+  - crash-6277e2a7446059985dc9bcf0a4ac1a8f.txt
+  - crash-850198c70f0f346031af54238374683c.txt

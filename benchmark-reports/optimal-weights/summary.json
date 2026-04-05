@@ -1,0 +1,20 @@
+{
+  "variant_dir": "optimal-weights",
+  "title": "Optimal mutator weights",
+  "git_branch": "feature/optimal-mutator-weights",
+  "generated_at_utc": "2026-04-05T15:43:10Z",
+  "source_stability_csv": "docker-output/benchmark/optimal-weights/stability.csv",
+  "source_fuzzer_log": "docker-output/benchmark/optimal-weights/fuzzer.log",
+  "stability_interval_metrics_rows": 4572,
+  "peak_runs": 487803,
+  "peak_unique_features": 27486,
+  "fuzzer_log_new_lines_total": 27286,
+  "progress_sample_rows": 2729,
+  "progress_sample_stride": 10,
+  "supervisor_events": 2,
+  "memory_soft_abort_messages": 3,
+  "crash_inputs_saved": [
+    "crash-6277e2a7446059985dc9bcf0a4ac1a8f.txt",
+    "crash-850198c70f0f346031af54238374683c.txt"
+  ]
+}
