@@ -50,6 +50,10 @@ coverage-report/
 corpus_yaml/
 log.txt
 
+# Docker local output and benchmark worktrees
+docker-output/
+.benchmark/
+
 # Fuzzer run artifacts
 results/
 determinism_runs.zip
