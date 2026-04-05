@@ -990,6 +990,11 @@ final class Fuzzer {
             $this->memory_limit = (int) $opts['memory-limit'];
         }
 
+        // PHP CLI default memory_limit (often 128M) must cover the fuzzer budget; otherwise
+        // the engine fatals before the soft check in fuzz() can stop cleanly.
+        $phpMemoryLimitMb = $this->memory_limit + 128;
+        ini_set('memory_limit', $phpMemoryLimitMb . 'M');
+
         if (isset($opts['max-time'])) {
             $this->maxTimeSeconds = (int) $opts['max-time'];
         }

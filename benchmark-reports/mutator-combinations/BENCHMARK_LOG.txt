@@ -1,18 +1,18 @@
 # Benchmark log — Mutator combinations
 Folder: benchmark-reports/mutator-combinations/
 Git branch (build context): feature/mutator-combinations
-Export UTC: 2026-04-05T15:43:10Z
+Export UTC: 2026-04-05T19:20:44Z
 
 ## Interval metrics (stability logger)
-Rows in interval_metrics.csv: 12898
-Peak runs: 481842
-Peak unique_features (edges): 29663
+Rows in interval_metrics.csv: 21747
+Peak runs: 769538
+Peak unique_features (edges): 48043
 
 ## Fuzzer process log (aggregate)
-Lines starting with NEW (total): 86489
-progress_sample.csv: 2983 rows (stride every ~29 NEW lines)
-Supervisor / entrypoint events: 13
-Soft memory abort messages (1024 MB): 14
+Lines starting with NEW (total): 146971
+progress_sample.csv: 3000 rows (stride every ~49 NEW lines)
+Supervisor / entrypoint events: 18
+Soft memory abort messages (1024 MB): 19
 
 ## Supervisor events
   - 2026-04-05T11:50:46+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
@@ -28,6 +28,11 @@ Soft memory abort messages (1024 MB): 14
   - 2026-04-05T15:00:41+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
   - 2026-04-05T15:18:37+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
   - 2026-04-05T15:37:00+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T16:42:47+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:15:31+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:48:10+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T18:21:10+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T18:54:16+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
 
 ## Crash inputs in docker-output (filenames only)
 

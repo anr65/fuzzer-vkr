@@ -216,6 +216,12 @@ final class StabilityLogger {
     }
     
     private function initializeLogFile(): void {
+        if (is_file($this->logFile)) {
+            $existingSize = @filesize($this->logFile);
+            if ($existingSize !== false && $existingSize > 0) {
+                return;
+            }
+        }
         if ($this->format === 'json') {
             // JSON format: array of objects
             file_put_contents($this->logFile, "[\n");

@@ -1,25 +1,31 @@
 # Benchmark log — Adaptive mutations
 Folder: benchmark-reports/adaptive-mutations/
 Git branch (build context): feature/adaptive-mutations
-Export UTC: 2026-04-05T15:43:10Z
+Export UTC: 2026-04-05T19:20:44Z
 
 ## Interval metrics (stability logger)
-Rows in interval_metrics.csv: 4599
-Peak runs: 494370
-Peak unique_features (edges): 27290
+Rows in interval_metrics.csv: 13668
+Peak runs: 990841
+Peak unique_features (edges): 48030
 
 ## Fuzzer process log (aggregate)
-Lines starting with NEW (total): 24510
-progress_sample.csv: 2724 rows (stride every ~9 NEW lines)
-Supervisor / entrypoint events: 2
-Soft memory abort messages (1024 MB): 0
+Lines starting with NEW (total): 66088
+progress_sample.csv: 2874 rows (stride every ~23 NEW lines)
+Supervisor / entrypoint events: 7
+Soft memory abort messages (1024 MB): 3
 
 ## Supervisor events
   - 2026-04-05T12:39:45+00:00: fuzzer exited with code 255; restarting fuzzer
   - 2026-04-05T12:59:54+00:00: fuzzer exited with code 255; restarting fuzzer
+  - 2026-04-05T16:47:18+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:24:35+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:58:23+00:00: fuzzer exited with code 255; restarting fuzzer
+  - 2026-04-05T18:35:41+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T19:18:11+00:00: fuzzer exited with code 255; restarting fuzzer
 
 ## Crash inputs in docker-output (filenames only)
 
   - crash-024a0d77cb6039e38cde76094b9bc475.txt
+  - crash-a1c6df3d6b8e4e674be60038d53a45c2.txt
   - crash-ab2a17fa7af574b98318642987cdca6f.txt
   - crash-b89ad9b958cd42652e9f026c6af8f5c4.txt

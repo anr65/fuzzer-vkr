@@ -11,3 +11,8 @@
 {"iso_time": "2026-04-05T15:00:41+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer", "kind": "memory_limit_restart"}
 {"iso_time": "2026-04-05T15:18:37+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer", "kind": "memory_limit_restart"}
 {"iso_time": "2026-04-05T15:37:00+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer", "kind": "memory_limit_restart"}
+{"iso_time": "2026-04-05T16:42:47+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer", "kind": "memory_limit_restart"}
+{"iso_time": "2026-04-05T17:15:31+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer", "kind": "memory_limit_restart"}
+{"iso_time": "2026-04-05T17:48:10+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer", "kind": "memory_limit_restart"}
+{"iso_time": "2026-04-05T18:21:10+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer", "kind": "memory_limit_restart"}
+{"iso_time": "2026-04-05T18:54:16+00:00", "message": "memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer", "kind": "memory_limit_restart"}

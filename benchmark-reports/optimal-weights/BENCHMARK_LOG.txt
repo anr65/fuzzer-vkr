@@ -1,22 +1,31 @@
 # Benchmark log — Optimal mutator weights
 Folder: benchmark-reports/optimal-weights/
 Git branch (build context): feature/optimal-mutator-weights
-Export UTC: 2026-04-05T15:43:10Z
+Export UTC: 2026-04-05T19:20:44Z
 
 ## Interval metrics (stability logger)
-Rows in interval_metrics.csv: 4572
+Rows in interval_metrics.csv: 12326
 Peak runs: 487803
-Peak unique_features (edges): 27486
+Peak unique_features (edges): 69437
 
 ## Fuzzer process log (aggregate)
-Lines starting with NEW (total): 27286
-progress_sample.csv: 2729 rows (stride every ~10 NEW lines)
-Supervisor / entrypoint events: 2
-Soft memory abort messages (1024 MB): 3
+Lines starting with NEW (total): 172620
+progress_sample.csv: 2977 rows (stride every ~58 NEW lines)
+Supervisor / entrypoint events: 11
+Soft memory abort messages (1024 MB): 12
 
 ## Supervisor events
   - 2026-04-05T12:38:49+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
   - 2026-04-05T12:58:07+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1024); restarting fuzzer
+  - 2026-04-05T16:30:39+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T16:51:19+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:12:04+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:33:17+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T17:54:02+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T18:14:36+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T18:35:43+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T18:57:04+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
+  - 2026-04-05T19:17:15+00:00: memory budget exceeded (exit 42, MEMORY_LIMIT_MB=1800); restarting fuzzer
 
 ## Crash inputs in docker-output (filenames only)
 

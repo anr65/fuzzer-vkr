@@ -9,9 +9,12 @@ x-fuzzer-environment: &fuzzer-environment
   OUTPUT_DIR: /app/output
   LOGFILE: /app/output/fuzzer.log
   SEED: "42"
-  MEMORY_LIMIT_MB: "1024"
-  MAX_TIME_SECONDS: ${BENCHMARK_MAX_TIME_SECONDS:-7200}
+  # Softer PHP heap budget (still below mem_limit 2560m); reduces exit-42 churn vs 1024M.
+  MEMORY_LIMIT_MB: "1800"
+  MAX_TIME_SECONDS: ${BENCHMARK_MAX_TIME_SECONDS:-10800}
   STABILITY_INTERVAL: "500"
+  # Supervisor in docker/entrypoint.sh: restart on crash (e.g. 255) and exit 42 (MEMORY_LIMIT_MB); not on 0 or 1. Set 0 to disable.
+  FUZZER_RESTART_ON_MEMORY_LIMIT: "1"
 
 x-fuzzer-deploy: &fuzzer-deploy
   mem_limit: 2560m
@@ -19,34 +22,41 @@ x-fuzzer-deploy: &fuzzer-deploy
 
 services:
   fuzzer_optimal_weights:
+    restart: unless-stopped
     build:
       context: .benchmark/optimal-weights
     image: fuzzer-vkr:optimal-weights
     container_name: fuzzer-optimal-weights
     environment:
       <<: *fuzzer-environment
+      # 2.1 — operator weight policies (hypothesis: adaptive / learned-style scheduling)
+      FUZZER_EXTRA_ARGS: "--operator-policy=adaptive --timeout=30"
     volumes:
       - ./docker-output/benchmark/optimal-weights:/app/output
     <<: *fuzzer-deploy
 
   fuzzer_mutator_combinations:
+    restart: unless-stopped
     build:
       context: .benchmark/mutator-combinations
     image: fuzzer-vkr:mutator-combinations
     container_name: fuzzer-mutator-combinations
     environment:
       <<: *fuzzer-environment
+      FUZZER_EXTRA_ARGS: "--timeout=30"
     volumes:
       - ./docker-output/benchmark/mutator-combinations:/app/output
     <<: *fuzzer-deploy
 
   fuzzer_adaptive_mutations:
+    restart: unless-stopped
     build:
       context: .benchmark/adaptive-mutations
     image: fuzzer-vkr:adaptive-mutations
     container_name: fuzzer-adaptive-mutations
     environment:
       <<: *fuzzer-environment
+      FUZZER_EXTRA_ARGS: "--timeout=30"
     volumes:
       - ./docker-output/benchmark/adaptive-mutations:/app/output
     <<: *fuzzer-deploy
@@ -54,12 +64,15 @@ services:
   # Same branch cannot be checked out in two worktrees; build from repo root.
   # Run builds with main checkout on matator-optimizations (see benchmark-worktrees.sh).
   fuzzer_mutator_optimizations:
+    restart: unless-stopped
     build:
       context: .
     image: fuzzer-vkr:mutator-optimizations
     container_name: fuzzer-mutator-optimizations
     environment:
       <<: *fuzzer-environment
+      # 2.4 — baseline run; adaptive-mutators/yaml flags disabled (Symfony Stream flock + PHP 8.4). Use stability.csv + fuzzer.log for H2.4 until fixed.
+      FUZZER_EXTRA_ARGS: "--timeout=30"
     volumes:
       - ./docker-output/benchmark/mutator-optimizations:/app/output
     <<: *fuzzer-deploy

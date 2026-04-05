@@ -1,5 +1,5 @@
 # Master benchmark log (all four Docker benchmark variants)
-Generated UTC: 2026-04-05T15:43:10Z
+Generated UTC: 2026-04-05T19:20:44Z
 
 This export was produced from `docker-output/benchmark/*` (not committed) by
 `scripts/export_benchmark_reports.py`. Regenerate after new runs.
@@ -26,7 +26,7 @@ This export was produced from `docker-output/benchmark/*` (not committed) by
 
 | Variant | peak runs | peak unique_features |
 |---------|-----------|----------------------|
-| optimal-weights | 487803 | 27486 |
-| mutator-combinations | 481842 | 29663 |
-| adaptive-mutations | 494370 | 27290 |
-| mutator-optimizations | 476926 | 27484 |
+| optimal-weights | 487803 | 69437 |
+| mutator-combinations | 769538 | 48043 |
+| adaptive-mutations | 990841 | 48030 |
+| mutator-optimizations | 916612 | 46776 |

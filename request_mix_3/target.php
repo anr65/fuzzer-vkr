@@ -96,6 +96,11 @@ function generateFuzzedRequest(string $input): Request
 // Настройка цели фаззинга
 $config->setTarget(function (string $input) use ($kernel) {
     try {
+        // Laravel/Symfony default max execution time (often 3s) aborts slow kernel->handle paths; align with fuzzer --timeout.
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(120);
+        }
+
         $request = generateFuzzedRequest($input);
 
         // — случайно включаем PJAX
