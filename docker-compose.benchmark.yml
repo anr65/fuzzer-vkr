@@ -1,0 +1,62 @@
+# Four parallel fuzzers: build one image per git worktree under .benchmark/
+# Prepare worktrees: ./scripts/benchmark-worktrees.sh
+# Run: docker compose -f docker-compose.benchmark.yml build && docker compose -f docker-compose.benchmark.yml up
+
+x-fuzzer-environment: &fuzzer-environment
+  TARGET: request_mix_3/target.php
+  CORPUS: corpus
+  OUTPUT_DIR: /app/output
+  LOGFILE: /app/output/fuzzer.log
+  SEED: "42"
+  MEMORY_LIMIT_MB: "1024"
+  MAX_TIME_SECONDS: "7200"
+  STABILITY_INTERVAL: "500"
+
+x-fuzzer-deploy: &fuzzer-deploy
+  mem_limit: 2560m
+  cpus: 2.0
+
+services:
+  fuzzer_optimal_weights:
+    build:
+      context: .benchmark/optimal-weights
+    image: fuzzer-vkr:optimal-weights
+    container_name: fuzzer-optimal-weights
+    environment:
+      <<: *fuzzer-environment
+    volumes:
+      - ./docker-output/benchmark/optimal-weights:/app/output
+    <<: *fuzzer-deploy
+
+  fuzzer_mutator_combinations:
+    build:
+      context: .benchmark/mutator-combinations
+    image: fuzzer-vkr:mutator-combinations
+    container_name: fuzzer-mutator-combinations
+    environment:
+      <<: *fuzzer-environment
+    volumes:
+      - ./docker-output/benchmark/mutator-combinations:/app/output
+    <<: *fuzzer-deploy
+
+  fuzzer_adaptive_mutations:
+    build:
+      context: .benchmark/adaptive-mutations
+    image: fuzzer-vkr:adaptive-mutations
+    container_name: fuzzer-adaptive-mutations
+    environment:
+      <<: *fuzzer-environment
+    volumes:
+      - ./docker-output/benchmark/adaptive-mutations:/app/output
+    <<: *fuzzer-deploy
+
+  fuzzer_mutator_optimizations:
+    build:
+      context: .benchmark/mutator-optimizations
+    image: fuzzer-vkr:mutator-optimizations
+    container_name: fuzzer-mutator-optimizations
+    environment:
+      <<: *fuzzer-environment
+    volumes:
+      - ./docker-output/benchmark/mutator-optimizations:/app/output
+    <<: *fuzzer-deploy

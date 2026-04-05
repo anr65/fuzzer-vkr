@@ -1,0 +1,19 @@
+services:
+  fuzzer:
+    build: .
+    image: fuzzer-vkr:local
+    environment:
+      TARGET: request_mix_3/target.php
+      CORPUS: corpus
+      OUTPUT_DIR: /app/output
+      LOGFILE: /app/output/fuzzer.log
+      SEED: "42"
+      MEMORY_LIMIT_MB: "1024"
+      # Short smoke run by default; override for long benchmarks
+      MAX_TIME_SECONDS: "60"
+      STABILITY_INTERVAL: "250"
+    volumes:
+      - ./docker-output/single:/app/output
+    # Optional: pin CPU/RAM locally (same keys work on Linux)
+    mem_limit: 2560m
+    cpus: 2.0

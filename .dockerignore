@@ -1,0 +1,30 @@
+# Rebuilt inside the image
+/vendor/
+
+# Git and local tooling
+.git/
+.gitignore
+.benchmark/
+.idea/
+.phpactor.json
+.phpunit.result.cache
+
+# Docker / local runs
+docker-output/
+
+# Large experiment artifacts (not needed to fuzz)
+determinism_runs/
+determinism_runs_yaml/
+determinism_runs.zip
+mutator_profile_runs/
+results/
+coverage-report/
+
+# Summaries and noise
+determinism_summary.csv
+determinism_summary_yaml.csv
+mutator_profiles_summary.csv
+*.zip
+
+# Corpus copy ignored by git — not in default image; use tracked corpus/
+corpus_yaml/
