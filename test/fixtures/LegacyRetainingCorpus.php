@@ -5,20 +5,24 @@ namespace PhpFuzzer;
 use PhpFuzzer\Diagnostics\CorpusDiagnostics;
 use PhpFuzzer\Mutation\RNG;
 
+/**
+ * Experimental control for the memory-leak A/B test.
+ *
+ * This class intentionally preserves the pre-fix corpus retention behavior,
+ * while keeping the current public method signatures so it can be preloaded
+ * into a separate fuzzer process. It must never be used in production runs.
+ */
 final class Corpus {
     /** @var CorpusEntry[] */
     private array $entriesByHash = [];
-    /** @var CorpusEntry[] Only used to get a random element. */
+    /** @var CorpusEntry[] */
     private array $entriesByIndex = [];
     /** @var array<int, bool> */
     private array $seenFeatures = [];
-
     /** @var array<int, bool> */
     private array $seenCrashFeatures = [];
-
     private int $totalLen = 0;
     private int $maxLen = 0;
-    
     private ?CorpusDiagnostics $diagnostics = null;
 
     public function setDiagnostics(?CorpusDiagnostics $diagnostics): void {
@@ -34,53 +38,21 @@ final class Corpus {
         }
     }
 
-    // Returns whether a new corpus entry has been added. If the same input was
-    // observed with additional features, feature ownership is merged into the
-    // existing entry without duplicating the input in the sampling index.
     public function addEntry(CorpusEntry $entry, ?string $parentHash = null, bool $skipRegistration = false): bool {
         $coverageBefore = $this->getNumFeatures();
-
-        if (isset($this->entriesByHash[$entry->hash])) {
-            $existingEntry = $this->entriesByHash[$entry->hash];
-            foreach ($entry->uniqueFeatures as $feature => $_) {
-                $existingEntry->uniqueFeatures[$feature] = true;
-                $this->seenFeatures[$feature] = true;
-            }
-
-            if ($this->diagnostics !== null && $this->diagnostics->isEnabled() && !$skipRegistration) {
-                $parentSeedId = $parentHash ? $this->diagnostics->getSeedId($parentHash) : null;
-                $this->diagnostics->logCandidateSeed(
-                    $entry,
-                    $parentSeedId,
-                    $coverageBefore,
-                    $this->getNumFeatures(),
-                    'merged',
-                    'duplicate_input_new_coverage'
-                );
-            }
-
-            return false;
-        }
-
         $this->entriesByHash[$entry->hash] = $entry;
         $this->entriesByIndex[] = $entry;
         foreach ($entry->uniqueFeatures as $feature => $_) {
             $this->seenFeatures[$feature] = true;
         }
-        // The full execution feature map is only needed while evaluating the
-        // candidate. Long-lived corpus entries retain only owned unique features.
-        $entry->features = [];
-        $len = \strlen($entry->input);
+        $len = strlen($entry->input);
         $this->totalLen += $len;
         $this->maxLen = max($this->maxLen, $len);
-        
-        // Register seed in diagnostics (unless already registered during corpus loading)
+
         if ($this->diagnostics !== null && $this->diagnostics->isEnabled() && !$skipRegistration) {
             $coverageAfter = $this->getNumFeatures();
             $parentSeedId = $parentHash ? $this->diagnostics->getSeedId($parentHash) : null;
-            $seedId = $this->diagnostics->registerSeed($entry, $parentHash, $coverageAfter);
-            
-            // Log candidate seed event
+            $this->diagnostics->registerSeed($entry, $parentHash, $coverageAfter);
             $this->diagnostics->logCandidateSeed(
                 $entry,
                 $parentSeedId,
@@ -94,13 +66,11 @@ final class Corpus {
         return true;
     }
 
-    // Returns whether the new entry has been added. The old one will always be removed.
     public function replaceEntry(CorpusEntry $origEntry, CorpusEntry $newEntry): bool {
         $coverageBefore = $this->getNumFeatures();
         unset($this->entriesByHash[$origEntry->hash]);
-        $this->entriesByIndex = array_values($this->entriesByHash); // TODO optimize
+        $this->entriesByIndex = array_values($this->entriesByHash);
         if (isset($this->entriesByHash[$newEntry->hash])) {
-            // The new entry is already part of the corpus, nothing to do.
             if ($this->diagnostics !== null && $this->diagnostics->isEnabled()) {
                 $parentSeedId = $this->diagnostics->getSeedId($origEntry->hash);
                 $this->diagnostics->logCandidateSeed(
@@ -117,11 +87,9 @@ final class Corpus {
 
         $this->entriesByHash[$newEntry->hash] = $newEntry;
         $this->entriesByIndex[] = $newEntry;
-        $newEntry->features = [];
-        $this->totalLen -= \strlen($origEntry->input);
-        $this->totalLen += \strlen($newEntry->input);
-        
-        // Handle seed replacement in diagnostics
+        $this->totalLen -= strlen($origEntry->input);
+        $this->totalLen += strlen($newEntry->input);
+
         if ($this->diagnostics !== null && $this->diagnostics->isEnabled()) {
             $coverageAfter = $this->getNumFeatures();
             $parentSeedId = $this->diagnostics->getSeedId($origEntry->hash);
@@ -135,7 +103,7 @@ final class Corpus {
                 'minimization'
             );
         }
-        
+
         return true;
     }
 
@@ -144,33 +112,27 @@ final class Corpus {
     }
 
     public function getRandomEntry(RNG $rng): ?CorpusEntry {
-        if (empty($this->entriesByHash)) {
+        if ($this->entriesByHash === []) {
             return null;
         }
-
         $entry = $rng->randomElement($this->entriesByIndex);
-        
-        // Record selection in diagnostics
-        if ($this->diagnostics !== null && $entry !== null) {
+        if ($this->diagnostics !== null) {
             $this->diagnostics->recordSelection($entry);
         }
-        
         return $entry;
     }
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public function getAllSeedHashes(): array {
         return array_keys($this->entriesByHash);
     }
 
     public function getNumCorpusEntries(): int {
-        return \count($this->entriesByHash);
+        return count($this->entriesByHash);
     }
 
     public function getNumFeatures(): int {
-        return \count($this->seenFeatures);
+        return count($this->seenFeatures);
     }
 
     public function getTotalLen(): int {
@@ -181,20 +143,16 @@ final class Corpus {
         return $this->maxLen;
     }
 
-    /**
-     * @return array<int, bool>
-     */
+    /** @return array<int, bool> */
     public function getSeenBlockMap(): array {
         $blocks = [];
         foreach ($this->seenFeatures as $feature => $_) {
-            $targetBlock = $feature & ((1 << 28) - 1);
-            $blocks[$targetBlock] = true;
+            $blocks[$feature & ((1 << 28) - 1)] = true;
         }
         return $blocks;
     }
 
     public function addCrashEntry(CorpusEntry $entry): bool {
-        // TODO: Also handle "absent feature"?
         $hasNewFeature = false;
         foreach ($entry->features as $feature => $_) {
             if (!isset($this->seenCrashFeatures[$feature])) {

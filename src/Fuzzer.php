@@ -333,11 +333,13 @@ final class Fuzzer {
                     }
                     $this->recordMutatorChainOutcome($chainMutatorNames, true);
                     $parentHash = $origEntry !== null ? $origEntry->hash : null;
-                    $this->corpus->addEntry($entry, $parentHash);
-                    if ($this->seedScheduler !== null) {
+                    $addedToCorpus = $this->corpus->addEntry($entry, $parentHash);
+                    if ($addedToCorpus && $this->seedScheduler !== null) {
                         $this->seedScheduler->registerSeed($entry->hash, $this->runs);
                     }
-                    $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
+                    if ($addedToCorpus) {
+                        $entry->storeAtPath($this->corpusDir . '/' . $entry->hash . '.txt');
+                    }
 
                     $this->lastInterestingRun = $this->runs;
                     
@@ -354,7 +356,7 @@ final class Fuzzer {
                         $this->corpusDiagnostics->recordContribution($origEntry);
                     }
                     
-                    $this->printAction('NEW', $entry);
+                    $this->printAction($addedToCorpus ? 'NEW' : 'MERGE', $entry);
                     $innerBrokeEarly = true;
                     break;
                 } else {
@@ -863,6 +865,9 @@ final class Fuzzer {
             Option::create(null, 'memory-limit', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('megabytes')
                 ->setDescription('RAM limit for one target execution'),
+            Option::create(null, 'max-crashes', GetOpt::REQUIRED_ARGUMENT)
+                ->setArgumentName('count')
+                ->setDescription('Maximum total crashes before stopping (default: 100)'),
             Option::create(null, 'len-control-factor', GetOpt::REQUIRED_ARGUMENT)
                 ->setArgumentName('num')
                 ->setDescription('A higher value will increase the maximum length more slowly'),
@@ -988,6 +993,9 @@ final class Fuzzer {
 
         if (isset($opts['memory-limit'])) {
             $this->memory_limit = (int) $opts['memory-limit'];
+        }
+        if (isset($opts['max-crashes'])) {
+            $this->maxCrashes = max(1, (int) $opts['max-crashes']);
         }
 
         // PHP CLI default memory_limit (often 128M) must cover the fuzzer budget; otherwise

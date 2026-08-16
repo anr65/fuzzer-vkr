@@ -21,6 +21,7 @@ final class CorpusEntry {
         $this->features = $features;
         $this->crashInfo = $crashInfo;
         $this->path = null;
+        $this->uniqueFeatures = [];
     }
 
     public function hasAllUniqueFeaturesOf(CorpusEntry $other): bool {

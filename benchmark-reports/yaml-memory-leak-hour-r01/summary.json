@@ -1,0 +1,126 @@
+{
+  "experiment_id": "yaml-memory-leak-hour-r01",
+  "status": "valid_pilot",
+  "hypothesis_assessment": {
+    "memory_mechanism": "confirmed",
+    "practical_memory_effect": "confirmed_in_single_replication",
+    "oom_prevention": "not_observed",
+    "full_code_coverage_gain": "not_measurable_with_current_renderer"
+  },
+  "configuration": {
+    "target": "/app/targets/yaml_target.php",
+    "target_sha256": "b9ecce9b5b30767af03409992d1a0de5fc167533a0c174c832c80abdabf561b5",
+    "seed_file": "/app/corpora/yaml-v1/seeds/B04_depth_width.yaml",
+    "seed_sha256": "b96bb2ea3b9b7c8d2116f96bb24bf51ba3c0ea4b65e142bd0dc1bf3546a61f66",
+    "seed_bytes": 121,
+    "prng_seed": 735457,
+    "duration_seconds": 3600,
+    "soft_parent_memory_limit_mb": 128,
+    "target_timeout_seconds": 3,
+    "supervisor_restarts": false,
+    "variant_order": ["baseline", "fixed"]
+  },
+  "integrity": {
+    "baseline_exit_code": 0,
+    "fixed_exit_code": 0,
+    "baseline_coverage_exit_code": 0,
+    "fixed_coverage_exit_code": 0,
+    "baseline_stderr_empty": true,
+    "fixed_stderr_empty": true,
+    "baseline_stop_reason": "time_limit",
+    "fixed_stop_reason": "time_limit"
+  },
+  "variants": {
+    "baseline": {
+      "elapsed_seconds": 3600.0,
+      "executions": 7026066,
+      "coverage_features": 12385,
+      "corpus_entries": 2502,
+      "corpus_files": 2502,
+      "corpus_disk_bytes": 206867,
+      "final_php_memory_mb": 56,
+      "peak_parent_rss_kb": 90004,
+      "final_parent_rss_kb": 90004,
+      "peak_worker_rss_kb": 76404,
+      "final_worker_rss_kb": 76224,
+      "peak_total_rss_kb": 166408,
+      "final_total_rss_kb": 166228,
+      "actions": {"new": 2647, "merge": 0, "reduce": 17612},
+      "worker_generations": 43,
+      "worker_restarts": 42,
+      "html_coverage_blocks": 4,
+      "html_total_blocks": 16
+    },
+    "fixed": {
+      "elapsed_seconds": 3600.63,
+      "executions": 6613987,
+      "coverage_features": 12595,
+      "corpus_entries": 2555,
+      "corpus_files": 2555,
+      "corpus_disk_bytes": 245732,
+      "final_php_memory_mb": 24,
+      "peak_parent_rss_kb": 61396,
+      "final_parent_rss_kb": 61396,
+      "peak_worker_rss_kb": 49604,
+      "final_worker_rss_kb": 47604,
+      "peak_total_rss_kb": 111000,
+      "final_total_rss_kb": 109000,
+      "actions": {"new": 2569, "merge": 139, "reduce": 16997},
+      "worker_generations": 70,
+      "worker_restarts": 69,
+      "html_coverage_blocks": 4,
+      "html_total_blocks": 16
+    }
+  },
+  "fixed_vs_baseline": {
+    "executions_delta": -412079,
+    "executions_delta_percent": -5.865,
+    "coverage_features_delta": 210,
+    "coverage_features_delta_percent": 1.696,
+    "corpus_entries_delta": 53,
+    "corpus_entries_delta_percent": 2.118,
+    "peak_parent_rss_delta_kb": -28608,
+    "peak_parent_rss_delta_percent": -31.785,
+    "final_php_memory_delta_percent": -57.143,
+    "peak_worker_rss_delta_kb": -26800,
+    "peak_worker_rss_delta_percent": -35.077,
+    "peak_total_rss_delta_kb": -55408,
+    "peak_total_rss_delta_percent": -33.297,
+    "corpus_disk_bytes_delta": 38865,
+    "corpus_disk_bytes_delta_percent": 18.787
+  },
+  "common_execution_budget": {
+    "executions": 6613987,
+    "baseline_elapsed_seconds_interpolated": 3382.584,
+    "fixed_elapsed_seconds": 3600.63,
+    "baseline_features_interpolated": 12344.812,
+    "fixed_features": 12595,
+    "fixed_features_delta": 250.188,
+    "fixed_features_delta_percent": 2.027,
+    "fixed_elapsed_delta_seconds": 218.046,
+    "fixed_elapsed_delta_percent": 6.447,
+    "coverage_feature_auc_delta_percent": 0.697
+  },
+  "coverage_thresholds": {
+    "12000": {
+      "baseline_seconds": 2122.88,
+      "baseline_executions": 4423088,
+      "fixed_seconds": 1890.86,
+      "fixed_executions": 3916317
+    },
+    "12300": {
+      "baseline_seconds": 3159.07,
+      "baseline_executions": 6169605,
+      "fixed_seconds": 2767.79,
+      "fixed_executions": 5344521
+    }
+  },
+  "limitations": [
+    "single paired replication with one PRNG seed",
+    "variant order was baseline then fixed and was not counterbalanced",
+    "worker generation counts differ and confound worker RSS, total RSS, and throughput",
+    "neither variant reached the 128 MB soft parent memory limit",
+    "HTML coverage excludes Symfony YAML files loaded in the child after fork"
+  ],
+  "source_artifacts": "corpora/runs/yaml-memory-leak-hour-r01"
+}
