@@ -19,4 +19,11 @@ final class Context {
         $this->fileInfo->blockIndexToPos[$blockIndex] = $pos;
         return $blockIndex;
     }
+
+    public function reserveBlockIndexesThrough(int $blockIndex): void {
+        if ($blockIndex >= (1 << 28)) {
+            throw new \OverflowException('Instrumentation block index exceeds the 28-bit feature encoding');
+        }
+        $this->blockIndex = max($this->blockIndex, $blockIndex + 1);
+    }
 }

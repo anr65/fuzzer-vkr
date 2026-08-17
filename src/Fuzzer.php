@@ -33,6 +33,10 @@ final class Fuzzer {
     private ?string $coverageDir = null;
     /** @var array<string, FileInfo> */
     private array $fileInfos = [];
+    /**
+     * @var array<string, array{source_hash: string, instrumented_code: string, block_index_to_pos: array<int, int>}>
+     */
+    private array $instrumentedFileCache = [];
     private ?string $lastInput = null;
 
     private int $runs = 0;
@@ -80,6 +84,7 @@ final class Fuzzer {
     private bool $yamlCacheEnabled = false;
     private int $yamlCacheStatsInterval = 1000;
     private ?string $yamlCacheStatsLogPath = null;
+    private ?TargetWorker $targetWorker = null;
 
     public function __construct() {
 //        $this->outputDir = getcwd();
@@ -103,9 +108,26 @@ final class Fuzzer {
             }
 
             $code = file_get_contents($path);
+            if ($code === false) {
+                throw new FuzzerException('Cannot read instrumented file: ' . $path);
+            }
+            $sourceHash = hash('sha256', $code);
+            $cached = $this->instrumentedFileCache[$path] ?? null;
+            if ($cached !== null && hash_equals($cached['source_hash'], $sourceHash)) {
+                $fileInfo = new FileInfo();
+                $fileInfo->blockIndexToPos = $cached['block_index_to_pos'];
+                $this->fileInfos[$path] = $fileInfo;
+                return $cached['instrumented_code'];
+            }
+
             $fileInfo = new FileInfo();
             $instrumentedCode = $this->instrumentor->instrument($code, $fileInfo);
             $this->fileInfos[$path] = $fileInfo;
+            $this->instrumentedFileCache[$path] = [
+                'source_hash' => $sourceHash,
+                'instrumented_code' => $instrumentedCode,
+                'block_index_to_pos' => $fileInfo->blockIndexToPos,
+            ];
             return $instrumentedCode;
         }, $protocols);
     }
@@ -653,14 +675,38 @@ final class Fuzzer {
 
     private function runInput(string $input): CorpusEntry {
         $this->runs++;
-        if (\extension_loaded('pcntl')) {
+        $directExecution = !$this->shouldUseTargetWorker();
+        if ($directExecution && \extension_loaded('pcntl')) {
             \pcntl_alarm($this->timeout);
         }
 
         // Remember the last input in case PHP generates a fatal error.
         $this->lastInput = $input;
-        FuzzingContext::reset();
         $crashInfo = null;
+        if ($this->shouldUseTargetWorker()) {
+            $result = $this->getTargetWorker()->run($input);
+            $this->mergeInstrumentedFiles($result->instrumentedFiles);
+            if ($result->crashInfo !== null) {
+                if ($result->throwableClass !== null && is_a($result->throwableClass, \Throwable::class, true)) {
+                    $allowed = false;
+                    foreach ($this->config->allowedExceptions as $allowedException) {
+                        if (is_a($result->throwableClass, $allowedException, true)) {
+                            $allowed = true;
+                            break;
+                        }
+                    }
+                    if (!$allowed) {
+                        $crashInfo = $result->crashInfo;
+                    }
+                } else {
+                    $crashInfo = $result->crashInfo;
+                }
+            }
+            $features = $this->edgeCountsToFeatures($result->edgeCounts);
+            return new CorpusEntry($input, $features, $crashInfo);
+        }
+
+        FuzzingContext::reset();
         try {
             ($this->config->target)($input);
         } catch (\ParseError $e) {
@@ -672,9 +718,74 @@ final class Fuzzer {
                 $crashInfo = (string) $e;
             }
         }
+        if ($directExecution && \extension_loaded('pcntl')) {
+            \pcntl_alarm(0);
+        }
 
         $features = $this->edgeCountsToFeatures(FuzzingContext::$edges);
         return new CorpusEntry($input, $features, $crashInfo);
+    }
+
+    private function shouldUseTargetWorker(): bool {
+        return \extension_loaded('pcntl');
+    }
+
+    private function getTargetWorker(): TargetWorker {
+        if ($this->targetWorker === null) {
+            $this->targetWorker = new TargetWorker(
+                $this->config->target,
+                $this->timeout,
+                fn(): array => $this->instrumentedFileCache
+            );
+        }
+        return $this->targetWorker;
+    }
+
+    /**
+     * @param array<string, mixed> $instrumentedFiles
+     */
+    private function mergeInstrumentedFiles(array $instrumentedFiles): void {
+        $maxBlockIndex = 0;
+        foreach ($instrumentedFiles as $path => $metadata) {
+            if (!is_string($path)
+                || !is_array($metadata)
+                || !isset($metadata['source_hash'], $metadata['instrumented_code'], $metadata['block_index_to_pos'])
+                || !is_string($metadata['source_hash'])
+                || !is_string($metadata['instrumented_code'])
+                || !is_array($metadata['block_index_to_pos'])
+            ) {
+                throw new FuzzerException('Target worker returned invalid instrumentation metadata');
+            }
+
+            $blockIndexToPos = [];
+            foreach ($metadata['block_index_to_pos'] as $blockIndex => $position) {
+                if (!is_int($blockIndex) || !is_int($position) || $blockIndex < 1 || $position < 0) {
+                    throw new FuzzerException('Target worker returned invalid block metadata');
+                }
+                $blockIndexToPos[$blockIndex] = $position;
+                $maxBlockIndex = max($maxBlockIndex, $blockIndex);
+            }
+
+            $normalized = [
+                'source_hash' => $metadata['source_hash'],
+                'instrumented_code' => $metadata['instrumented_code'],
+                'block_index_to_pos' => $blockIndexToPos,
+            ];
+            if (isset($this->instrumentedFileCache[$path])
+                && $this->instrumentedFileCache[$path] !== $normalized
+            ) {
+                throw new FuzzerException('Conflicting instrumentation metadata for file: ' . $path);
+            }
+
+            $this->instrumentedFileCache[$path] = $normalized;
+            $fileInfo = new FileInfo();
+            $fileInfo->blockIndexToPos = $blockIndexToPos;
+            $this->fileInfos[$path] = $fileInfo;
+        }
+
+        if ($maxBlockIndex > 0) {
+            $this->instrumentor->reserveBlockIndexesThrough($maxBlockIndex);
+        }
     }
 
     /**
@@ -1201,7 +1312,7 @@ final class Fuzzer {
     }
 
     private function setupTimeoutHandler(): void {
-        if (\extension_loaded('pcntl')) {
+        if (\extension_loaded('pcntl') && !$this->shouldUseTargetWorker()) {
             \pcntl_signal(SIGALRM, function() {
                 throw new \Error("Timeout of {$this->timeout} seconds exceeded");
             });

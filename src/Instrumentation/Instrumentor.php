@@ -27,4 +27,8 @@ final class Instrumentor {
         $this->traverser->traverse($stmts);
         return $mutableStr->getModifiedString();
     }
+
+    public function reserveBlockIndexesThrough(int $blockIndex): void {
+        $this->context->reserveBlockIndexesThrough($blockIndex);
+    }
 }
